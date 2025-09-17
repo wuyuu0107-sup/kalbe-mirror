@@ -7,7 +7,7 @@ import json
 class RegisterEndpointTests(TestCase):
     def setUp(self):  
         self.client = Client()
-        self.url_name = "register"
+        self.url_name = "authentication:register"
     
     def _post_json(self, url, payload:dict):
         return self.client.post(
@@ -54,4 +54,5 @@ class RegisterEndpointTests(TestCase):
         ):
             r = self._post_json(url, payload)
             self.assertEqual(r.status_code, 400, r.content)
+
 

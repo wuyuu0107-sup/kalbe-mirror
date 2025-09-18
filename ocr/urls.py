@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import handwriting_ocr
+from .views import ocr_extract
 
 urlpatterns = [
-    path("handwriting/", handwriting_ocr, name="handwriting_ocr"),
+    path('extract/', ocr_extract, name='ocr_extract'),
 ]

@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
-# Envs
+# Environments
 .venv/
 venv/
 .env
@@ -13,6 +13,6 @@ venv/
 staticfiles/
 media/
 
-# Editors/OS
+# Editors / OS
 .vscode/
 .DS_Store

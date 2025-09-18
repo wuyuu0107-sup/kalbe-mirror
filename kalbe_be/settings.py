@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -74,14 +76,9 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-	    'NAME': 'postgres',
-        'USER': 'postgres',  
-        'PASSWORD': 'group1',  
-        'HOST': 'db.jfgndcfxzgxbyxjlamgg.supabase.co',  
-        'PORT': '5432',  
-    }
+    'default': dj_database_url.parse(
+        "postgresql://postgres.jfgndcfxzgxbyxjlamgg:group1numerouno@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
+    )
 }
 
 # Password validation

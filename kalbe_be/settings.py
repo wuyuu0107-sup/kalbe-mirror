@@ -76,8 +76,8 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-	'NAME': 'postgres',
-        'USER': 'postgres.jfgndcfxzgxbyxjlamgg',  
+	    'NAME': 'postgres',
+        'USER': 'postgres',  
         'PASSWORD': 'group1',  
         'HOST': 'db.jfgndcfxzgxbyxjlamgg.supabase.co',  
         'PORT': '5432',  

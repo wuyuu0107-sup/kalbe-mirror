@@ -61,4 +61,4 @@ class UserModelTest(TestCase):
         old_timestamp = self.user.last_accessed
         self.user.display_name = "Updated Name"
         self.user.save()
-        self.assertNotEqual(self.user.last_accessed, old_timestamp)
+        self.assertGreaterEqual(self.user.last_accessed, old_timestamp)

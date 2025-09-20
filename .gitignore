@@ -2,8 +2,13 @@
 *.log
 *.pot
 *.pyc
-*.py[cod]
 __pycache__
+
+#Ignore Python cache
+__pycache__/
+*.py[cod]
+
+# SQLite database
 db.sqlite3
 media
 
@@ -137,6 +142,3 @@ GitHub.sublime-settings
 !.vscode/launch.json
 !.vscode/extensions.json
 .history
-
-#SQLiteDatabase
-db.sqlite3

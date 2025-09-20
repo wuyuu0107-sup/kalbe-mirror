@@ -32,11 +32,11 @@ class RegisterProfileTests(TestCase):
         self.assertEqual(r.status_code, 201, r.content)
 
         # Created once
-        self.assertEqual(User.objects.filter(username="alice").count(), 1)
+        self.assertEqual(User.objects.filter(username="dummy").count(), 1)
         u = User.objects.get(username="dummy")
 
         # Profile fields stored
-        self.assertEqual(u.display_name, "Dr.Alice Pharma")
+        self.assertEqual(u.display_name, "dummy dummy")
         self.assertEqual(u.email, "dummy@gmail.com")
         self.assertEqual(u.roles, ["researcher"])
 

@@ -17,3 +17,6 @@ media/
 # Editors / OS
 .vscode/
 .DS_Store
+
+#Database
+db.sqlite3

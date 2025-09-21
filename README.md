@@ -1,6 +1,7 @@
-# OCR Service - Setup & Usage Guide
 
-This guide explains how to set up and run the OCR service feature in this project.
+# OCR & Gemini Medical PDF Service - Setup & Usage Guide
+
+This guide explains how to set up and run the OCR and Gemini medical PDF extraction features in this project.
 
 ## Prerequisites
 - Python 3.12 or higher
@@ -8,40 +9,36 @@ This guide explains how to set up and run the OCR service feature in this projec
 - Git (optional, for cloning)
 
 ## 1. Setup Virtual Environment
-Navigate to the `ocr_service` directory:
+Navigate to the `backend` directory:
 
 ```powershell
-cd path\to\be\ocr_service
-```
-
-Activate the virtual environment:
-
-```powershell
-.\env\Scripts\Activate.ps1
-```
-
-If you see an execution policy error, run:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+cd path\to\backend
+python -m venv env
 .\env\Scripts\Activate.ps1
 ```
 
 ## 2. Install Dependencies
-If not already installed, install required packages:
+Install required packages:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## 3. Apply Migrations
+## 3. Environment Variables
+Create a `.env` file in the `backend` directory and add your Gemini API key:
+
+```
+GEMINI_API_KEY=your_api_key_here
+```
+
+## 4. Apply Migrations
 Before running the server, apply Django migrations:
 
 ```powershell
 python manage.py migrate
 ```
 
-## 4. Run the Development Server
+## 5. Run the Development Server
 Start the Django development server:
 
 ```powershell
@@ -50,15 +47,23 @@ python manage.py runserver
 
 The server will start at `http://127.0.0.1:8000/`.
 
-## 5. Using the OCR Feature
-- Access the OCR API endpoints as defined in `ocr_api/urls.py`.
-- Interact with the service using HTTP requests (e.g., via Postman, curl, or a frontend).
+## 6. Using the Features
 
-## 6. Troubleshooting
+### EasyOCR
+- Go to `http://127.0.0.1:8000/ocr/image/` to upload images or PDFs for OCR extraction.
+- Returns a downloadable JSON file with detected text and bounding boxes.
+
+### Gemini OCR Extraction
+- Go to `http://127.0.0.1:8000/ocr/` to upload a medical PDF.
+- The backend will use Gemini API to extract structured medical data from the PDF.
+- Results are displayed in the browser as JSON.
+
+## 7. Troubleshooting
 - If you see `ModuleNotFoundError`, ensure your virtual environment is activated and dependencies are installed.
 - For migration issues, ensure the database (`db.sqlite3`) exists and is accessible.
+- For Gemini errors, check your API key in `.env` and internet connection.
 
-## 7. Deactivating the Environment
+## 8. Deactivating the Environment
 When done, deactivate the virtual environment:
 
 ```powershell
@@ -66,3 +71,4 @@ deactivate
 ```
 
 ---
+For more details, see the code in `ocr/` and `kalbe_be/` folders.

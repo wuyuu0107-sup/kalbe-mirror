@@ -4,6 +4,6 @@ from .views import ocr_image, ocr_test_page
 app_name = "ocr"
 
 urlpatterns = [
-    path("", ocr_image, name="image"),         
-    path("test/", ocr_test_page, name="test"),  
+    path("", ocr_test_page, name="ocr_test_page"),
+    path("image/", ocr_image, name="image"),
 ]

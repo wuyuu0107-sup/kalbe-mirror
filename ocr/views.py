@@ -1,28 +1,67 @@
-from django.http import JsonResponse
+# ocr/views.py
+import numpy as np
+from PIL import Image
+from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
 from django.shortcuts import render
-from .utils import run_ocr_pipeline
+from .reader import get_reader
+from .utils import correct_word
 
-def index(request):
-    # Renders your HTML uploader at /api/ocr/
-    return render(request, "ocr/index.html")
+def ocr_test_page(request):
+    return render(request, "ocr_test.html")
+
+def _json_default(o):
+    """Fallback converter for any stray NumPy types."""
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    if isinstance(o, (np.ndarray,)):
+        return o.tolist()
+    return str(o)
+
+def _normalize_results(results):
+    """(box, text, conf) -> dict with only plain Python types."""
+    norm = []
+    for box, text, conf in results:
+        # Force to Python lists of floats to avoid int32
+        b = np.asarray(box, dtype=float).tolist()
+        norm.append({
+            "box": b,
+            "text": str(text),
+            "confidence": float(conf),
+        })
+    return norm
 
 @csrf_exempt
-@require_http_methods(["POST"])
-def ocr_extract(request):
-    """
-    Accepts multipart/form-data with a single file field named 'file'
-    (PNG/JPG/PDF) and returns JSON.
-    """
-    f = request.FILES.get("file")
+def ocr_image(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST an image file with the 'image' key.")
+
+    f = request.FILES.get("image")
     if not f:
-        return JsonResponse({"error": "Upload a file with field name 'file'."}, status=400)
+        return HttpResponseBadRequest("No file uploaded under 'image'.")
 
     try:
-        # pass both bytes and name so utils can detect PDFs
-        data = run_ocr_pipeline(f.read(), f.name)
-        return JsonResponse(data, json_dumps_params={"indent": 2})
-    except Exception as e:
-        # Always return JSON so the frontend never crashes on HTML error pages
-        return JsonResponse({"error": "OCR failed", "detail": str(e)}, status=500)
+        img = Image.open(f).convert("RGB")
+    except Exception:
+        return HttpResponseBadRequest("Invalid image.")
+
+    arr = np.array(img)
+    reader = get_reader(langs=["en", "id"], gpu=False)
+    results = reader.readtext(arr, detail=1, paragraph=False)
+
+    payload = {"results": _normalize_results(results)}
+    return JsonResponse(payload, json_dumps_params={"default": _json_default})
+
+def _normalize_results(results):
+    norm = []
+    for box, text, conf in results:
+        b = np.asarray(box, dtype=float).tolist()
+        corrected = correct_word(str(text))
+        norm.append({
+            "box": b,
+            "text": corrected,
+            "confidence": float(conf),
+        })
+    return norm

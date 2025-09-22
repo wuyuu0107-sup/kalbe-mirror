@@ -53,3 +53,12 @@ class AnnotationCRUDTests(TestCase):
         annotation_id = response.json()["id"]
         delete_response = self.client.delete(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/{annotation_id}/')
         self.assertEqual(delete_response.status_code, 204)
+
+    def test_update_nonexistent_annotation(self):
+        updated_drawing = {"type": "drawing", "data": [{"tool": "eraser", "points": [[15, 15], [25, 25]]}]}
+        response = self.client.put(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/9999/', updated_drawing, content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_delete_nonexistent_annotation(self):
+        response = self.client.delete(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/9999/')
+        self.assertEqual(response.status_code, 404)

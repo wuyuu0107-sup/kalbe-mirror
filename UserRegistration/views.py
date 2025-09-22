@@ -44,6 +44,25 @@ def register_profile(request):
         return JsonResponse({"error": "user already exists"}, status=409)
 
     return JsonResponse(
-        {"user_id": str(u.user_id), "message": "Registration successful. Please log in."},
+        {
+            "user_id": str(u.user_id),
+            "message": "Registration successful. Please log in.",
+            "verification_link": f"/verify-email/{u.verification_token}"  # stub link
+        },
         status=201
     )
+
+@csrf_exempt
+@require_POST
+def verify_email(request, token):
+    try:
+        user = User.objects.get(verification_token=token)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "Invalid token"}, status=400)
+
+    if user.is_verified:
+        return JsonResponse({"message": "Already verified"}, status=200)
+
+    user.is_verified = True
+    user.save(update_fields=["is_verified"])
+    return JsonResponse({"message": "Email verified successfully"}, status=200)

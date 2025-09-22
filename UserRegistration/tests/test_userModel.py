@@ -62,3 +62,16 @@ class UserModelTest(TestCase):
         self.user.display_name = "Updated Name"
         self.user.save()
         self.assertGreaterEqual(self.user.last_accessed, old_timestamp)
+
+    def test_email_verification_fields(self):
+        # By default, user should not be verified
+        self.assertFalse(self.user.is_verified)
+        self.assertIsNotNone(self.user.verification_token)
+
+        # Simulate verifying the user
+        self.user.is_verified = True
+        self.user.save()
+
+        # Reload from DB to confirm
+        refreshed = User.objects.get(pk=self.user.user_id)
+        self.assertTrue(refreshed.is_verified)

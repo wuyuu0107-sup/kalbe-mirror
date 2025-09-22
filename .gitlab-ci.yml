@@ -6,7 +6,7 @@ stages:
 variables:
   PYTHONUNBUFFERED: 1
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  DJANGO_SETTINGS_MODULE: "myproject.settings"
+  DJANGO_SETTINGS_MODULE: "kalbe_be.settings"
 
 cache:
   paths:

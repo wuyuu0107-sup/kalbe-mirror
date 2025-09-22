@@ -12,6 +12,22 @@ class AnnotationCRUDTests(TestCase):
             "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}]
         }
 
+    def test_invalid_method_on_get_patients(self):
+        response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_method_on_create_drawing_annotation(self):
+        response = self.client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_not_found_annotation(self):
+        response = self.client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/9999/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_bad_json_create_drawing_annotation(self):
+        response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/', '{bad json}', content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+
     def test_create_and_get_drawing_annotation(self):
         # Create annotation
         response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/', self.mock_drawing, content_type='application/json')

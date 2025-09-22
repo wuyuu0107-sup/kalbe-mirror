@@ -1,0 +1,29 @@
+stages:
+  - test
+
+variables:
+  PYTHONUNBUFFERED: 1
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DJANGO_SETTINGS_MODULE: "myproject.settings"
+
+cache:
+  paths:
+    - .cache/pip
+
+before_script:
+  - python -V
+  - pip install --upgrade pip
+  - pip install -r requirements.txt
+
+test:
+  stage: test
+  script:
+    - python manage.py migrate --noinput
+    - python manage.py collectstatic --noinput
+    - python manage.py test
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit.xml
+    paths:
+      - reports/

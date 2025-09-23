@@ -1,8 +1,9 @@
-from django.shortcuts import render
 from django.http import JsonResponse
-from django.contrib.auth.models import User
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction, IntegrityError
+from django.contrib.auth.hashers import make_password
+from UserRegistration.models import User
 import json
 
 @csrf_exempt
@@ -11,7 +12,7 @@ def register(request):
     try:
         data = json.loads(request.body.decode() or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error: invalid payload"}, status = 400)
+        return JsonResponse({"error": "invalid payload"}, status = 400)
 
     username = (data.get("username") or "").strip()
     password = (data.get("password") or "").strip()
@@ -19,9 +20,18 @@ def register(request):
     if not username or not password:
         return JsonResponse({"error": "username and password required"}, status=400)
     
-    user = User.objects.create_user(username=username, password=password)
+    try:
+        with transaction.atomic():
+            user = User.objects.create(
+                username=username,
+                password=make_password(password),  # hash for security
+            )
+    except IntegrityError:
+        # unique username handled here if model enforces it
+        return JsonResponse({"error": "user already exists"}, status=409)
+
     return JsonResponse({
-        "user_id" : f"user {user.id}",
+        "user_id" : f"user {user.user_id}",
         "message": "Registration is successful. Please log in"},
         status=201
     )

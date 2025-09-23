@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.urls import reverse, NoReverseMatch
-from django.contrib.auth.models import User
+from UserRegistration.models import User
+from django.contrib.auth.hashers import check_password
 import json
 
 # Create your tests here.
@@ -33,7 +34,7 @@ class RegisterEndpointTests(TestCase):
 
         # Password is hashed & works with check_password
         self.assertNotEqual(user.password, "dummy_pass")
-        self.assertTrue(user.check_password("dummy_pass"))
+        self.assertTrue(check_password("dummy_pass", user.password))
 
     def test_missing_fields_returns_400(self):
         url = reverse(self.url_name)
@@ -45,15 +46,6 @@ class RegisterEndpointTests(TestCase):
         # No password
         response = self._post_json(url, {"username": "dummy"})
         self.assertEqual(response.status_code, 400, response.content)
-    
-    def test_disallows_blank_username_or_password(self):
-        url = reverse(self.url_name)
-        for payload in (
-            {"username": "", "password": "x"},
-            {"username": "x", "password": ""},
-        ):
-            r = self._post_json(url, payload)
-            self.assertEqual(r.status_code, 400, r.content)
 
     def test_disallows_blank_username_or_password(self):
         url = reverse(self.url_name)
@@ -128,7 +120,7 @@ class RegisterEndpointTests(TestCase):
         
         # Check user_id format
         user = User.objects.get(username="test_structure")
-        expected_user_id = f"user {user.id}"
+        expected_user_id = f"user {user.user_id}"
         self.assertEqual(response_data["user_id"], expected_user_id)
 
     def test_non_post_methods_not_allowed(self):

@@ -16,10 +16,7 @@ class RegisterProfileTests(TestCase):
         )
     
     def test_register_stores_profile_and_hashes_password(self):
-        try:
-            url = reverse(self.url_name)
-        except NoReverseMatch:
-            self.fail(f"URL name {self.url_name} not defined")
+        url = reverse(self.url_name)
         
         payload = {
             "username": "dummy",
@@ -107,3 +104,20 @@ class RegisterProfileTests(TestCase):
         ):
             r = self._post_json(url, payload)
             self.assertEqual(r.status_code, 400, r.content)
+    
+    def test_invalid_json_payload_returns_400(self):
+        url = reverse(self.url_name)
+
+        bad_payload = '{"username: "dummy'
+
+        response = self.client.post(
+            url,
+            data = bad_payload,
+            content_type= "application/json"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertJSONEqual(
+            response.content,
+            {"error": "invalid payload"}
+        )

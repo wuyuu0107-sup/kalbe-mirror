@@ -2,12 +2,11 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 import shutil
-
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
-
 from PIL import Image
+
 
 class OCRTests(TestCase):
     def test_health_endpoint(self):

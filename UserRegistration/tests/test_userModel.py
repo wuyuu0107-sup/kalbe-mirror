@@ -1,6 +1,8 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from UserRegistration.models import User
+from django.urls import reverse
+from django.test import Client
 
 class UserModelTest(TestCase):
 
@@ -75,3 +77,31 @@ class UserModelTest(TestCase):
         # Reload from DB to confirm
         refreshed = User.objects.get(pk=self.user.user_id)
         self.assertTrue(refreshed.is_verified)
+
+    def test_verify_email_success(self):
+        client = Client()
+        response = client.post(
+            reverse("UserRegistration:verify_email", args=[self.user.verification_token])
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.user.is_verified)
+        self.assertEqual(response.json()["message"], "Email verified successfully")
+        
+    def test_verify_email_invalid_token(self):
+        client = Client()
+        response = client.post(
+            reverse("UserRegistration:verify_email", args=["00000000-0000-0000-0000-000000000000"])
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Invalid token")
+
+    def test_verify_email_already_verified(self):
+        self.user.is_verified = True
+        self.user.save()
+        client = Client()
+        response = client.post(
+            reverse("UserRegistration:verify_email", args=[self.user.verification_token])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], "Already verified")

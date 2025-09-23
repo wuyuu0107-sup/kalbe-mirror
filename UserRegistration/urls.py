@@ -1,5 +1,5 @@
 from django.urls import path
-from UserRegistration.views import *
+from UserRegistration.views import register_profile, verify_email
 
 app_name = 'UserRegistration'
 

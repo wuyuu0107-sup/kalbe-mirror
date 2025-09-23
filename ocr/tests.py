@@ -1,11 +1,7 @@
-from io import BytesIO
-from pathlib import Path
-from unittest.mock import patch
-import shutil
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
-from django.urls import reverse
 from PIL import Image
+from io import BytesIO
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 
 
 class OCRTests(TestCase):
@@ -42,8 +38,6 @@ class OCRTests(TestCase):
         self.assertIn(resp.status_code, [200, 500])
 
     def _create_test_image_bytes(self):
-        from PIL import Image
-        from io import BytesIO
         img = Image.new("RGB", (100, 100), color=(255, 255, 255))
         bio = BytesIO()
         img.save(bio, format="PNG")

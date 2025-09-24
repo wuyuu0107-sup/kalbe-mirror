@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/ocr/', api_ocr),
     # UI and other OCR routes live under /ocr/
     path('ocr/', include('ocr.urls')),
+    path('csv/', include('csv_export.urls'))
 ]

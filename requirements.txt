@@ -6,3 +6,10 @@ requests
 urllib3
 django-cors-headers
 djangorestframework
+numpy
+Pillow
+easyocr
+pyspellchecker
+pymupdf
+google-generativeai
+dotenv

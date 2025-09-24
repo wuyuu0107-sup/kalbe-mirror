@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Gemini OCR Medical PDF</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        .result { margin-top: 2em; }
+        .box { background: #f0f0f0; padding: 1em; border-radius: 5px; margin-bottom: 1em; }
+        label { display: block; margin-top: 1em; }
+    </style>
+</head>
+<body>
+    <h1>Gemini OCR Medical PDF</h1>
+    <form id="geminiForm" enctype="multipart/form-data">
+        <label for="pdf">Upload a medical PDF:</label>
+        <input type="file" id="pdf" name="pdf" accept="application/pdf" required>
+        <button type="submit">Run Gemini OCR</button>
+    </form>
+    <div class="result" id="result"></div>
+    <script>
+        document.getElementById('geminiForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            const pdfInput = document.getElementById('pdf');
+            if (!pdfInput.files.length) return;
+            formData.append('pdf', pdfInput.files[0]);
+            document.getElementById('result').innerHTML = 'Processing...';
+            try {
+                const response = await fetch('/ocr/', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error('Gemini OCR failed');
+                const data = await response.json();
+                let html = '<h2>Structured Data</h2>';
+                html += `<pre>${JSON.stringify(data.structured_data, null, 2)}</pre>`;
+                if (data.error) {
+                    html += `<div class="box">Error: ${data.error}</div>`;
+                }
+                document.getElementById('result').innerHTML = html;
+            } catch (err) {
+                document.getElementById('result').innerHTML = 'Error: ' + err.message;
+            }
+        };
+    </script>
+</body>
+</html>

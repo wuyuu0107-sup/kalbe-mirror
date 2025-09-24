@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.parse(
-        "postgresql://postgres.jfgndcfxzgxbyxjlamgg:group1numerouno@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
+         config("DATABASE_URL")
     )
 }
 

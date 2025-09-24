@@ -105,7 +105,8 @@ def ocr_test_page(request):
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 prompt = """
                 Analyze this medical document PDF and extract the following information in JSON format.
-                If any information is not found, leave the value as null.
+                If any information is not found, leave the value as null. for example, some of the data is in indonesian, like density in urinalysis, which is berat jenis in the pdf
+                For urinalysis, hematology, and clinical chemistry, there is titles of the tables called "Hasil", "Nilai Rujukan", "Satuan", and "Metode", display them in the results in order like ""ph": 6.5, ..., ..., ...""
                 Required Fields:
                 1. DEMOGRAPHY:
                    - subject_initials
@@ -129,7 +130,7 @@ def ocr_test_page(request):
                    - hcv
                    - hiv
                 5. URINALYSIS:
-                   - ph
+                   - ph : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
                    - density
                    - glucose
                    - ketone
@@ -139,14 +140,14 @@ def ocr_test_page(request):
                    - leucocyte_esterase
                    - nitrite
                 6. HEMATOLOGY:
-                   - hemoglobin
+                   - hemoglobin : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
                    - hematocrit
                    - leukocyte
                    - erythrocyte
                    - thrombocyte
                    - esr
                 7. CLINICAL_CHEMISTRY:
-                   - bilirubin_total
+                   - bilirubin_total : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
                    - alkaline_phosphatase
                    - sgot
                    - sgpt

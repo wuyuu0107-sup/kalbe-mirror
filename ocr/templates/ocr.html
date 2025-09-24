@@ -46,3 +46,294 @@
     </script>
 </body>
 </html> -->
+
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>K-SCAN • OCR</title>
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Secular+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+Bhai+2:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --brand:#056534; /* brand green */
+      --bg:#f6f7f9;
+      --ink:#0f172a;
+      --muted:#6b7280;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:'Secular One', sans-serif;   /* default everywhere */
+      font-size:16px; line-height:1.5;
+      color:var(--ink);
+      background:var(--bg);
+      letter-spacing:.2px;
+    }
+
+    /* ========= NAVBAR (two-row grid with extra vertical spacing) ========= */
+    .navbar{
+      background:var(--brand);
+      color:#fff;
+      height:140px;                   /* taller to create visual separation */
+      padding:16px 22px 18px;
+      display:grid;
+      grid-template-columns: 1fr auto;/* left area + right links */
+      grid-template-rows: auto auto;  /* top row, bottom row */
+      row-gap:22px;                   /* space between the two rows */
+      align-items:center;
+      position:relative;
+    }
+    .brand{
+      grid-column:1; grid-row:1;      /* top-left */
+      font-weight:800; font-size:28px; letter-spacing:.3px;
+      align-self:start;
+    }
+    .navlinks{
+      grid-column:2; grid-row:1;      /* top-right */
+      justify-self:end;
+      display:flex; gap:28px;
+    }
+    .navlinks a{
+      font-family:'Baloo Bhai 2', cursive;   /* <- Baloo Bhai 2 for menu */
+      color:#e7f3eb; text-decoration:none; font-weight:700; opacity:.95;
+    }
+    .navlinks a.active{color:#f0ffcf}
+    .backbtn{
+      grid-column:1; grid-row:2;      /* bottom-left */
+      justify-self:start; align-self:end;
+      width:42px; height:42px; border-radius:50%;
+      border:3px solid #e7f3eb; display:grid; place-items:center;
+      color:#e7f3eb; text-decoration:none;
+    }
+    .title{
+      grid-column:1 / span 2; grid-row:2;  /* bottom-center */
+      justify-self:center; align-self:end;
+      font-weight:800; font-size:26px; color:#e7f3eb; white-space:nowrap;
+      text-align:center;
+    }
+
+    /* ========= CONTENT ========= */
+    .content{
+      position:relative;              /* so the info icon can anchor to this box */
+      max-width:1100px; margin:36px auto; padding:0 20px;
+      min-height:60vh;
+      display:grid; place-items:center;
+    }
+
+    /* Info icon (top-right of the white content area) */
+    .info-btn{
+      position:absolute; top:2px; right:-280px; /* adjust as needed */
+      width:42px; height:42px; border-radius:50%;
+      border:3px solid var(--brand); color:var(--brand);
+      background:transparent; display:grid; place-items:center;
+      text-decoration:none;
+    }
+    /* If you prefer it pinned to the viewport’s far right, swap to this:
+    .info-btn{ position:fixed; top:calc(140px + 12px); right:18px; }
+    */
+
+    /* Upload tile */
+    .drop{
+      width:190px; height:190px; border-radius:22px;
+      background:var(--brand); color:#fff;
+      display:grid; grid-auto-rows:1fr auto; place-items:center;
+      gap:6px; padding:18px; cursor:pointer;
+      box-shadow:0 10px 30px rgba(5,101,52,.18);
+      user-select:none; outline:2px solid transparent; outline-offset:4px;
+    }
+    .drop:focus-visible{outline-color:rgba(5,101,52,.35)}
+    .plus{
+      width:54px; height:54px; display:grid; place-items:center;
+      border-radius:16px; background:rgba(255,255,255,.1);
+    }
+    .drop small{
+      font-family:'Baloo Bhai 2', cursive;     /* <- Baloo Bhai 2 for caption */
+      font-size:12px; text-align:center;
+    }
+    input[type="file"]{display:none}
+
+    /* Result panel */
+    .panel{
+      margin:30px auto 0;
+      background:#fff; border-radius:16px;
+      padding:18px;
+      box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+      max-width:920px;
+    }
+    .panel h3{margin:0 0 10px 0}
+    .meta{color:var(--muted); font-size:13px; margin-bottom:10px}
+    pre{
+      margin:0; padding:14px; background:#0b1220; color:#e2e8f0;
+      border-radius:12px; overflow:auto; font-size:13px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing:0;
+    }
+    .actions{display:flex; gap:10px; margin-top:12px}
+    .btn{border:none; border-radius:12px; padding:10px 14px; cursor:pointer; background:var(--brand); color:#fff; font-weight:600}
+    .btn.secondary{background:#e9eef0; color:#0b1320}
+    .hidden{display:none}
+
+    @media (max-width:640px){
+      .navbar{height:120px}
+      .title{font-size:18px}
+      .brand{font-size:22px}
+      .navlinks{gap:16px}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <div class="brand">K-SCAN</div>
+
+    <nav class="navlinks">
+      <a class="active" href="#">Home</a>
+      <a href="#">Files</a>
+      <a href="#">Trials</a>
+      <a href="#">Chatbot</a>
+    </nav>
+
+    <a href="javascript:history.back()" class="backbtn" aria-label="Kembali">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </a>
+
+    <div class="title">Semua / Trial Docs</div>
+  </header>
+
+  <!-- CONTENT -->
+  <main>
+    <section class="content">
+      <!-- Info icon (top-right of white area) -->
+      <a class="info-btn" href="#" aria-label="Info">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <circle cx="12" cy="8" r="1"></circle>
+        </svg>
+      </a>
+
+      <!-- Uploader -->
+      <label class="drop" for="pdfInput" id="dropZone" tabindex="0">
+        <div class="plus" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <small>Mengunggah<br>berkas baru</small>
+        <input id="pdfInput" type="file" name="pdf" accept="application/pdf" />
+      </label>
+    </section>
+
+    <!-- Result -->
+    <section id="resultPanel" class="panel hidden" aria-live="polite">
+      <h3>Hasil Ekstraksi</h3>
+      <div class="meta" id="meta"></div>
+      <pre id="jsonOut">{}</pre>
+      <div class="actions">
+        <button class="btn" id="downloadBtn" type="button">Unduh JSON</button>
+        <button class="btn secondary" type="button" id="clearBtn">Bersihkan</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const ENDPOINT = '/ocr/'; 
+
+    const input = document.getElementById('pdfInput');
+    const panel = document.getElementById('resultPanel');
+    const out = document.getElementById('jsonOut');
+    const meta = document.getElementById('meta');
+    const dl = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const drop = document.getElementById('dropZone');
+
+    // --- Front-end coercion: force specific numeric-looking fields to strings ---
+    function coerceToStrings(data) {
+        if (!data || typeof data !== 'object') return data;
+
+        const ensureObj = (o) => (o && typeof o === 'object') ? o : {};
+        const dem = ensureObj(data.DEMOGRAPHY);
+        const vit = ensureObj(data.VITAL_SIGNS);
+
+        const toStr = (v) => (v == null ? v : String(v));
+
+        ['weight_kg','height_cm','bmi'].forEach(k => {
+        if (k in dem) dem[k] = toStr(dem[k]);
+        });
+        ['systolic_bp','diastolic_bp','heart_rate'].forEach(k => {
+        if (k in vit) vit[k] = toStr(vit[k]);
+        });
+
+        return { ...data, DEMOGRAPHY: dem, VITAL_SIGNS: vit };
+    }
+
+    drop.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+
+    input.addEventListener('change', ()=>{
+        const file = input.files?.[0];
+        if (file) handleUpload(file);
+    });
+
+    async function handleUpload(file){
+        panel.classList.remove('hidden');
+        meta.textContent = 'Memproses…';
+        out.textContent = '';
+
+        const form = new FormData();
+        form.append('pdf', file);
+
+        try{
+        const res = await fetch(ENDPOINT, { method:'POST', body: form });
+        if(!res.ok) throw new Error('Gagal memproses dokumen');
+
+        const data = await res.json();
+        // Coerce ONLY for display/download; server response stays untouched.
+        const coerced = coerceToStrings(data.structured_data ?? {});
+
+        const pretty = JSON.stringify(coerced, null, 2);
+        out.textContent = pretty;
+
+        const t = (data.processing_time!=null) ? `${data.processing_time}s` : '—';
+        meta.innerHTML = `Berkas: <strong>${file.name}</strong> • Waktu proses: <strong>${t}</strong>` +
+                        (data.error ? ` • <span style="color:#b42318">Error: ${data.error}</span>` : '');
+
+        // Download the coerced JSON
+        dl.onclick = ()=>{
+            const blob = new Blob([pretty], {type:'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = Object.assign(document.createElement('a'), {
+            href: url, download: file.name.replace(/\.[^.]+$/, '') + '.json'
+            });
+            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        };
+        }catch(err){
+        meta.textContent = err.message;
+        out.textContent = '{}';
+        }
+    }
+
+    clearBtn.addEventListener('click', ()=>{
+        panel.classList.add('hidden');
+        out.textContent = '{}';
+        meta.textContent = '';
+        input.value = '';
+    });
+    </script>
+
+</body>
+</html>
+

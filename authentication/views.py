@@ -36,8 +36,29 @@ def register(request):
         status=201
     )
 
-# login skeleton
 @csrf_exempt
 @require_POST
 def login(request):
-    return JsonResponse({"error": "not implemented"}, status=501)
+    try:
+        data = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "invalid payload"}, status=400)
+
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not username or not password:
+        return JsonResponse({"error": "username and password required"}, status=400)
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "invalid credentials"}, status=401)
+
+    if not check_password(password, user.password):
+        return JsonResponse({"error": "invalid credentials"}, status=401)
+
+    return JsonResponse({
+        "user_id": f"user {user.user_id}",
+        "message": "Login successful"
+    }, status=200)

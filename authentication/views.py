@@ -35,3 +35,9 @@ def register(request):
         "message": "Registration is successful. Please log in"},
         status=201
     )
+
+# login skeleton
+@csrf_exempt
+@require_POST
+def login(request):
+    return JsonResponse({"error": "not implemented"}, status=501)

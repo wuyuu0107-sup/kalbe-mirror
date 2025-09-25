@@ -1,5 +1,5 @@
 from django.test import TestCase, Client
-from django.urls import reverse, NoReverseMatch
+from django.urls import reverse
 from UserRegistration.models import User
 from django.contrib.auth.hashers import check_password
 import json
@@ -18,10 +18,7 @@ class RegisterEndpointTests(TestCase):
         )
 
     def test_register_user_success(self):
-        try:
-            url = reverse(self.url_name)
-        except NoReverseMatch as e:
-            self.fail(f"{self.url_name} is not defined")
+        url = reverse(self.url_name)
 
         payload = {"username": "dummy", "password": "dummy_pass"}
         response = self._post_json(url, payload)
@@ -102,6 +99,7 @@ class RegisterEndpointTests(TestCase):
         
         # This will likely cause an IntegrityError - you may want to handle this in your view
         # For now, we just ensure only one user exists
+        self.assertIn(response2.status_code, [400, 409])
         self.assertEqual(User.objects.filter(username="duplicate_user").count(), 1)
 
     def test_response_content_structure(self):

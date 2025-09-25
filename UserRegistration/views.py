@@ -4,6 +4,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import IntegrityError, transaction
 from django.contrib.auth.hashers import make_password
 from UserRegistration.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 import json
 
 # Create your views here.
@@ -26,6 +28,11 @@ def register_profile(request):
     # required fields
     if not username or not password or not display_name or not email:
         return JsonResponse({"error": "missing required fields"}, status=400)
+    
+    try:
+        validate_password(password)
+    except ValidationError as e:
+        return JsonResponse({"error": e.messages}, status=400)
 
     # Hash password
     encoded = make_password(password)

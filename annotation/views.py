@@ -3,16 +3,6 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from .models import Document, Patient, Annotation
 
-def get_patients_for_document(request, document_id):
-    if request.method == "GET":
-        try:
-            patients = Patient.objects.filter(document_id=document_id)
-            data = [{"id": p.id, "name": p.name} for p in patients]
-            return JsonResponse(data, safe=False)
-        except Exception as e:
-            return HttpResponseBadRequest(str(e))
-    return HttpResponseBadRequest("Invalid method")
-
 @csrf_exempt
 def create_drawing_annotation(request, document_id, patient_id):
     if request.method == "POST":

@@ -1,6 +1,6 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from .models import Annotation
+from .models import Annotation, Patient, Document
 
 class AnnotationCRUDTests(TestCase):
     def setUp(self):
@@ -12,9 +12,9 @@ class AnnotationCRUDTests(TestCase):
             "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}]
         }
 
-    def test_invalid_method_on_get_patients(self):
-        response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/')
-        self.assertEqual(response.status_code, 400)
+        # Create Patient and Document IDs in the test database
+        Patient.objects.create(id=self.patient_id, name="Test Patient")
+        Document.objects.create(id=self.document_id)
 
     def test_invalid_method_on_create_drawing_annotation(self):
         response = self.client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')

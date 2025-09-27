@@ -1,13 +1,16 @@
 import json
 import csv
 from io import StringIO
+from unittest.mock import patch, Mock
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.http import HttpResponse
 
 
 class CSVExportTestCase(TestCase):
     def setUp(self):
         self.client = Client()
+        self.url = '/csv/export/' 
         self.valid_ocr_data = {
             "DEMOGRAPHY": {
                 "subject_initials": "LMNO",
@@ -63,3 +66,31 @@ class CSVExportTestCase(TestCase):
                 "random_blood_glucose": 122
             }
         }
+
+    # Happy Path Test
+    @patch('csv_export.views.json_to_csv')
+    def test_successful_csv_export_with_ocr_data(self, mock_json_to_csv):
+        """Test successful CSV export with valid OCR medical data"""
+        mock_json_to_csv.return_value = None
+        
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        
+        # Check response status and headers
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        self.assertEqual(
+            response['Content-Disposition'], 
+            'attachment; filename="report.csv"'
+        )
+        
+        # Verify json_to_csv was called with correct arguments
+        mock_json_to_csv.assert_called_once()
+        call_args = mock_json_to_csv.call_args
+        self.assertEqual(call_args[0][0], self.valid_ocr_data)
+        self.assertIsInstance(call_args[0][1], csv.writer)
+
+    

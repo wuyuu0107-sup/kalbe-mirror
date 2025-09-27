@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from .models import Annotation, Patient, Document
+from unittest.mock import patch
 
 class AnnotationCRUDTests(TestCase):
     def setUp(self):
@@ -38,6 +39,13 @@ class AnnotationCRUDTests(TestCase):
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(get_response.json()["drawing"], self.mock_drawing)
 
+    def test_get_drawing_annotation_exception(self):
+        # Simulate exception in Annotation.objects.get for GET
+        with patch('annotation.views.Annotation.objects.get', side_effect=Exception('Test error')):
+            response = self.client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/')
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('Test error', response.content.decode())
+
     def test_update_drawing_annotation(self):
         # Create annotation
         response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/', self.mock_drawing, content_type='application/json')
@@ -47,12 +55,27 @@ class AnnotationCRUDTests(TestCase):
         self.assertEqual(put_response.status_code, 200)
         self.assertEqual(put_response.json()["drawing"], updated_drawing)
 
+    def test_put_drawing_annotation_exception(self):
+        # Simulate exception in Annotation.objects.get for PUT
+        updated_drawing = {"type": "drawing", "data": [{"tool": "eraser", "points": [[15, 15], [25, 25]]}]}
+        with patch('annotation.views.Annotation.objects.get', side_effect=Exception('Test error')):
+            response = self.client.put(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/', updated_drawing, content_type='application/json')
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('Test error', response.content.decode())
+
     def test_delete_drawing_annotation(self):
         # Create annotation
         response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/', self.mock_drawing, content_type='application/json')
         annotation_id = response.json()["id"]
         delete_response = self.client.delete(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/{annotation_id}/')
         self.assertEqual(delete_response.status_code, 204)
+
+    def test_delete_drawing_annotation_exception(self):
+        # Simulate exception in Annotation.objects.get for DELETE
+        with patch('annotation.views.Annotation.objects.get', side_effect=Exception('Test error')):
+            response = self.client.delete(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/')
+            self.assertEqual(response.status_code, 400)
+            self.assertIn('Test error', response.content.decode())
 
     def test_update_nonexistent_annotation(self):
         updated_drawing = {"type": "drawing", "data": [{"tool": "eraser", "points": [[15, 15], [25, 25]]}]}
@@ -62,3 +85,7 @@ class AnnotationCRUDTests(TestCase):
     def test_delete_nonexistent_annotation(self):
         response = self.client.delete(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/9999/')
         self.assertEqual(response.status_code, 404)
+
+    def test_invalid_method_on_drawing_annotation(self):
+        response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/')
+        self.assertEqual(response.status_code, 400)

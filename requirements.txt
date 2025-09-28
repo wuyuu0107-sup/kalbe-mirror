@@ -6,3 +6,4 @@ requests
 urllib3
 django-cors-headers
 djangorestframework
+python-decouple==3.8

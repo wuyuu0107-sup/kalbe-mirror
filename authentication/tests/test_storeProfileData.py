@@ -3,12 +3,12 @@ from django.test import TestCase, Client
 from django.urls import path, reverse, NoReverseMatch
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import check_password
-from UserRegistration.models import User
+from authentication.models import User
 
 class RegisterProfileTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.url_name = "UserRegistration:register"
+        self.url_name = "authentication:register"
 
     def _post_json(self, url, payload: dict):
         return self.client.post(

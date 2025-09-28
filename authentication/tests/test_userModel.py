@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
-from UserRegistration.models import User
+from authentication.models import User
 
 class UserModelTest(TestCase):
 

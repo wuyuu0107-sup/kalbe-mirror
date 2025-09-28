@@ -27,12 +27,6 @@ test:
   script:
     - python manage.py migrate --noinput
     - coverage run --source='.' manage.py test
-    - coverage report
-    - coverage xml  
-  artifacts:
-    paths:
-      - coverage.xml
-    expire_in: 1 week
 
 build-sonar:
   image: 

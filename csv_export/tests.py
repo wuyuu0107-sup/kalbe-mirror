@@ -296,5 +296,54 @@ class CSVExportTestCase(TestCase):
         response = self.client.delete(self.url)
         self.assertEqual(response.status_code, 405)
 
+    # --- Invalid input data ---
+
+    def test_invalid_json_syntax(self):
+        """Test with invalid JSON syntax - should return 400 with error message"""
+        invalid_json_cases = [
+            '{"key": value}',        # unquoted value
+            '{"key": "value",}',     # trailing comma
+            '{key: "value"}',        # unquoted key
+            '{"key": "value"',       # missing closing brace
+        ]
+        for invalid_json in invalid_json_cases:
+            with self.subTest(json_data=invalid_json):
+                response = self.client.post(
+                    self.url,
+                    data=invalid_json,
+                    content_type='application/json'
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response['Content-Type'], 'application/json')
+                response_data = json.loads(response.content)
+                self.assertIn('error', response_data)
+                self.assertEqual(response_data['error'], 'Invalid JSON format')
+
+
+    def test_empty_request_body(self):
+        """Test with empty request body - should return 400"""
+        response = self.client.post(
+            self.url,
+            data='',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        response_data = json.loads(response.content)
+        self.assertIn('error', response_data)
+        self.assertEqual(response_data['error'], 'Invalid JSON format')
+
+
+    def test_malformed_unicode(self):
+        """Test with malformed Unicode - should return 400"""
+        response = self.client.post(
+            self.url,
+            data=b'{"invalid": "\xff\xfe"}',
+            content_type='application/json; charset=utf-8'
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+
 
         

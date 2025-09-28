@@ -375,3 +375,51 @@ class CSVExportTestCase(TestCase):
         response_data = json.loads(response.content)
         self.assertEqual(response_data['error'], 'CSV conversion failed')
 
+ # Strategy Pattern Tests
+
+class StrategyPatternTestCase(TestCase):
+    """Test cases specifically for Strategy Pattern implementation"""
+    
+    def test_abstract_strategy_cannot_be_instantiated(self):
+        """Test that abstract ExportStrategy cannot be instantiated"""
+        from csv_export.strategies import ExportStrategy
+
+        with self.assertRaises(TypeError):
+            ExportStrategy()
+    
+    def test_csv_export_strategy_implementation(self):
+        """Test CSVExportStrategy implementation"""
+        from csv_export.strategies import CSVExportStrategy, ExportStrategy
+        from unittest.mock import Mock
+        
+        strategy = CSVExportStrategy()
+        self.assertIsInstance(strategy, ExportStrategy)
+        
+        self.assertTrue(hasattr(strategy, 'export'))
+        self.assertTrue(callable(strategy.export))
+        
+        mock_writer = Mock()
+        test_data = {"test": "data"}
+        
+        with patch('csv_export.utility.json_to_csv.json_to_csv') as mock_json_to_csv:
+            strategy.export(test_data, mock_writer)
+            mock_json_to_csv.assert_called_once_with(test_data, mock_writer)
+    
+    def test_abstract_method_properties(self):
+        """Test abstract method properties and force execution of pass statement"""
+        from csv_export.strategies import ExportStrategy
+        import inspect
+        
+        export_method = ExportStrategy.export
+        
+        self.assertTrue(getattr(export_method, '__isabstractmethod__', False))
+        
+        sig = inspect.signature(export_method)
+        params = list(sig.parameters.keys())
+        self.assertEqual(params, ['self', 'data', 'writer_or_response'])
+        
+        mock_self = Mock()
+        mock_self.__class__ = ExportStrategy
+        
+        result = export_method(mock_self, {}, None)
+        self.assertIsNone(result)  

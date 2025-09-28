@@ -145,13 +145,18 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", cast=int, default=587)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
 
-EMAIL_HOST_USER = config("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")  # <-- default kosong
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+
+# Kalau kredensial gak ada (CI), pakai console backend biar gak error
+if not EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 # kalau DEFAULT_FROM_EMAIL gak ada di .env, pakai EMAIL_HOST_USER
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)

@@ -271,5 +271,30 @@ class CSVExportTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    # ============ NEGATIVE TEST CASES ============
+
+    # --- Method validation ---
+
+    def test_get_method_not_allowed(self):
+        """Test that GET method returns 405"""
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 405)
+
+
+    def test_put_method_not_allowed(self):
+        """Test that PUT method returns 405"""
+        response = self.client.put(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 405)
+
+
+    def test_delete_method_not_allowed(self):
+        """Test that DELETE method returns 405"""
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, 405)
+
 
         

@@ -67,7 +67,8 @@ class CSVExportTestCase(TestCase):
             }
         }
 
-    # Happy Path Test
+    # ============ POSITIVE TEST CASES ============
+    
     @patch('csv_export.views.json_to_csv')
     def test_successful_csv_export_with_ocr_data(self, mock_json_to_csv):
         """Test successful CSV export with valid OCR medical data"""
@@ -79,18 +80,14 @@ class CSVExportTestCase(TestCase):
             content_type='application/json'
         )
         
-        # Check response status and headers
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/csv')
-        self.assertEqual(
-            response['Content-Disposition'], 
-            'attachment; filename="report.csv"'
-        )
+        self.assertEqual(response['Content-Disposition'], 'attachment; filename="report.csv"')
         
-        # Verify json_to_csv was called with correct arguments
         mock_json_to_csv.assert_called_once()
         call_args = mock_json_to_csv.call_args
         self.assertEqual(call_args[0][0], self.valid_ocr_data)
-        self.assertIsInstance(call_args[0][1], csv.writer)
-
-    
+        
+        writer_arg = call_args[0][1]
+        self.assertTrue(hasattr(writer_arg, 'writerow'))
+        self.assertTrue(hasattr(writer_arg, 'writerows'))

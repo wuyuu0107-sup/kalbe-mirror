@@ -78,7 +78,7 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.parse(
-        "postgresql://postgres.jfgndcfxzgxbyxjlamgg:group1numerouno@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
+         config("DATABASE_URL")
     )
 }
 
@@ -91,6 +91,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "OPTIONS": {
+            "min_length" : 8,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',

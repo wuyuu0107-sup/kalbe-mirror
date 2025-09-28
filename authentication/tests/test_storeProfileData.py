@@ -1,7 +1,6 @@
 import json
 from django.test import TestCase, Client
-from django.urls import path, reverse, NoReverseMatch
-from django.core.exceptions import ValidationError
+from django.urls import reverse
 from django.contrib.auth.hashers import check_password
 from authentication.models import User
 
@@ -120,4 +119,26 @@ class RegisterProfileTests(TestCase):
         self.assertJSONEqual(
             response.content,
             {"error": "invalid payload"}
+        )
+    
+    def test_password_too_short_rejected(self):
+        url = reverse(self.url_name)
+
+        payload = {
+            "username": "dummy",
+            "password": "1234567",  # only 7 chars
+            "display_name": "Shorty",
+            "email": "short@example.com",
+            "roles": ["researcher"],
+        }
+
+        response = self._post_json(url, payload)
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+
+        self.assertIn("error", body)
+
+        self.assertTrue(
+            any("too short" in msg.lower() for msg in body["error"]),
+            f"Expected password too short error, got: {body['error']}",
         )

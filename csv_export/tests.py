@@ -68,6 +68,8 @@ class CSVExportTestCase(TestCase):
         }
 
     # ============ POSITIVE TEST CASES ============
+
+    # --- Happy Test ---
     
     @patch('csv_export.views.json_to_csv')
     def test_successful_csv_export_with_ocr_data(self, mock_json_to_csv):
@@ -91,3 +93,147 @@ class CSVExportTestCase(TestCase):
         writer_arg = call_args[0][1]
         self.assertTrue(hasattr(writer_arg, 'writerow'))
         self.assertTrue(hasattr(writer_arg, 'writerows'))
+
+    # --- Input variations ---
+
+    @patch('csv_export.views.json_to_csv')
+    def test_minimal_ocr_data(self, mock_json_to_csv):
+        """Test with minimal OCR data"""
+        minimal_data = {"DEMOGRAPHY": {"subject_initials": "ABC"}}
+        response = self.client.post(
+            self.url,
+            data=json.dumps(minimal_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(minimal_data, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_empty_json_object(self, mock_json_to_csv):
+        """Test with empty JSON object"""
+        response = self.client.post(
+            self.url,
+            data='{}',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with({}, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_null_json_value(self, mock_json_to_csv):
+        """Test with null JSON value"""
+        response = self.client.post(
+            self.url,
+            data='null',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(None, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_json_array(self, mock_json_to_csv):
+        """Test with JSON array"""
+        array_data = [self.valid_ocr_data, {"DEMOGRAPHY": {"subject_initials": "XYZ"}}]
+        response = self.client.post(
+            self.url,
+            data=json.dumps(array_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(array_data, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_unicode_characters(self, mock_json_to_csv):
+        """Test with Unicode characters in data"""
+        unicode_data = {
+            "DEMOGRAPHY": {
+                "subject_initials": "José María",
+                "study_drug": "Paracétamol 500mg™"
+            }
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(unicode_data, ensure_ascii=False),
+            content_type='application/json; charset=utf-8'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(unicode_data, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_large_dataset(self, mock_json_to_csv):
+        """Test with large OCR dataset"""
+        large_data = {
+            "patients": [
+                {**self.valid_ocr_data, "DEMOGRAPHY": {**self.valid_ocr_data["DEMOGRAPHY"], "sin": str(i)}}
+                for i in range(100)
+            ]
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(large_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(large_data, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_special_characters_in_data(self, mock_json_to_csv):
+        """Test with special characters that might break CSV"""
+        special_data = {
+            "DEMOGRAPHY": {
+                "subject_initials": 'Test "Quote"',
+                "notes": "Line1\nLine2\tTabbed",
+                "study_drug": "Drug, with comma"
+            }
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(special_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(special_data, mock_json_to_csv.call_args[0][1])
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_deeply_nested_data(self, mock_json_to_csv):
+        """Test with deeply nested medical data"""
+        nested_data = {
+            "PATIENT": {
+                "demographics": self.valid_ocr_data["DEMOGRAPHY"],
+                "test_results": {
+                    "blood_work": self.valid_ocr_data["HEMATOLOGY"],
+                    "additional": {"level3": {"level4": "deep_value"}}
+                }
+            }
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(nested_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        mock_json_to_csv.assert_called_once_with(nested_data, mock_json_to_csv.call_args[0][1])
+
+
+    def test_very_large_json_string_field(self):
+        """Test with very large string field"""
+        large_string_data = {
+            "NOTES": "x" * 10000,  # 10KB string
+            "DEMOGRAPHY": {"subject_initials": "TEST"}
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(large_string_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+        

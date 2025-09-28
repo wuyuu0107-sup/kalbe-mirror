@@ -4,37 +4,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import check_password, make_password
 from authentication.models import User
+from .forms import LoginForm, RegistrationForm
 import json
+import logging
 
-@csrf_exempt
-@require_POST
-def register(request):
-    try:
-        data = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid payload"}, status = 400)
-
-    username = (data.get("username") or "").strip()
-    password = (data.get("password") or "").strip()
-
-    if not username or not password:
-        return JsonResponse({"error": "username and password required"}, status=400)
-    
-    try:
-        with transaction.atomic():
-            user = User.objects.create(
-                username=username,
-                password=make_password(password),  # hash for security
-            )
-    except IntegrityError:
-        # unique username handled here if model enforces it
-        return JsonResponse({"error": "user already exists"}, status=409)
-
-    return JsonResponse({
-        "user_id" : f"user {user.user_id}",
-        "message": "Registration is successful. Please log in"},
-        status=201
-    )
+# Set up logging
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_POST
@@ -44,22 +19,32 @@ def login(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "invalid payload"}, status=400)
 
-    username = (data.get("username") or "").strip()
-    password = (data.get("password") or "").strip()
-
-    if not username or not password:
-        return JsonResponse({"error": "username and password required"}, status=400)
-
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
+    # Create form instance with data
+    form = LoginForm(data)
+    
+    if not form.is_valid():
+        # Return validation errors
+        errors = {}
+        for field, error_list in form.errors.items():
+            errors[field] = error_list[0]  # Get first error for each field
+        return JsonResponse({"errors": errors}, status=400)
+    
+    # Try to authenticate user
+    user = form.authenticate()
+    if user is None:
         return JsonResponse({"error": "invalid credentials"}, status=401)
-
-    if not check_password(password, user.password):
-        return JsonResponse({"error": "invalid credentials"}, status=401)
-
+    
+    # Check if user is verified (optional check)
+    if not user.is_verified:
+        return JsonResponse({
+            "error": "Email not verified", 
+            "message": "Please verify your email before logging in"
+        }, status=403)
+    
     return JsonResponse({
         "user_id": f"user {user.user_id}",
+        "username": user.username,
+        "display_name": user.display_name,
         "message": "Login successful"
     }, status=200)
 
@@ -71,16 +56,22 @@ def register_profile(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "invalid payload"}, status=400)
     
-    # Fields from data
-    username = (data.get("username") or "").strip()
-    password = (data.get("password") or "").strip()
-    display_name = (data.get("display_name") or "").strip()
-    email = (data.get("email") or "").strip()
-    roles = data.get("roles", [])
+    # Create form instance with data
+    form = RegistrationForm(data)
+    
+    if not form.is_valid():
+        # Return validation errors
+        errors = {}
+        for field, error_list in form.errors.items():
+            errors[field] = error_list[0] if isinstance(error_list, list) else str(error_list)
+        return JsonResponse({"errors": errors}, status=400)
 
-    # required fields
-    if not username or not password or not display_name or not email:
-        return JsonResponse({"error": "missing required fields"}, status=400)
+    # Get cleaned data
+    username = form.cleaned_data['username']
+    password = form.cleaned_data['password']
+    display_name = form.cleaned_data['display_name']
+    email = form.cleaned_data['email']
+    roles = form.cleaned_data.get('roles', [])
 
     # Hash password
     encoded = make_password(password)
@@ -118,6 +109,13 @@ def verify_email(request, token):
     if user.is_verified:
         return JsonResponse({"message": "Already verified"}, status=200)
 
-    user.is_verified = True
+    user.is_verified = True 
     user.save(update_fields=["is_verified"])
-    return JsonResponse({"message": "Email verified successfully"}, status=200)
+    
+    logger.info(f"Email verified for user: {user.username}")
+    
+    return JsonResponse({
+        "success": True,
+        "message": "Email verified successfully",
+        "details": "You can now log in to your account"
+    }, status=200)

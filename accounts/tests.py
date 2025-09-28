@@ -1,73 +1,101 @@
+# accounts/tests.py
+import json
 from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.core import mail
-import json
-from urllib.parse import urlparse
 
+# ======================
+# Helpers
+# ======================
+def extract_otp_from_mail(body: str) -> str:
+    """
+    Cari baris yang isinya angka aja (6 digit) dari email body.
+    Sesuaikan kalau format email kamu beda.
+    """
+    for ln in body.splitlines():
+        s = ln.strip()
+        if s.isdigit() and 4 <= len(s) <= 8:  # fleksibel 4-8 digit
+            return s
+    # fallback: ambil digit berturut-turut terpanjang
+    digits = "".join(ch for ch in body if ch.isdigit())
+    if len(digits) >= 4:
+        return digits[:6]
+    raise AssertionError("OTP not found in email body")
+
+
+# ======================
+# Email OTP Tests
+# ======================
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-class PasswordResetFlowTests(TestCase):
+class EmailOTPTests(TestCase):
     def setUp(self):
-        self.client = Client()
+        self.c = Client()
         self.user = User.objects.create_user(
-            username="alice", email="alice@example.com", password="OldPass_123"
+            username="alice",
+            email="alice@example.com",
+            password="Old_123456",
         )
 
-    def test_request_always_200_and_sends_mail_for_existing_email(self):
-        res = self.client.post(
-            reverse("password-reset-request"),
+    def test_request_known_email_sends_mail(self):
+        res = self.c.post(
+            reverse("password-reset-otp-request"),
             data=json.dumps({"email": "alice@example.com"}),
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["status"], "ok")
+        self.assertEqual(res.json().get("status"), "ok")
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("/accounts/password-reset/confirm/", mail.outbox[0].body)
+        self.assertIn("Your OTP Code", mail.outbox[0].subject)
 
-    def test_request_unknown_email_still_200(self):
-        res = self.client.post(
-            reverse("password-reset-request"),
+    def test_request_unknown_email_also_200_no_mail(self):
+        res = self.c.post(
+            reverse("password-reset-otp-request"),
             data=json.dumps({"email": "ghost@example.com"}),
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["status"], "ok")
+        self.assertEqual(res.json().get("status"), "ok")
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_confirm_with_token_sets_new_password(self):
-        self.client.post(
-            reverse("password-reset-request"),
+    def test_confirm_sets_new_password(self):
+        # Request OTP
+        self.c.post(
+            reverse("password-reset-otp-request"),
             data=json.dumps({"email": "alice@example.com"}),
             content_type="application/json",
         )
-        body = mail.outbox[0].body
-        path = urlparse([ln for ln in body.splitlines() if "/accounts/password-reset/confirm/" in ln][0]).path
+        # Ambil OTP dari email
+        self.assertEqual(len(mail.outbox), 1, "Email OTP tidak terkirim")
+        otp = extract_otp_from_mail(mail.outbox[0].body)
 
-        res = self.client.post(
-            path, data=json.dumps({"password": "NewPass_456!"}), content_type="application/json"
+        # Confirm pakai OTP
+        res = self.c.post(
+            reverse("password-reset-otp-confirm"),
+            data=json.dumps(
+                {"email": "alice@example.com", "otp": otp, "password": "New_456789!"}
+            ),
+            content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["status"], "password-updated")
-        self.assertTrue(self.client.login(username="alice", password="NewPass_456!"))
+        self.assertEqual(res.json().get("status"), "password-updated")
+        self.assertTrue(self.c.login(username="alice", password="New_456789!"))
 
-    def test_confirm_with_bad_token_fails(self):
-        res = self.client.post(
-            "/accounts/password-reset/confirm/invalid/invalid/",
-            data=json.dumps({"password": "Whatever_123!"}),
-            content_type="application/json",
-        )
-        self.assertEqual(res.status_code, 400)
-
-    def test_confirm_requires_strong_password(self):
-        self.client.post(
-            reverse("password-reset-request"),
+    def test_confirm_weak_password(self):
+        self.c.post(
+            reverse("password-reset-otp-request"),
             data=json.dumps({"email": "alice@example.com"}),
             content_type="application/json",
         )
-        body = mail.outbox[0].body
-        path = urlparse([ln for ln in body.splitlines() if "/accounts/password-reset/confirm/" in ln][0]).path
+        self.assertEqual(len(mail.outbox), 1)
+        otp = extract_otp_from_mail(mail.outbox[0].body)
 
-        res = self.client.post(
-            path, data=json.dumps({"password": "short"}), content_type="application/json"
+        res = self.c.post(
+            reverse("password-reset-otp-confirm"),
+            data=json.dumps(
+                {"email": "alice@example.com", "otp": otp, "password": "short"}
+            ),
+            content_type="application/json",
         )
         self.assertEqual(res.status_code, 400)
+        self.assertIn("error", res.json())

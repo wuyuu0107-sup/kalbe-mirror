@@ -4,7 +4,9 @@ from authentication.models import User
 from django.contrib.auth.hashers import check_password
 import json
 
-# Create your tests here.
+# to run test, enter in terminal:
+# coverage run --source=authentication manage.py test authentication.tests.test_register --settings=kalbe_be.test_settings
+
 class RegisterEndpointTests(TestCase):
     def setUp(self):  
         self.client = Client()

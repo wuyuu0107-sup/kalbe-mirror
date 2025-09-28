@@ -2,8 +2,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-# Ignore pycache in kalbe_be
-kalbe_be/__pycache__/
 
 # Distribution / packaging
 .Python
@@ -116,6 +114,5 @@ site/
 *.sage.py
 
 *.bak
-
-# Ruff
-.ruff_cache/
+kalbe_be/__pycache__/settings.cpython-312.pyc
+kalbe_be/__pycache__/urls.cpython-312.pyc

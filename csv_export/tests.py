@@ -343,6 +343,40 @@ class CSVExportTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    # --- Exception handling ---
+
+    @patch('csv_export.views.json_to_csv')
+    def test_json_to_csv_exception(self, mock_json_to_csv):
+        """Test when json_to_csv raises an exception - should return 500"""
+        mock_json_to_csv.side_effect = ValueError("CSV conversion failed")
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        response_data = json.loads(response.content)
+        self.assertIn('error', response_data)
+        self.assertEqual(response_data['error'], 'CSV conversion failed')
+        self.assertEqual(response_data['message'], 'CSV conversion failed')
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_json_to_csv_memory_error(self, mock_json_to_csv):
+        """Test when json_to_csv raises MemoryError"""
+        mock_json_to_csv.side_effect = MemoryError("Not enough memory")
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 500)
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], 'CSV conversion failed')
+
+
+
 
 
 

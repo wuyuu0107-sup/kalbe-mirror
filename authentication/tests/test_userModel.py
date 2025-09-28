@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
+from shapely import reverse
 from authentication.models import User
 from django.test import Client
 

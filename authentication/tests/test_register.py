@@ -1,6 +1,6 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from UserRegistration.models import User
+from authentication.models import User
 from django.contrib.auth.hashers import check_password
 import json
 

@@ -1,7 +1,7 @@
 from django.test import TestCase, Client
 from django.urls import reverse, NoReverseMatch
 from django.contrib.auth.hashers import make_password
-from UserRegistration.models import User
+from authentication.models import User
 import json
 import uuid
 

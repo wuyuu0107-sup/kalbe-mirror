@@ -1,7 +1,9 @@
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.db import IntegrityError
 from authentication.models import User
 from django.contrib.auth.hashers import check_password
+from unittest.mock import patch
 import json
 
 # to run test, enter in terminal:
@@ -163,4 +165,23 @@ class RegisterEndpointTests(TestCase):
         response = self.client.delete(url)
         self.assertEqual(response.status_code, 405)
 
+    def test_register_duplicate_user_triggers_integrity_error(self):
+        """negative: simulate IntegrityError to cover exception branch"""
+        url = reverse(self.url_name)
 
+        payload = {
+            "username": "duplicate_mock",
+            "password": "Dummy_pass1",
+            "confirm_password": "Dummy_pass1",
+            "display_name": "Duplicate Mock",
+            "email": "duplicate@example.com",
+        }
+
+        with patch("authentication.views.User.objects.create") as mock_create:
+            mock_create.side_effect = IntegrityError("duplicate entry")
+            response = self._post_json(url, payload)
+
+        self.assertEqual(response.status_code, 409)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"], "user already exists")

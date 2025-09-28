@@ -131,3 +131,25 @@ class LoginEndpointTests(TestCase):
         response = self._post_json(url, {"password": self.password})
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn("error", response.json())
+
+    def test_login_unverified_user(self):
+        """negative: login fails if user is not verified"""
+        url = reverse(self.url_name)
+
+        # Create a new user who is not verified
+        unverified_user = User.objects.create(
+            username="stranger",
+            password=make_password("danger123"),
+            email="stranger@email.com",
+            is_verified=False
+        )
+
+        payload = {"username": "stranger", "password": "danger123"}
+        response = self._post_json(url, payload)
+
+        self.assertEqual(response.status_code, 403, response.content)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"], "Email not verified")
+        self.assertIn("message", data)
+        self.assertEqual(data["message"], "Please verify your email before logging in")

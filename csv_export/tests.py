@@ -235,5 +235,41 @@ class CSVExportTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    # --- Response behavior ---
+
+    @patch('csv_export.views.json_to_csv')
+    def test_response_headers_correct(self, mock_json_to_csv):
+        """Test that successful response has correct headers"""
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        self.assertIsInstance(response, HttpResponse)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        self.assertEqual(response['Content-Disposition'], 'attachment; filename="report.csv"')
+
+
+    @patch('csv_export.views.json_to_csv')
+    def test_csrf_exempt_works(self, mock_json_to_csv):
+        """Test that CSRF protection is bypassed"""
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.valid_ocr_data),
+            content_type='application/json'
+        )
+        self.assertNotEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+
+
+    def test_non_json_content_type_still_works(self):
+        """Test that non-JSON content type can still work if body is valid JSON"""
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"test": "data"}),
+            content_type='text/plain'
+        )
+        self.assertEqual(response.status_code, 200)
+
 
         

@@ -5,7 +5,9 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from .strategies import CSVExportStrategy
+from django.contrib.auth.decorators import login_required
 
+@login_required
 @csrf_exempt
 @require_POST
 def export_csv(request):

@@ -1,6 +1,7 @@
 django
 gunicorn
 whitenoise
-psycopg2-binary
+psycopg2-binary>=2.9
 requests
 urllib3
+dj_database_url

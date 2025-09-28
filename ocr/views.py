@@ -102,7 +102,7 @@ def ocr_test_page(request):
         if pdf_file and api_key:
             try:
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.5-flash")
                 prompt = """
                 Analyze this medical document PDF and extract the following information in JSON format.
                 If any information is not found, leave the value as null. for example, some of the data is in indonesian, like density in urinalysis, which is berat jenis in the pdf

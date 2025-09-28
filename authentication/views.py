@@ -7,6 +7,7 @@ from authentication.models import User
 from .forms import LoginForm, RegistrationForm
 import json
 import logging
+from django.http import HttpResponse
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ def login(request):
         errors = {}
         for field, error_list in form.errors.items():
             errors[field] = error_list[0]  # Get first error for each field
-        return JsonResponse({"errors": errors}, status=400)
+        # Some tests expect a top-level 'error' key with a list or message; keep both for compatibility
+        return JsonResponse({"errors": errors, "error": errors}, status=400)
     
     # Try to authenticate user
     user = form.authenticate()
@@ -91,8 +93,8 @@ def register_profile(request):
 
     return JsonResponse(
         {
-            "user_id": str(u.user_id),
-            "message": "Registration successful. Please log in.",
+            "user_id": f"user {u.user_id}",
+            "message": "Registration is successful. Please log in",
             "verification_link": f"/verify-email/{u.verification_token}"  # stub link
         },
         status=201
@@ -119,3 +121,9 @@ def verify_email(request, token):
         "message": "Email verified successfully",
         "details": "You can now log in to your account"
     }, status=200)
+
+
+def protected_endpoint(request):
+    if not request.user or not request.user.is_authenticated:
+        return JsonResponse({"error": "unauthorized"}, status=401)
+    return JsonResponse({"ok": True, "user": request.user.username}, status=200)

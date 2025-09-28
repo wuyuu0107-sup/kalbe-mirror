@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.hashers import check_password
 from django.core.validators import EmailValidator, MinLengthValidator
+from django.contrib.auth.password_validation import CommonPasswordValidator,NumericPasswordValidator
 from authentication.models import User
 import re
 
@@ -39,10 +40,8 @@ class LoginForm(forms.Form):
         password = self.cleaned_data.get('password')
         if not password:
             raise forms.ValidationError("Password cannot be empty.")
-        
         if len(password) < 8:
             raise forms.ValidationError("Password must be at least 8 characters long.")
-        
         return password
 
     def authenticate(self):
@@ -121,10 +120,21 @@ class RegistrationForm(forms.Form):
         if not username:
             raise forms.ValidationError("Username cannot be empty.")
         
+        username = username.strip()
+        
+        if len(username) <= 3:
+            raise forms.ValidationError("Username must be at least 3 characters long.")
+
         # Check if username contains only valid characters
         if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
             raise forms.ValidationError("Username can only contain letters, numbers, dots, hyphens, and underscores.")
         
+        if username.isdigit():
+            raise forms.ValidationError("Username cannot be entirely numeric.")
+        
+        if username.startswith(('.', '_')) or username.endswith(('.', '_')):
+            raise forms.ValidationError("Username cannot start or end with a dot or underscore.")
+
         # Check if username already exists
         if User.objects.filter(username=username).exists():
             raise forms.ValidationError("This username is already taken.")
@@ -134,7 +144,8 @@ class RegistrationForm(forms.Form):
     def clean_email(self):
         email = self.cleaned_data.get('email')
         if not email:
-            raise forms.ValidationError("Email cannot be empty.")
+            raise forms.ValidationError("Email is required.")
+        email = email.lower()
         
         # Check if email already exists
         if User.objects.filter(email=email).exists():
@@ -161,6 +172,17 @@ class RegistrationForm(forms.Form):
             raise forms.ValidationError("Password must contain at least one number.")
         
         return password
+    
+    def clean_display_name(self):
+        display_name = self.cleaned_data.get('display_name')
+        if not display_name or not display_name.strip():
+            raise forms.ValidationError("A display name is required")
+        
+        if re.search(r'[<>"/\\]', display_name):
+            raise forms.ValidationError("Display name cannot contain <, >, \", /, or \\ characters.")
+        
+        return display_name.strip()
+    
 
     def clean(self):
         cleaned_data = super().clean()

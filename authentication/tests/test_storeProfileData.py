@@ -19,7 +19,8 @@ class RegisterProfileTests(TestCase):
         
         payload = {
             "username": "dummy",
-            "password": "pass_dummy",
+            "password": "Pass_dummy1",
+            "confirm_password": "Pass_dummy1",
             "display_name": "dummy dummy",
             "email": "dummy@gmail.com",
             "roles": ["researcher"]
@@ -38,7 +39,7 @@ class RegisterProfileTests(TestCase):
 
         # Password hashed, check_password works on encoded string
         self.assertNotEqual(u.password, payload["password"])
-        self.assertTrue(check_password("pass_dummy", u.password))
+        self.assertTrue(check_password("Pass_dummy1", u.password))
 
         # response shape
         data = r.json()
@@ -127,6 +128,7 @@ class RegisterProfileTests(TestCase):
         payload = {
             "username": "dummy",
             "password": "1234567",  # only 7 chars
+            "confirm_password": "1234567",
             "display_name": "Shorty",
             "email": "short@example.com",
             "roles": ["researcher"],
@@ -136,9 +138,29 @@ class RegisterProfileTests(TestCase):
         self.assertEqual(response.status_code, 400)
         body = response.json()
 
-        self.assertIn("error", body)
+        # Support both legacy top-level 'error' and newer 'errors' mapping
+        msgs = []
+        if "error" in body:
+            val = body["error"]
+            if isinstance(val, dict):
+                msgs = list(val.values())
+            elif isinstance(val, list):
+                msgs = val
+            else:
+                msgs = [str(val)]
+        elif "errors" in body:
+            val = body["errors"]
+            if isinstance(val, dict):
+                msgs = list(val.values())
+            elif isinstance(val, list):
+                msgs = val
+            else:
+                msgs = [str(val)]
+        else:
+            self.fail(f"Expected 'error' or 'errors' in response, got: {body}")
 
+        # Look for phrases indicating the password is too short
         self.assertTrue(
-            any("too short" in msg.lower() for msg in body["error"]),
-            f"Expected password too short error, got: {body['error']}",
+            any(("too short" in str(m).lower() or "at least 8" in str(m).lower()) for m in msgs),
+            f"Expected password too short error, got: {msgs}",
         )

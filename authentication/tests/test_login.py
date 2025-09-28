@@ -13,12 +13,14 @@ class LoginEndpointTests(TestCase):
         self.client = Client()
         self.url_name = "authentication:login"
         self.username = f"user_{uuid.uuid4().hex[:6]}"
-        self.password = "password123"
+        self.password = "KalbePPL2025"
 
         self.user = User.objects.create(
             username=self.username,
             password=make_password(self.password)
         )
+        self.user.is_verified = True #assuming user has been verified since before login
+        self.user.save()
 
     def _post_json(self, url, payload: dict):
         return self.client.post(

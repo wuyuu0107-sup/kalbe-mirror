@@ -1,8 +1,9 @@
 import psycopg2
+import os
 
-DATABASE_URL = "postgresql://postgres:YOUR-PASSWORD@db.jfgndcfxzgxbyxjlamgg.supabase.co:5432/postgres?sslmode=require"
 
 try:
+    os.environ.get("DATABASE_URL")
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute("SELECT NOW();")

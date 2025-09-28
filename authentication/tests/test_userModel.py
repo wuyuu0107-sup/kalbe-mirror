@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
-from shapely import reverse
+from django.urls import reverse
 from authentication.models import User
 from django.test import Client
 
@@ -81,7 +81,7 @@ class UserModelTest(TestCase):
     def test_verify_email_success(self):
         client = Client()
         response = client.post(
-            reverse("UserRegistration:verify_email", args=[self.user.verification_token])
+            reverse("authentication:verify_email", args=[self.user.verification_token])
         )
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, 200)
@@ -91,7 +91,7 @@ class UserModelTest(TestCase):
     def test_verify_email_invalid_token(self):
         client = Client()
         response = client.post(
-            reverse("UserRegistration:verify_email", args=["00000000-0000-0000-0000-000000000000"])
+            reverse("authentication:verify_email", args=["00000000-0000-0000-0000-000000000000"])
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "Invalid token")
@@ -101,7 +101,7 @@ class UserModelTest(TestCase):
         self.user.save()
         client = Client()
         response = client.post(
-            reverse("UserRegistration:verify_email", args=[self.user.verification_token])
+            reverse("authentication:verify_email", args=[self.user.verification_token])
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["message"], "Already verified")

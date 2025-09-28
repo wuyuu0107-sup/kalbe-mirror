@@ -22,7 +22,13 @@ class RegisterEndpointTests(TestCase):
     def test_register_user_success(self):
         url = reverse(self.url_name)
 
-        payload = {"username": "dummy", "password": "dummy_pass"}
+        payload = {
+            "username": "dummy",
+            "password": "Dummy_pass1",
+            "confirm_password": "Dummy_pass1",
+            "display_name": "Dummy User",
+            "email": "dummy@example.com",
+        }
         response = self._post_json(url, payload)
 
         self.assertEqual(response.status_code, 201, response.content)
@@ -32,8 +38,8 @@ class RegisterEndpointTests(TestCase):
         user = User.objects.get(username="dummy")
 
         # Password is hashed & works with check_password
-        self.assertNotEqual(user.password, "dummy_pass")
-        self.assertTrue(check_password("dummy_pass", user.password))
+        self.assertNotEqual(user.password, "Dummy_pass1")
+        self.assertTrue(check_password("Dummy_pass1", user.password))
 
     def test_missing_fields_returns_400(self):
         url = reverse(self.url_name)
@@ -91,12 +97,24 @@ class RegisterEndpointTests(TestCase):
         url = reverse(self.url_name)
         
         # Create first user
-        payload = {"username": "duplicate_user", "password": "pass1"}
+        payload = {
+            "username": "duplicate_user",
+            "password": "HollowKn1ght",
+            "confirm_password": "HollowKn1ght",
+            "display_name": "Hornet Lover",
+            "email": "fake@example.com",
+        }
         response1 = self._post_json(url, payload)
         self.assertEqual(response1.status_code, 201)
         
         # Try to create user with same username
-        payload2 = {"username": "duplicate_user", "password": "pass2"}
+        payload2 = {
+            "username": "duplicate_user",
+            "password": "HollowKn2ght",
+            "confirm_password": "HollowKn2ght",
+            "display_name": "Hornet Hater",
+            "email": "fake2@example.com",
+        }
         response2 = self._post_json(url, payload2)
         
         # This will likely cause an IntegrityError - you may want to handle this in your view
@@ -107,7 +125,13 @@ class RegisterEndpointTests(TestCase):
     def test_response_content_structure(self):
         """Test that successful response has correct structure"""
         url = reverse(self.url_name)
-        payload = {"username": "test_structure", "password": "test_pass"}
+        payload = {
+            "username": "test_structure",
+            "password": "T3st_pass1",
+            "confirm_password": "T3st_pass1",
+            "display_name": "Test Structure",
+            "email": "structure@example.com",
+        }
         response = self._post_json(url, payload)
         
         self.assertEqual(response.status_code, 201)

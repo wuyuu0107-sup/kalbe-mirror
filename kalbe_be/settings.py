@@ -26,6 +26,8 @@ SECRET_KEY = 'django-insecure-461+y(vuzlus9-rs6rwp_r%w-9$3h)6tsk^qizulq*h3w$7j-0
 DEBUG = True
 
 ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
     'backend-mirror-production.up.railway.app'
 ]
 

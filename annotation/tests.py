@@ -1,6 +1,5 @@
 from django.test import TestCase, Client
-from django.urls import reverse
-from .models import Annotation, Patient, Document
+from .models import Patient, Document
 from unittest.mock import patch
 
 class AnnotationCRUDTests(TestCase):

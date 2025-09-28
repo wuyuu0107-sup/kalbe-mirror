@@ -9,6 +9,7 @@ class Patient(models.Model):
     pass
 
 class Annotation(models.Model):
+    id = models.AutoField(primary_key=True)
     document = models.ForeignKey(Document, related_name='annotations', on_delete=models.CASCADE)
     patient = models.ForeignKey(Patient, related_name='annotations', on_delete=models.CASCADE)
     drawing_data = models.JSONField()  # Store drawing as JSON (SVG, coordinates, etc.)

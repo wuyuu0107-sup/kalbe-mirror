@@ -1,7 +1,7 @@
 from django.http import JsonResponse, HttpResponseNotFound, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 import json
-from .models import Document, Patient, Annotation
+from .models import Annotation
 
 @csrf_exempt
 def create_drawing_annotation(request, document_id, patient_id):

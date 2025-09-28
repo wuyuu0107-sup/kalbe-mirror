@@ -375,9 +375,3 @@ class CSVExportTestCase(TestCase):
         response_data = json.loads(response.content)
         self.assertEqual(response_data['error'], 'CSV conversion failed')
 
-
-
-
-
-
-        

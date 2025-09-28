@@ -2,11 +2,16 @@ image: python:3.12
 
 stages:
   - test
+  - build-sonar
+
 
 variables:
   PYTHONUNBUFFERED: 1
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   DJANGO_SETTINGS_MODULE: "kalbe_be.settings"
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: "0"
+
 
 cache:
   paths:
@@ -18,13 +23,43 @@ before_script:
   - pip install -r requirements.txt
 
 test:
+  image: python:3.12
   stage: test
   script:
     - python manage.py migrate --noinput
-    - python manage.py test
+    - pip install coverage  
+    - coverage run manage.py test
+    - coverage xml  
+    - coverage report
   artifacts:
     when: always
     reports:
       junit: reports/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
     paths:
       - reports/
+      - coverage.xml  
+    expire_in: 1 week
+
+build-sonar:
+  image: 
+    name: sonarsource/sonar-scanner-cli:11
+    entrypoint: [""]
+  stage: build-sonar
+  cache:
+    policy: pull-push
+    key: "sonar-cache-$CI_COMMIT_REF_SLUG"
+    paths:
+      - "${SONAR_USER_HOME}/cache"
+      - sonar-scanner/
+  script: 
+    - sonar-scanner -Dsonar.host.url="${SONAR_HOST_URL}"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
+  needs: ["test"]

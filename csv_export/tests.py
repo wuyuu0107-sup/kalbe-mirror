@@ -71,7 +71,7 @@ class CSVExportTestCase(TestCase):
 
     # --- Happy Test ---
     
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_successful_csv_export_with_ocr_data(self, mock_json_to_csv):
         """Test successful CSV export with valid OCR medical data"""
         mock_json_to_csv.return_value = None
@@ -96,7 +96,7 @@ class CSVExportTestCase(TestCase):
 
     # --- Input variations ---
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_minimal_ocr_data(self, mock_json_to_csv):
         """Test with minimal OCR data"""
         minimal_data = {"DEMOGRAPHY": {"subject_initials": "ABC"}}
@@ -109,7 +109,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(minimal_data, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_empty_json_object(self, mock_json_to_csv):
         """Test with empty JSON object"""
         response = self.client.post(
@@ -121,7 +121,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with({}, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_null_json_value(self, mock_json_to_csv):
         """Test with null JSON value"""
         response = self.client.post(
@@ -133,7 +133,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(None, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_json_array(self, mock_json_to_csv):
         """Test with JSON array"""
         array_data = [self.valid_ocr_data, {"DEMOGRAPHY": {"subject_initials": "XYZ"}}]
@@ -146,7 +146,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(array_data, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_unicode_characters(self, mock_json_to_csv):
         """Test with Unicode characters in data"""
         unicode_data = {
@@ -164,7 +164,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(unicode_data, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_large_dataset(self, mock_json_to_csv):
         """Test with large OCR dataset"""
         large_data = {
@@ -182,7 +182,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(large_data, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_special_characters_in_data(self, mock_json_to_csv):
         """Test with special characters that might break CSV"""
         special_data = {
@@ -201,7 +201,7 @@ class CSVExportTestCase(TestCase):
         mock_json_to_csv.assert_called_once_with(special_data, mock_json_to_csv.call_args[0][1])
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_deeply_nested_data(self, mock_json_to_csv):
         """Test with deeply nested medical data"""
         nested_data = {
@@ -237,7 +237,7 @@ class CSVExportTestCase(TestCase):
 
     # --- Response behavior ---
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_response_headers_correct(self, mock_json_to_csv):
         """Test that successful response has correct headers"""
         response = self.client.post(
@@ -250,7 +250,7 @@ class CSVExportTestCase(TestCase):
         self.assertEqual(response['Content-Disposition'], 'attachment; filename="report.csv"')
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_csrf_exempt_works(self, mock_json_to_csv):
         """Test that CSRF protection is bypassed"""
         response = self.client.post(
@@ -345,7 +345,7 @@ class CSVExportTestCase(TestCase):
 
     # --- Exception handling ---
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_json_to_csv_exception(self, mock_json_to_csv):
         """Test when json_to_csv raises an exception - should return 500"""
         mock_json_to_csv.side_effect = ValueError("CSV conversion failed")
@@ -362,7 +362,7 @@ class CSVExportTestCase(TestCase):
         self.assertEqual(response_data['message'], 'CSV conversion failed')
 
 
-    @patch('csv_export.views.json_to_csv')
+    @patch('csv_export.utility.json_to_csv.json_to_csv')
     def test_json_to_csv_memory_error(self, mock_json_to_csv):
         """Test when json_to_csv raises MemoryError"""
         mock_json_to_csv.side_effect = MemoryError("Not enough memory")

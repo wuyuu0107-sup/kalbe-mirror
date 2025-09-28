@@ -4,11 +4,16 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from csv_export.utility.json_to_csv import *
+from .strategies import CSVExportStrategy
 
 @csrf_exempt
 @require_POST
 def export_csv(request):
+    """
+    Strategy Pattern Applied:
+    - Uses CSVExportStrategy to handle the export algorithm
+    - Strategy can be easily swapped for different export formats
+    """
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError as e:
@@ -28,7 +33,8 @@ def export_csv(request):
     writer = csv.writer(response)
     
     try:
-        json_to_csv(data, writer)
+        export_strategy = CSVExportStrategy()
+        export_strategy.export(data, writer)
     except Exception as e:
         return JsonResponse({
             'error': 'CSV conversion failed',

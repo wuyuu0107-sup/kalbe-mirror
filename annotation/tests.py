@@ -4,6 +4,22 @@ from unittest.mock import patch
 from authentication.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
+import os
+import io
+import json
+import base64
+from django.core.files.uploadedfile import SimpleUploadedFile
+from unittest.mock import patch, MagicMock
+from rest_framework.test import APIClient
+from rest_framework import status
+
+
+# If your file already declared HAS_COMMENTS earlier, you can reuse it.
+try:
+    from .models import Comment  # noqa: F401
+    HAS_COMMENTS = True
+except Exception:
+    HAS_COMMENTS = False
 
 class AnnotationCRUDTests(TestCase):
     def setUp(self):
@@ -231,3 +247,227 @@ class AnnotationAPITests(TestCase):
         unauthenticated_client = APIClient()
         res = unauthenticated_client.get(f'/api/v1/annotations/')
         self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+def make_pdf_bytes() -> bytes:
+    # minimal-but-valid-enough PDF header for upload tests
+    return b"%PDF-1.4\n%Fake\n1 0 obj <<>> endobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<<>>\nstartxref\n0\n%%EOF"
+
+
+class _AuthAPIMixin:
+    """Common setup that creates a user and uses DRF APIClient with force_authenticate."""
+    def api_setup(self):
+        from authentication.models import User  # your existing import style
+        self.user = User.objects.create(
+            username="apitester",
+            email="api@test.local",
+            password="pass12345",
+        )
+        # If your tests/session logic expects .user_id, mirror it
+        if not hasattr(self.user, "user_id"):
+            self.user.user_id = self.user.id
+
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+        # handy paths
+        self.DOC_LIST = "/api/v1/documents/"
+        self.PAT_LIST = "/api/v1/patients/"
+        self.ANN_LIST = "/api/v1/annotations/"
+        self.ANN_BY_DOC_PAT = "/api/v1/annotations/by_document_patient/"
+        self.DOC_FROM_GEMINI = "/api/v1/documents/from-gemini/"
+
+
+class DocumentViewSetTests(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+
+    def test_create_document_json_source(self):
+        payload = {
+            "source": "json",
+            "payload_json": {"hello": "world"},
+            "meta": {"from": "unit-test"},
+        }
+        res = self.client.post(self.DOC_LIST, data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.content)
+        self.assertIn("id", res.data)
+        self.assertEqual(res.data["source"], "json")
+        self.assertEqual(res.data["payload_json"]["hello"], "world")
+
+    def test_document_validation_requires_content(self):
+        # source='pdf' but no content_url
+        bad = self.client.post(
+            self.DOC_LIST,
+            data=json.dumps({"source": "pdf"}),
+            content_type="application/json",
+        )
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST, bad.content)
+
+    def test_patch_document_payload(self):
+        # create
+        create = self.client.post(
+            self.DOC_LIST,
+            data=json.dumps({"source": "json", "payload_json": {"a": 1}}),
+            content_type="application/json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.content)
+        doc_id = create.data["id"]
+
+        # patch payload_json
+        patch = {"payload_json": {"a": 2, "b": 3}}
+        res = self.client.patch(
+            f"{self.DOC_LIST}{doc_id}/",
+            data=json.dumps(patch),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        self.assertEqual(res.data["payload_json"]["a"], 2)
+        self.assertEqual(res.data["payload_json"]["b"], 3)
+
+    @patch("annotation.views.genai.GenerativeModel")
+    def test_from_gemini_ok(self, MockModel):
+        # fake model + response
+        mock_model = MagicMock()
+        MockModel.return_value = mock_model
+
+        fake_text = '{"DEMOGRAPHY":{"subject_initials":"AB"}}'
+        mock_resp = MagicMock()
+        mock_resp.text = fake_text
+        mock_model.generate_content.return_value = mock_resp
+
+        # ensure an API key is present for the view logic
+        os.environ["GEMINI_API_KEY"] = "fake-key-for-tests"
+
+        pdf_file = SimpleUploadedFile("x.pdf", make_pdf_bytes(), content_type="application/pdf")
+        res = self.client.post(self.DOC_FROM_GEMINI, data={"file": pdf_file}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED, res.content)
+        self.assertEqual(res.data["source"], "json")
+        self.assertIn("payload_json", res.data)
+        self.assertEqual(res.data["payload_json"]["DEMOGRAPHY"]["subject_initials"], "AB")
+
+    @patch("annotation.views.genai.GenerativeModel")
+    def test_from_gemini_missing_api_key(self, MockModel):
+        # clear keys the view checks
+        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+
+        pdf_file = SimpleUploadedFile("x.pdf", make_pdf_bytes(), content_type="application/pdf")
+        res = self.client.post(self.DOC_FROM_GEMINI, data={"file": pdf_file}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR, res.content)
+        self.assertIn("GEMINI_API_KEY not set", res.data.get("error", ""))
+
+
+class PatientViewSetTests(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+
+    def test_create_and_retrieve_patient(self):
+        create = self.client.post(
+            self.PAT_LIST,
+            data=json.dumps({"name": "Alice", "external_id": "PAT-XYZ"}),
+            content_type="application/json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.content)
+        pid = create.data["id"]
+
+        get_res = self.client.get(f"{self.PAT_LIST}{pid}/")
+        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(get_res.data["name"], "Alice")
+        self.assertEqual(get_res.data["external_id"], "PAT-XYZ")
+
+
+class AnnotationByDocPatientTests(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+        # create a doc + two patients
+        d = self.client.post(
+            self.DOC_LIST,
+            data=json.dumps({"source": "json", "payload_json": {"k": 1}}),
+            content_type="application/json",
+        )
+        self.assertEqual(d.status_code, status.HTTP_201_CREATED, d.content)
+        self.doc_id = d.data["id"]
+
+        p1 = self.client.post(
+            self.PAT_LIST,
+            data=json.dumps({"name": "P1", "external_id": "P-1"}),
+            content_type="application/json",
+        )
+        p2 = self.client.post(
+            self.PAT_LIST,
+            data=json.dumps({"name": "P2", "external_id": "P-2"}),
+            content_type="application/json",
+        )
+        self.assertEqual(p1.status_code, 201)
+        self.assertEqual(p2.status_code, 201)
+        self.p1 = p1.data["id"]
+        self.p2 = p2.data["id"]
+
+        # annotations for each patient
+        a1 = self.client.post(
+            self.ANN_LIST,
+            data=json.dumps({"document": self.doc_id, "patient": self.p1, "label": "A1", "drawing_data": {"v": 1}}),
+            content_type="application/json",
+        )
+        a2 = self.client.post(
+            self.ANN_LIST,
+            data=json.dumps({"document": self.doc_id, "patient": self.p2, "label": "A2", "drawing_data": {"v": 2}}),
+            content_type="application/json",
+        )
+        self.assertEqual(a1.status_code, 201, a1.content)
+        self.assertEqual(a2.status_code, 201, a2.content)
+
+    def test_filter_by_doc_and_patient(self):
+        res = self.client.get(f"{self.ANN_LIST}?document={self.doc_id}&patient={self.p1}")
+        self.assertEqual(res.status_code, 200)
+        # handle both paginated & non-paginated responses
+        data = res.data.get("results", res.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["label"], "A1")
+
+    def test_by_document_patient_action(self):
+        res = self.client.get(f"{self.ANN_BY_DOC_PAT}?document={self.doc_id}&patient={self.p1}")
+        self.assertEqual(res.status_code, 200)
+        data = res.data.get("results", res.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["label"], "A1")
+
+
+if HAS_COMMENTS:
+    class CommentViewSetTests(_AuthAPIMixin, TestCase):
+        def setUp(self):
+            self.api_setup()
+            # doc + patient to attach comments to
+            d = self.client.post(
+                self.DOC_LIST,
+                data=json.dumps({"source": "json", "payload_json": {"k": 1}}),
+                content_type="application/json",
+            )
+            self.assertEqual(d.status_code, 201, d.content)
+            self.doc_id = d.data["id"]
+
+            p = self.client.post(
+                self.PAT_LIST,
+                data=json.dumps({"name": "Commenter", "external_id": "C-1"}),
+                content_type="application/json",
+            )
+            self.assertEqual(p.status_code, 201, p.content)
+            self.pat_id = p.data["id"]
+
+            self.COMMENT_LIST = "/api/v1/comments/"
+
+        def test_create_list_delete_comment(self):
+            create = self.client.post(
+                self.COMMENT_LIST,
+                data=json.dumps({"document": self.doc_id, "patient": self.pat_id, "author": "Dr J", "body": "Looks good."}),
+                content_type="application/json",
+            )
+            self.assertEqual(create.status_code, 201, create.content)
+            cid = create.data["id"]
+
+            lst = self.client.get(f"{self.COMMENT_LIST}?document={self.doc_id}&patient={self.pat_id}")
+            self.assertEqual(lst.status_code, 200)
+            data = lst.data.get("results", lst.data)
+            self.assertTrue(any(c["id"] == cid for c in data))
+
+            dele = self.client.delete(f"{self.COMMENT_LIST}{cid}/")
+            self.assertEqual(dele.status_code, 204)

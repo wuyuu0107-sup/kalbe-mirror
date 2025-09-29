@@ -27,7 +27,18 @@ SECRET_KEY = config("SECRET_KEY_DJANGO")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 
 # Application definition
@@ -40,6 +51,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "accounts",
+    "corsheaders",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -63,6 +75,7 @@ TIME_ZONE = "Asia/Jakarta"
 USE_TZ = True
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

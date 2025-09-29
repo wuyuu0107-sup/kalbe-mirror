@@ -1,6 +1,9 @@
 from django.test import TestCase, Client
 from .models import Patient, Document
 from unittest.mock import patch
+from authentication.models import User
+from rest_framework.test import APIClient
+from rest_framework import status
 
 class AnnotationCRUDTests(TestCase):
     def setUp(self):
@@ -11,6 +14,20 @@ class AnnotationCRUDTests(TestCase):
             "type": "drawing",
             "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}]
         }
+
+        # Create a test user
+        self.user = User.objects.create(
+            username='testuser',
+            password='testpassword',
+            email='testuser@example.com',
+            is_verified=True
+        )
+
+        # Simulate login by setting session data
+        session = self.client.session
+        session['_auth_user_id'] = str(self.user.user_id)
+        session['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
+        session.save()
 
         # Create Patient and Document IDs in the test database
         Patient.objects.create(id=self.patient_id, name="Test Patient")
@@ -89,16 +106,27 @@ class AnnotationCRUDTests(TestCase):
         response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/')
         self.assertEqual(response.status_code, 400)
 
-
-from django.test import TestCase
-from rest_framework.test import APIClient
-from rest_framework import status
-from .models import Document, Patient, Annotation
+    def test_unauthenticated_access(self):
+        unauthenticated_client = Client()
+        response = unauthenticated_client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
+        self.assertEqual(response.status_code, 302)  # Redirect to login page
 
 
 class AnnotationAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
+
+        # Create a test user
+        self.user = User.objects.create(
+            username='testuser',
+            password='testpassword',
+            email='testuser@example.com',
+            is_verified=True
+        )
+
+        # Simulate authentication by setting credentials
+        self.client.credentials(HTTP_AUTHORIZATION='Token fake-token')
+
         # Prepare a sample Document (json) and Patient
         doc_res = self.client.post('/api/v1/documents/', {
             'source': 'json',
@@ -198,3 +226,8 @@ class AnnotationAPITests(TestCase):
             'drawing_data': 'not-json-object'
         }, format='json')
         self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unauthenticated_access(self):
+        unauthenticated_client = APIClient()
+        res = unauthenticated_client.get(f'/api/v1/annotations/')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)

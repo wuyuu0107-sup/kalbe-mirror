@@ -19,6 +19,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from ocr.views import api_ocr
+from annotation.views_page import AnnotationTesterPage
+from ocr.views import ocr_test_page
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -28,4 +30,9 @@ urlpatterns = [
     path('api/ocr/', api_ocr),
     # UI and other OCR routes live under /ocr/
     path('ocr/', include('ocr.urls')),
+    path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
+    path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
+    
+    
+    
 ]

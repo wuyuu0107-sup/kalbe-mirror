@@ -1,7 +1,6 @@
 from django import forms
 from django.contrib.auth.hashers import check_password
 from django.core.validators import EmailValidator, MinLengthValidator
-from django.contrib.auth.password_validation import CommonPasswordValidator,NumericPasswordValidator
 from authentication.models import User
 import re
 

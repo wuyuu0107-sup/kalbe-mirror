@@ -33,5 +33,8 @@ class User(models.Model):
     is_verified = models.BooleanField(default=False)
     verification_token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
+    USERNAME_FIELD = 'username'  
+    REQUIRED_FIELDS = ['email']  
+
     def __str__(self):
         return self.username

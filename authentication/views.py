@@ -2,12 +2,11 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import make_password
 from authentication.models import User
 from .forms import LoginForm, RegistrationForm
 import json
 import logging
-from django.http import HttpResponse
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -16,7 +15,14 @@ logger = logging.getLogger(__name__)
 @require_POST
 def login(request):
     try:
-        data = json.loads(request.body.decode() or "{}")
+        # More robust JSON parsing
+        if request.body:
+            try:
+                data = json.loads(request.body.decode('utf-8'))
+            except UnicodeDecodeError:
+                return JsonResponse({"error": "invalid payload"}, status=400)
+        else:
+            data = {}
     except json.JSONDecodeError:
         return JsonResponse({"error": "invalid payload"}, status=400)
 
@@ -28,7 +34,6 @@ def login(request):
         errors = {}
         for field, error_list in form.errors.items():
             errors[field] = error_list[0]  # Get first error for each field
-        # Some tests expect a top-level 'error' key with a list or message; keep both for compatibility
         return JsonResponse({"errors": errors, "error": errors}, status=400)
     
     # Try to authenticate user
@@ -42,6 +47,9 @@ def login(request):
             "error": "Email not verified", 
             "message": "Please verify your email before logging in"
         }, status=403)
+    
+    request.session['user_id'] = str(user.user_id)
+    request.session['username'] = user.username
     
     return JsonResponse({
         "user_id": f"user {user.user_id}",
@@ -127,3 +135,9 @@ def protected_endpoint(request):
     if not request.user or not request.user.is_authenticated:
         return JsonResponse({"error": "unauthorized"}, status=401)
     return JsonResponse({"ok": True, "user": request.user.username}, status=200)
+
+@csrf_exempt  
+@require_POST
+def logout(request):
+    request.session.flush()
+    return JsonResponse({'message': 'Logged out'}, status=200)

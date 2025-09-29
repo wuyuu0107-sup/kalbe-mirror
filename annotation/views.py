@@ -1,8 +1,12 @@
 from django.http import JsonResponse, HttpResponseNotFound, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 import json
 from .models import Annotation
 
+@login_required
 @csrf_exempt
 def create_drawing_annotation(request, document_id, patient_id):
     if request.method == "POST":
@@ -18,6 +22,7 @@ def create_drawing_annotation(request, document_id, patient_id):
             return HttpResponseBadRequest(str(e))
     return HttpResponseBadRequest("Invalid method")
 
+@login_required
 @csrf_exempt
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     if request.method == "GET":
@@ -68,6 +73,9 @@ class DocumentViewSet(mixins.CreateModelMixin,
     """
     Minimal: OCR service POSTs here to create a Document record.
     """
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
     queryset = Document.queryset = Document.objects.all().order_by('-created_at')
     serializer_class = DocumentSerializer
     
@@ -126,6 +134,9 @@ class PatientViewSet(mixins.CreateModelMixin,
                      mixins.RetrieveModelMixin,
                      mixins.ListModelMixin,
                      viewsets.GenericViewSet):
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
     queryset = Patient.objects.all().order_by('id')
     serializer_class = PatientSerializer
     filter_backends = [filters.SearchFilter]
@@ -136,6 +147,9 @@ class AnnotationViewSet(viewsets.ModelViewSet):
     """
     Full CRUD + filtering by document & patient.
     """
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
     queryset = Annotation.objects.select_related('document', 'patient').all().order_by('-created_at')
     serializer_class = AnnotationSerializer
     filter_backends = [DjangoFilterBackend]

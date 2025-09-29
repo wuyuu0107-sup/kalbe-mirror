@@ -88,3 +88,113 @@ class AnnotationCRUDTests(TestCase):
     def test_invalid_method_on_drawing_annotation(self):
         response = self.client.post(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/1/')
         self.assertEqual(response.status_code, 400)
+
+
+from django.test import TestCase
+from rest_framework.test import APIClient
+from rest_framework import status
+from .models import Document, Patient, Annotation
+
+
+class AnnotationAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        # Prepare a sample Document (json) and Patient
+        doc_res = self.client.post('/api/v1/documents/', {
+            'source': 'json',
+            'payload_json': {'hello': 'world'},
+            'meta': {'from': 'ocr-service'}
+        }, format='json')
+        self.assertEqual(doc_res.status_code, status.HTTP_201_CREATED)
+        self.document_id = doc_res.data['id']
+
+        pat_res = self.client.post('/api/v1/patients/', {
+            'name': 'Test Patient',
+            'external_id': 'PAT-001'
+        }, format='json')
+        self.assertEqual(pat_res.status_code, status.HTTP_201_CREATED)
+        self.patient_id = pat_res.data['id']
+
+    def test_create_annotation(self):
+        res = self.client.post('/api/v1/annotations/', {
+            'document': self.document_id,
+            'patient': self.patient_id,
+            'label': 'highlight',
+            'drawing_data': {'type': 'drawing', 'data': [{'tool': 'pen', 'points': [[10, 10], [20, 20]]}]}
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertIn('id', res.data)
+
+    def test_list_filter_by_doc_and_patient(self):
+        # create two annotations, one for another patient
+        a1 = self.client.post('/api/v1/annotations/', {
+            'document': self.document_id,
+            'patient': self.patient_id,
+            'label': 'A1',
+            'drawing_data': {'foo': 'bar'}
+        }, format='json')
+        self.assertEqual(a1.status_code, status.HTTP_201_CREATED)
+
+        pat2 = self.client.post('/api/v1/patients/', {'name': 'Other', 'external_id': 'PAT-002'}, format='json')
+        self.assertEqual(pat2.status_code, status.HTTP_201_CREATED)
+        a2 = self.client.post('/api/v1/annotations/', {
+            'document': self.document_id,
+            'patient': pat2.data['id'],
+            'label': 'A2',
+            'drawing_data': {'foo': 'baz'}
+        }, format='json')
+        self.assertEqual(a2.status_code, status.HTTP_201_CREATED)
+
+        res = self.client.get(f'/api/v1/annotations/?document={self.document_id}&patient={self.patient_id}')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['label'], 'A1')
+
+    def test_get_update_delete_annotation(self):
+        create = self.client.post('/api/v1/annotations/', {
+            'document': self.document_id,
+            'patient': self.patient_id,
+            'label': 'to-update',
+            'drawing_data': {'v': 1}
+        }, format='json')
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        annot_id = create.data['id']
+
+        # retrieve
+        get_res = self.client.get(f'/api/v1/annotations/{annot_id}/')
+        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(get_res.data['label'], 'to-update')
+
+        # update
+        upd = self.client.put(f'/api/v1/annotations/{annot_id}/', {
+            'document': self.document_id,
+            'patient': self.patient_id,
+            'label': 'updated',
+            'drawing_data': {'v': 2}
+        }, format='json')
+        self.assertEqual(upd.status_code, status.HTTP_200_OK)
+        self.assertEqual(upd.data['label'], 'updated')
+        self.assertEqual(upd.data['drawing_data']['v'], 2)
+
+        # delete
+        dele = self.client.delete(f'/api/v1/annotations/{annot_id}/')
+        self.assertEqual(dele.status_code, status.HTTP_204_NO_CONTENT)
+
+        # 404 after delete
+        notfound = self.client.get(f'/api/v1/annotations/{annot_id}/')
+        self.assertEqual(notfound.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_document_validation_requires_content(self):
+        bad = self.client.post('/api/v1/documents/', {
+            'source': 'pdf'  # missing content_url/payload_json
+        }, format='json')
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_annotation_validation_requires_json_shape(self):
+        # invalid: drawing_data is string
+        bad = self.client.post('/api/v1/annotations/', {
+            'document': self.document_id,
+            'patient': self.patient_id,
+            'drawing_data': 'not-json-object'
+        }, format='json')
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)

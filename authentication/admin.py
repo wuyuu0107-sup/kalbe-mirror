@@ -1,3 +1,4 @@
-from django.contrib import admin
+# Remove 
+# from django.contrib import admin
 
 # Register your models here.

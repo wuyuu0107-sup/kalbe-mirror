@@ -2,19 +2,19 @@ import os
 import re
 import time
 import json
-import numpy as np
-from PIL import Image
 
 from django.http import HttpResponseBadRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
-
-import easyocr
 import google.generativeai as genai
 from dotenv import load_dotenv
 
 from .reader import get_reader
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from .utils import correct_word
+from django.conf import settings
+
 
 # --- PDF support flag for tests / optional dependency ---
 try:
@@ -92,6 +92,8 @@ def health(request):
     return JsonResponse({"status": "ok"}, status=200)
 
 
+from annotation.models import Document, Patient
+
 @csrf_exempt
 def ocr_test_page(request):
     load_dotenv()
@@ -101,12 +103,14 @@ def ocr_test_page(request):
         result: dict = {}
         if pdf_file and api_key:
             try:
+                # 1) Call Gemini 2.5 OCR
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.5-flash")
                 prompt = """
                 Analyze this medical document PDF and extract the following information in JSON format.
-                If any information is not found, leave the value as null. for example, some of the data is in indonesian, like density in urinalysis, which is berat jenis in the pdf
-                For urinalysis, hematology, and clinical chemistry, there is titles of the tables called "Hasil", "Nilai Rujukan", "Satuan", and "Metode", display them in the results in order like ""ph": 6.5, ..., ..., ...""
+                If any information is not found, leave the value as null. Some labels are Indonesian (e.g., "berat jenis" for urine density).
+                For urinalysis, hematology, and clinical chemistry, return objects with keys:
+                "Hasil", "Nilai Rujukan", "Satuan", "Metode".
                 Required Fields:
                 1. DEMOGRAPHY:
                    - subject_initials
@@ -130,7 +134,7 @@ def ocr_test_page(request):
                    - hcv
                    - hiv
                 5. URINALYSIS:
-                   - ph : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
+                   - ph
                    - density
                    - glucose
                    - ketone
@@ -140,64 +144,102 @@ def ocr_test_page(request):
                    - leucocyte_esterase
                    - nitrite
                 6. HEMATOLOGY:
-                   - hemoglobin : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
+                   - hemoglobin
                    - hematocrit
                    - leukocyte
                    - erythrocyte
                    - thrombocyte
                    - esr
                 7. CLINICAL_CHEMISTRY:
-                   - bilirubin_total : "Hasil", "Nilai Rujukan", "Satuan", "Metode"
+                   - bilirubin_total
                    - alkaline_phosphatase
                    - sgot
                    - sgpt
                    - ureum
                    - creatinine
                    - random_blood_glucose
-                Provide ONLY the JSON object without any additional text or formatting.
+                Provide ONLY a single JSON object with those sections/keys.
                 """.strip()
 
-                pdf_data = pdf_file.read()
-                start_time = time.time()
-                response = model.generate_content(
-                    [prompt, {"mime_type": "application/pdf", "data": pdf_data}]
+                pdf_bytes = pdf_file.read()
+                t0 = time.time()
+                resp = model.generate_content(
+                    [prompt, {"mime_type": "application/pdf", "data": pdf_bytes}],
+                    generation_config={"temperature": 0},
                 )
-                processing_time = time.time() - start_time
+                dt = round(time.time() - t0, 2)
 
-                json_text = response.text.strip()
-                json_text = re.sub(r"^```json\s*", "", json_text)
-                json_text = re.sub(r"\s*```$", "", json_text)
+                # 2) Clean + parse JSON
+                text = (resp.text or "").strip()
+                text = re.sub(r"^```json\s*", "", text, flags=re.M)
+                text = re.sub(r"^```\s*", "", text, flags=re.M)
+                text = re.sub(r"\s*```$", "", text)
                 try:
-                    extracted_data = json.loads(json_text)
+                    extracted = json.loads(text)
                 except Exception:
-                    extracted_data = {}
+                    # last resort: grab last {...}
+                    m = re.search(r"\{.*\}\s*$", text, flags=re.S)
+                    extracted = json.loads(m.group(0)) if m else {}
+
+                # 3) Save PDF to MEDIA so the viewer can load it
+                #    We'll put it under media/ocr/<original_name>
+                save_path = f"ocr/{pdf_file.name}"
+                stored_path = default_storage.save(save_path, ContentFile(pdf_bytes))
+                # Build a URL clients can fetch (works in DEBUG with static serving configured)
+                try:
+                    pdf_url = default_storage.url(stored_path)
+                except Exception:
+                    pdf_url = (settings.MEDIA_URL.rstrip("/") + "/" + stored_path.lstrip("/"))
+
+
+                # 4) Create a Document row carrying both the PDF URL and the parsed JSON
+                doc = Document.objects.create(
+                    source="pdf",
+                    content_url=pdf_url,          # so the viewer can render it
+                    payload_json=extracted,        # also keep the structured data
+                    meta={"from": "gemini_2_5"},
+                )
+
+                # (Optional) Create a throwaway Patient so you can annotate immediately
+                # or replace this with your real patient creation logic
+                pat = Patient.objects.create(name="OCR Patient", external_id="OCR-ADHOC")
 
                 result = {
-                    "structured_data": extracted_data,
-                    "raw_response": json_text,
-                    "processing_time": round(processing_time, 2),
                     "success": True,
                     "error": None,
+                    "processing_time": dt,
+                    # what the front-end needs to enable Start Annotating:
+                    "document_id": doc.id,
+                    "patient_id": pat.id,
+                    "pdf_url": pdf_url,
+                    # and the OCR JSON to display/edit:
+                    "structured_data": extracted,
+                    "raw_response": text,
                 }
+                return HttpResponse(json.dumps(result), content_type="application/json")
+
             except Exception as err:
                 result = {
+                    "success": False,
                     "error": str(err),
+                    "processing_time": 0,
                     "structured_data": {},
                     "raw_response": "",
-                    "processing_time": 0,
-                    "success": False,
                 }
+                return HttpResponse(json.dumps(result), content_type="application/json", status=200)
         else:
             result = {
+                "success": False,
                 "error": "Missing PDF or API key",
+                "processing_time": 0,
                 "structured_data": {},
                 "raw_response": "",
-                "processing_time": 0,
-                "success": False,
             }
-        return HttpResponse(json.dumps(result), content_type="application/json")
+            return HttpResponse(json.dumps(result), content_type="application/json", status=200)
 
+    # GET -> show your uploader/test page
     return render(request, "ocr.html")
+
 
 
 @csrf_exempt

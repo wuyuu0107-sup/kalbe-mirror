@@ -39,3 +39,12 @@ class Annotation(models.Model):
         indexes = [
             models.Index(fields=['document', 'patient']),
         ]
+
+class Comment(models.Model):
+    document = models.ForeignKey(Document, related_name='comments', on_delete=models.CASCADE)
+    patient = models.ForeignKey(Patient, related_name='comments', on_delete=models.SET_NULL, null=True, blank=True)
+    author = models.CharField(max_length=128, blank=True, default="")
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+

@@ -7,5 +7,6 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("", ocr_test_page, name="ocr_test_page"),
     path("image/", ocr_image, name="image"),
+    path('ocr_test_page/', ocr_test_page),
     path("api/ocr/", api_ocr, name="api_ocr"),
 ]

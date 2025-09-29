@@ -1,9 +1,10 @@
 django==5.2.6
 gunicorn==23.0.0
 whitenoise==6.8.2
-psycopg2-binary
+psycopg2-binary>=2.9
 requests
 urllib3
+dj_database_url
 django-cors-headers
 djangorestframework
 numpy

@@ -18,6 +18,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from authentication.views import protected_endpoint
 from ocr.views import api_ocr
 from annotation.views_page import AnnotationTesterPage
 from ocr.views import ocr_test_page
@@ -32,7 +33,6 @@ urlpatterns = [
     path('ocr/', include('ocr.urls')),
     path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
     path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
-    
-    
-    
+    path('auth/', include('authentication.urls')),
+    path('api/protected-endpoint/', protected_endpoint),
 ]

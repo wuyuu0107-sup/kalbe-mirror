@@ -629,3 +629,21 @@ class RegistrationFormTest(TestCase):
         with self.assertRaises(forms.ValidationError) as cm:
             reg_form.clean_display_name()
         self.assertIn("cannot contain", str(cm.exception))
+
+    def test_direct_clean_password_min_length(self):
+        """Directly test password min length branch in clean_password"""
+        reg_form = RegistrationForm()
+        # password shorter than 8 should raise the specific ValidationError
+        reg_form.cleaned_data = {'password': '1234567'}
+        with self.assertRaises(forms.ValidationError) as cm:
+            reg_form.clean_password()
+        self.assertIn('at least 8 characters', str(cm.exception))
+
+    def test_direct_clean_display_name_whitespace(self):
+        """Directly test display_name whitespace-only is rejected"""
+        reg_form = RegistrationForm()
+        reg_form.cleaned_data = {'display_name': '   '}
+        with self.assertRaises(forms.ValidationError) as cm:
+            reg_form.clean_display_name()
+        # exact message expected from the form
+        self.assertIn('A display name is required', str(cm.exception))

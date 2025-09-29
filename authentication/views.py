@@ -14,17 +14,19 @@ logger = logging.getLogger(__name__)
 @csrf_exempt
 @require_POST
 def login(request):
-    try:
-        # More robust JSON parsing
-        if request.body:
-            try:
-                data = json.loads(request.body.decode('utf-8'))
-            except UnicodeDecodeError:
-                return JsonResponse({"error": "invalid payload"}, status=400)
-        else:
-            data = {}
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid payload"}, status=400)
+    # More robust JSON parsing: treat empty or whitespace-only bodies as empty JSON
+    raw = request.body or b''
+    if not raw or raw.strip() == b'':
+        data = {}
+    else:
+        try:
+            text = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            return JsonResponse({"error": "invalid payload"}, status=400)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "invalid payload"}, status=400)
 
     # Create form instance with data
     form = LoginForm(data)

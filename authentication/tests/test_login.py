@@ -62,6 +62,17 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn("error", response.json())
 
+    def test_invalid_unicode_payload_returns_400(self):
+        """negative: requests with bytes that cannot be UTF-8 decoded should return 400"""
+        url = reverse(self.login_url_name)
+        # Send raw bytes that are invalid UTF-8 to trigger UnicodeDecodeError
+        invalid_bytes = b"\xff\xfe\xff"
+        response = self.client.post(url, data=invalid_bytes, content_type="application/json")
+        self.assertEqual(response.status_code, 400, response.content)
+        data = response.json()
+        self.assertIn("error", data)
+        self.assertEqual(data.get("error"), "invalid payload")
+
     def test_login_nonexistent_credentials(self):
         url = reverse(self.login_url_name)
         payload = {"username": "doesnotexist", "password": "whatever"}
@@ -116,6 +127,23 @@ class LoginEndpointTests(TestCase):
             content_type="application/x-www-form-urlencoded",
         )
         self.assertIn(response.status_code, (400, 415), response.content)
+
+    def test_login_empty_body_returns_400(self):
+        """Negative: empty request body should be treated as empty JSON and return 400 (missing fields)"""
+        url = reverse(self.login_url_name)
+        # Post with no body (empty) but JSON content type
+        response = self.client.post(url, content_type="application/json")
+        self.assertEqual(response.status_code, 400, response.content)
+        data = response.json()
+        self.assertIn("error", data)
+
+    def test_login_whitespace_body_returns_400(self):
+        """Negative: whitespace-only body should be treated like empty JSON and return 400"""
+        url = reverse(self.login_url_name)
+        response = self.client.post(url, data=b"   ", content_type="application/json")
+        self.assertEqual(response.status_code, 400, response.content)
+        data = response.json()
+        self.assertIn("error", data)
 
     def test_login_unverified_user(self):
         """Negative: unverified user → 403"""

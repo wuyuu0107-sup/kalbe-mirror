@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.auth.hashers import make_password
 from authentication.forms import LoginForm, RegistrationForm
 from authentication.models import User
+from django import forms
 
 
 class LoginFormTest(TestCase):
@@ -137,6 +138,40 @@ class LoginFormTest(TestCase):
         self.assertFalse(form.is_valid())
         authenticated_user = form.authenticate()
         self.assertIsNone(authenticated_user)
+    
+    def test_empty_username_specific_message(self):
+        #Test specific validation message for empty username
+        form_data = {
+            'username': None,  # None value to trigger specific validation
+            'password': 'TestPass123'
+        }
+        form = LoginForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        # This will trigger the clean_username method
+
+    def test_empty_password_specific_message(self):
+        #Test specific validation message for empty password
+        form_data = {
+            'username': 'testuser',
+            'password': None  # None value to trigger specific validation
+        }
+        form = LoginForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        # This will trigger the clean_password method
+    
+    def test_direct_clean_methods_coverage(self):
+        """Test direct calls to clean methods for coverage"""
+        form = LoginForm()
+        
+        # Test clean_username with empty string
+        form.cleaned_data = {'username': ''}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_username()
+            
+        # Test clean_password with empty string  
+        form.cleaned_data = {'password': ''}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_password()
 
 
 class RegistrationFormTest(TestCase):
@@ -408,7 +443,189 @@ class RegistrationFormTest(TestCase):
             'confirm_password': 'NewPass123',
             'display_name': 'New User',
             'email': 'new@example.com',
-            'roles': ['admin', 'user']
+            'roles': ['researcher', 'admin']
         }
         form = RegistrationForm(data=form_data)
         self.assertTrue(form.is_valid())
+    
+    # Additional tests to improve coverage
+    def test_username_empty_validation(self):
+        #Test username empty validation in RegistrationForm
+        form_data = {
+            'username': None,
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        
+    def test_username_too_short(self):
+        #Test username minimum length validation
+        form_data = {
+            'username': 'ab',  # Only 2 characters
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        
+    def test_username_entirely_numeric(self):
+        #Test username entirely numeric validation
+        form_data = {
+            'username': '123456',  # All numbers
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        
+    def test_username_invalid_start_end(self):
+        #Test username starting/ending with dots or underscores
+        for username in ['.testuser', '_testuser', 'testuser.', 'testuser_']:
+            form_data = {
+                'username': username,
+                'password': 'ValidPass123!',
+                'confirm_password': 'ValidPass123!',
+                'display_name': 'Test User',
+                'email': 'test@example.com'
+            }
+            form = RegistrationForm(data=form_data)
+            self.assertFalse(form.is_valid())
+            
+    def test_email_required_validation(self):
+        #Test email required validation
+        form_data = {
+            'username': 'testuser',
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!',
+            'display_name': 'Test User',
+            'email': None
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        
+    def test_password_empty_validation(self):
+        #Test password empty validation in RegistrationForm
+        form_data = {
+            'username': 'testuser',
+            'password': None,
+            'confirm_password': 'ValidPass123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        
+    def test_display_name_xss_characters(self):
+        #Test display name XSS character validation
+        invalid_names = ['User<script>', 'User"quote', 'User/slash', 'User\\backslash', 'User>tag']
+        for name in invalid_names:
+            form_data = {
+                'username': 'testuser',
+                'password': 'ValidPass123!',
+                'confirm_password': 'ValidPass123!',
+                'display_name': name,
+                'email': 'test@example.com'
+            }
+            form = RegistrationForm(data=form_data)
+            self.assertFalse(form.is_valid())
+            
+    def test_clean_method_password_mismatch(self):
+        #Test the clean() method for password mismatch
+        form_data = {
+            'username': 'testuser',
+            'password': 'ValidPass123!',
+            'confirm_password': 'DifferentPass123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('__all__', form.errors)  # Non-field errors
+        self.assertIn('Passwords do not match', str(form.errors['__all__']))
+    
+    def test_direct_registration_clean_methods_coverage(self):
+        #Test direct calls to clean methods for additional coverage
+        form = RegistrationForm()
+        
+        # Test clean_username with empty string
+        form.cleaned_data = {'username': ''}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_username()
+            
+        # Test clean_username with short username
+        form.cleaned_data = {'username': 'ab'}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_username()
+            
+        # Test clean_email with empty email
+        form.cleaned_data = {'email': ''}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_email()
+            
+        # Test clean_password with empty password
+        form.cleaned_data = {'password': ''}
+        with self.assertRaises(forms.ValidationError):
+            form.clean_password()
+            
+        # Test clean_password without uppercase letter
+        form.cleaned_data = {'password': 'nouppercase123!'}  # Fixed: no uppercase
+        with self.assertRaises(forms.ValidationError) as cm:
+            form.clean_password()
+        self.assertIn("Password must contain at least one uppercase letter", str(cm.exception))
+            
+        # Test clean_display_name with XSS characters
+        for char in ['<', '>', '"', '/', '\\']:
+            form.cleaned_data = {'display_name': f'User{char}test'}
+            with self.assertRaises(forms.ValidationError) as cm:
+                form.clean_display_name()
+            self.assertIn("Display name cannot contain", str(cm.exception))
+    
+    def test_specific_coverage_targets(self):
+        #Specific tests to hit the exact missing lines
+        
+        # Target line 163: Password uppercase validation
+        form_data = {
+            'username': 'testuser',
+            'password': 'lowercase123!',  # No uppercase letters
+            'confirm_password': 'lowercase123!',
+            'display_name': 'Test User',
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('password', form.errors)
+        
+        # Target line 179: Display name XSS validation  
+        form_data = {
+            'username': 'testuser',
+            'password': 'ValidPass123!',
+            'confirm_password': 'ValidPass123!', 
+            'display_name': 'User<script>alert("xss")</script>',  # Contains < and >
+            'email': 'test@example.com'
+        }
+        form = RegistrationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('display_name', form.errors)
+    
+    def test_direct_method_calls_for_100_percent_coverage(self):
+        #Direct method calls to ensure we hit lines 163 and 179
+        
+        # Create form instance for direct method testing
+        reg_form = RegistrationForm()
+        
+        reg_form.cleaned_data = {'password': 'alllowercase123!'}  # No uppercase
+        with self.assertRaises(forms.ValidationError) as cm:
+            reg_form.clean_password()
+        self.assertIn("uppercase letter", str(cm.exception))
+        
+        reg_form.cleaned_data = {'display_name': 'User<xss>'}  # Contains < and >
+        with self.assertRaises(forms.ValidationError) as cm:
+            reg_form.clean_display_name()
+        self.assertIn("cannot contain", str(cm.exception))

@@ -72,3 +72,15 @@ deactivate
 
 ---
 For more details, see the code in `ocr/` and `kalbe_be/` folders.
+
+
+## to use annotate feature
+
+make a .env
+
+fill with
+
+SECRET_KEY_DJANGO=whatever-long-random-string
+GEMINI_API_KEY=gemini key
+DJANGO_DEBUG=1
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost

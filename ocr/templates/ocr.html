@@ -1,333 +1,448 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Gemini OCR Medical PDF</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2em; }
-        .result { margin-top: 2em; }
-        .box { background: #f0f0f0; padding: 1em; border-radius: 5px; margin-bottom: 1em; }
-        label { display: block; margin-top: 1em; }
-    </style>
-</head>
-<body>
-    <h1>Gemini OCR Medical PDF</h1>
-    <form id="geminiForm" enctype="multipart/form-data">
-        <label for="pdf">Upload a medical PDF:</label>
-        <input type="file" id="pdf" name="pdf" accept="application/pdf" required>
-        <button type="submit">Run Gemini OCR</button>
-    </form>
-    <div class="result" id="result"></div>
-    <script>
-        document.getElementById('geminiForm').onsubmit = async function(e) {
-            e.preventDefault();
-            const formData = new FormData();
-            const pdfInput = document.getElementById('pdf');
-            if (!pdfInput.files.length) return;
-            formData.append('pdf', pdfInput.files[0]);
-            document.getElementById('result').innerHTML = 'Processing...';
-            try {
-                const response = await fetch('/ocr/', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!response.ok) throw new Error('Gemini OCR failed');
-                const data = await response.json();
-                let html = '<h2>Structured Data</h2>';
-                html += `<pre>${JSON.stringify(data.structured_data, null, 2)}</pre>`;
-                if (data.error) {
-                    html += `<div class="box">Error: ${data.error}</div>`;
-                }
-                document.getElementById('result').innerHTML = html;
-            } catch (err) {
-                document.getElementById('result').innerHTML = 'Error: ' + err.message;
-            }
-        };
-    </script>
-</body>
-</html> 
-
-
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>K-SCAN • OCR</title>
-  <link href="https://fonts.googleapis.com/css2?family=Secular+One&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+Bhai+2:wght@600;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8"/>
+  <title>OCR → Annotate → Edit JSON → Comment</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <style>
-    :root{
-      --brand:#056534; 
-      --bg:#f6f7f9;
-      --ink:#0f172a;
-      --muted:#6b7280;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font-family:'Secular One', sans-serif;   /* default everywhere */
-      font-size:16px; line-height:1.5;
-      color:var(--ink);
-      background:var(--bg);
-      letter-spacing:.2px;
-    }
-
-    .navbar{
-      background:var(--brand);
-      color:#fff;
-      height:140px;                   /* taller to create visual separation */
-      padding:16px 22px 18px;
-      display:grid;
-      grid-template-columns: 1fr auto;/* left area + right links */
-      grid-template-rows: auto auto;  /* top row, bottom row */
-      row-gap:22px;                   /* space between the two rows */
-      align-items:center;
-      position:relative;
-    }
-    .brand{
-      grid-column:1; grid-row:1;      /* top-left */
-      font-weight:800; font-size:28px; letter-spacing:.3px;
-      align-self:start;
-    }
-    .navlinks{
-      grid-column:2; grid-row:1;      /* top-right */
-      justify-self:end;
-      display:flex; gap:28px;
-    }
-    .navlinks a{
-      font-family:'Baloo Bhai 2', cursive;   /* <- Baloo Bhai 2 for menu */
-      color:#e7f3eb; text-decoration:none; font-weight:700; opacity:.95;
-    }
-    .navlinks a.active{color:#f0ffcf}
-    .backbtn{
-      grid-column:1; grid-row:2;      /* bottom-left */
-      justify-self:start; align-self:end;
-      width:42px; height:42px; border-radius:50%;
-      border:3px solid #e7f3eb; display:grid; place-items:center;
-      color:#e7f3eb; text-decoration:none;
-    }
-    .title{
-      grid-column:1 / span 2; grid-row:2;  /* bottom-center */
-      justify-self:center; align-self:end;
-      font-weight:800; font-size:26px; color:#e7f3eb; white-space:nowrap;
-      text-align:center;
-    }
-
-    /* ========= CONTENT ========= */
-    .content{
-      position:relative;              /* so the info icon can anchor to this box */
-      max-width:1100px; margin:36px auto; padding:0 20px;
-      min-height:60vh;
-      display:grid; place-items:center;
-    }
-
-    /* Info icon (top-right of the white content area) */
-    .info-btn{
-      position:absolute; top:2px; right:-280px; /* adjust as needed */
-      width:42px; height:42px; border-radius:50%;
-      border:3px solid var(--brand); color:var(--brand);
-      background:transparent; display:grid; place-items:center;
-      text-decoration:none;
-    }
-    /* If you prefer it pinned to the viewport’s far right, swap to this:
-    .info-btn{ position:fixed; top:calc(140px + 12px); right:18px; }
-    */
-
-    /* Upload tile */
-    .drop{
-      width:190px; height:190px; border-radius:22px;
-      background:var(--brand); color:#fff;
-      display:grid; grid-auto-rows:1fr auto; place-items:center;
-      gap:6px; padding:18px; cursor:pointer;
-      box-shadow:0 10px 30px rgba(5,101,52,.18);
-      user-select:none; outline:2px solid transparent; outline-offset:4px;
-    }
-    .drop:focus-visible{outline-color:rgba(5,101,52,.35)}
-    .plus{
-      width:54px; height:54px; display:grid; place-items:center;
-      border-radius:16px; background:rgba(255,255,255,.1);
-    }
-    .drop small{
-      font-family:'Baloo Bhai 2', cursive;     /* <- Baloo Bhai 2 for caption */
-      font-size:12px; text-align:center;
-    }
-    input[type="file"]{display:none}
-
-    /* Result panel */
-    .panel{
-      margin:30px auto 0;
-      background:#fff; border-radius:16px;
-      padding:18px;
-      box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
-      max-width:920px;
-    }
-    .panel h3{margin:0 0 10px 0}
-    .meta{color:var(--muted); font-size:13px; margin-bottom:10px}
-    pre{
-      margin:0; padding:14px; background:#0b1220; color:#e2e8f0;
-      border-radius:12px; overflow:auto; font-size:13px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      letter-spacing:0;
-    }
-    .actions{display:flex; gap:10px; margin-top:12px}
-    .btn{border:none; border-radius:12px; padding:10px 14px; cursor:pointer; background:var(--brand); color:#fff; font-weight:600}
-    .btn.secondary{background:#e9eef0; color:#0b1320}
-    .hidden{display:none}
-
-    @media (max-width:640px){
-      .navbar{height:120px}
-      .title{font-size:18px}
-      .brand{font-size:22px}
-      .navlinks{gap:16px}
-    }
+    :root{ --bar:#f6f7fb; --b:#e8e8ef; --ink:#222; }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; color:var(--ink);}
+    header{ display:flex; gap:12px; align-items:center; padding:10px 12px; background:var(--bar); border-bottom:1px solid var(--b); position:sticky; top:0; z-index:5;}
+    header .spacer{ flex:1; }
+    .pill{ border:1px solid var(--b); padding:3px 8px; border-radius:999px; background:#fff; }
+    main{ display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px; padding:12px; }
+    .card{ background:#fff; border:1px solid var(--b); border-radius:10px; overflow:hidden; display:flex; flex-direction:column;}
+    .card header{ position:static; background:#fff; border-bottom:1px solid var(--b);}
+    .card .body{ padding:10px; overflow:auto; }
+    #viewerWrap{ background:#fafafa; display:flex; justify-content:center; align-items:flex-start; height: calc(100vh - 120px); overflow:auto; }
+    .page-wrap{ position:relative; }
+    canvas.pdf{ display:block; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+    #stageHost{ position:absolute; left:0; top:0; }
+    .toolbar{ display:flex; gap:8px; align-items:center; }
+    .tool{ padding:6px 10px; border:1px solid var(--b); background:#fff; border-radius:8px; cursor:pointer; }
+    .tool.active{ background:#eef3ff; border-color:#7aa2ff; }
+    textarea{ width:100%; min-height:220px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .list{ display:flex; flex-direction:column; gap:8px; }
+    .comment{ border:1px solid var(--b); border-radius:8px; padding:8px; background:#fff; }
+    .muted{ color:#666; font-size:12px; }
   </style>
 </head>
 <body>
-
-  <header class="navbar">
-    <div class="brand">K-SCAN</div>
-
-    <nav class="navlinks">
-      <a class="active" href="#">Home</a>
-      <a href="#">Files</a>
-      <a href="#">Trials</a>
-      <a href="#">Chatbot</a>
-    </nav>
-
-    <a href="javascript:history.back()" class="backbtn" aria-label="Kembali">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="15 18 9 12 15 6"></polyline>
-      </svg>
-    </a>
-
-    <div class="title">Semua / Trial Docs</div>
+  <header>
+    <strong>OCR → Annotate</strong>
+    <span class="pill">Doc: <span id="docId">–</span></span>
+    <span class="pill">Patient: <span id="patId">–</span></span>
+    <div class="spacer"></div>
+    <input type="file" id="pdfInput" accept="application/pdf"/>
+    <button id="btnOCR" class="tool">Run OCR (Gemini 2.5)</button>
   </header>
 
   <main>
-    <section class="content">
-      <a class="info-btn" href="#" aria-label="Info">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <circle cx="12" cy="8" r="1"></circle>
-        </svg>
-      </a>
+    <!-- LEFT: PDF + Drawing -->
+    <section class="card">
+      <header class="toolbar">
+        <button class="tool" data-tool="pan">Pan</button>
+        <button class="tool" data-tool="pen">Pen</button>
+        <button class="tool" data-tool="rect">Rect</button>
+        <button class="tool" id="btnDelete">Delete</button>
+        <label class="pill">Zoom
+          <input id="zoom" type="range" min="60" max="200" value="110" />
+        </label>
 
-      <label class="drop" for="pdfInput" id="dropZone" tabindex="0">
-        <div class="plus" aria-hidden="true">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
+
+        <!-- ⬇️ Add this pager block -->
+        <div class="pill" style="display:flex;align-items:center;gap:6px;">
+          <button id="btnPrev" class="tool" style="padding:4px 8px;">‹</button>
+          <span id="pageLabel" class="muted">Page 1 of ?</span>
+          <button id="btnNext" class="tool" style="padding:4px 8px;">›</button>
         </div>
-        <small>Mengunggah<br>berkas baru</small>
-        <input id="pdfInput" type="file" name="pdf" accept="application/pdf" />
-      </label>
+        <!-- ⬆️ -->
+        <button id="btnSaveAnno" class="tool">Save Shape</button>
+        <button id="btnReloadAnno" class="tool">Reload</button>
+      </header>
+      <div id="viewerWrap" class="body">
+        <div class="page-wrap">
+          <canvas id="pdfCanvas" class="pdf"></canvas>
+          <div id="stageHost"></div>
+        </div>
+      </div>
     </section>
 
-    <section id="resultPanel" class="panel hidden" aria-live="polite">
-      <h3>Hasil Ekstraksi</h3>
-      <div class="meta" id="meta"></div>
-      <pre id="jsonOut">{}</pre>
-      <div class="actions">
-        <button class="btn" id="downloadBtn" type="button">Unduh JSON</button>
-        <button class="btn secondary" type="button" id="clearBtn">Bersihkan</button>
+    <!-- RIGHT: JSON editor + Comments -->
+    <section class="card">
+      <header><strong style="padding-left:8px">OCR JSON</strong></header>
+      <div class="body">
+        <textarea id="jsonBox" placeholder="OCR structured JSON here…"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="tool" id="btnFormat">Format</button>
+          <button class="tool" id="btnSaveJSON">Save JSON to Document</button>
+          <span id="saveStatus" class="muted"></span>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="tool" id="btnDownloadBefore">Download Original JSON</button>
+          <button class="tool" id="btnDownloadAfter">Download Edited JSON</button>
+        </div>
+      </div>
+
+      <header><strong style="padding-left:8px">Comments</strong></header>
+      <div class="body">
+        <div class="row">
+          <input id="author" placeholder="Your name" class="pill" />
+          <input id="commentText" placeholder="Write a comment…" style="flex:1; padding:8px; border:1px solid var(--b); border-radius:8px;"/>
+          <button class="tool" id="btnAddComment">Add</button>
+        </div>
+        <div id="comments" class="list" style="margin-top:10px"></div>
       </div>
     </section>
   </main>
 
+  <!-- pdf.js (UMD) — reliable version -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    const ENDPOINT = '/ocr/'; 
+    // Point the worker to the same version
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  </script>
 
-    const input = document.getElementById('pdfInput');
-    const panel = document.getElementById('resultPanel');
-    const out = document.getElementById('jsonOut');
-    const meta = document.getElementById('meta');
-    const dl = document.getElementById('downloadBtn');
-    const clearBtn = document.getElementById('clearBtn');
-    const drop = document.getElementById('dropZone');
+  <!-- Konva -->
+  <script src="https://unpkg.com/konva@9.3.0/konva.min.js"></script>
 
-    // --- Front-end coercion: force specific numeric-looking fields to strings ---
-    function coerceToStrings(data) {
-        if (!data || typeof data !== 'object') return data;
+  <script>
+    // ===== State =====
+    let DOC_ID = null, PATIENT_ID = null, PDF_URL = null;
+    let ORIGINAL_JSON = null;
 
-        const ensureObj = (o) => (o && typeof o === 'object') ? o : {};
-        const dem = ensureObj(data.DEMOGRAPHY);
-        const vit = ensureObj(data.VITAL_SIGNS);
+    const ANN_LIST  = () => `/api/v1/annotations/?document=${DOC_ID}&patient=${PATIENT_ID}`;
+    const ANN_POST  = `/api/v1/annotations/`;
+    const ANN_ITEM  = id => `/api/v1/annotations/${id}/`;
+    const DOC_ITEM  = () => `/api/v1/documents/${DOC_ID}/`;
+    const COMMENTS_LIST = () => `/api/v1/comments/?document=${DOC_ID}${PATIENT_ID?`&patient=${PATIENT_ID}`:''}`;
+    const COMMENTS_POST = `/api/v1/comments/`;
+    const COMMENT_ITEM  = id => `/api/v1/comments/${id}/`;
 
-        const toStr = (v) => (v == null ? v : String(v));
+    // ===== DOM =====
+    const $          = s => document.querySelector(s);
+    const pdfInput   = $('#pdfInput');
+    const btnOCR     = $('#btnOCR');
+    const docIdEl    = $('#docId');
+    const patIdEl    = $('#patId');
+    const jsonBox    = $('#jsonBox');
+    const btnFormat  = $('#btnFormat');
+    const btnSaveJSON= $('#btnSaveJSON');
+    const saveStatus = $('#saveStatus');
+    const commentsBox= $('#comments');
+    const authorInp  = $('#author');
+    const commentInp = $('#commentText');
 
-        ['weight_kg','height_cm','bmi'].forEach(k => {
-        if (k in dem) dem[k] = toStr(dem[k]);
-        });
-        ['systolic_bp','diastolic_bp','heart_rate'].forEach(k => {
-        if (k in vit) vit[k] = toStr(vit[k]);
-        });
+    // PDF/UI controls
+    const pdfCanvas  = document.getElementById('pdfCanvas');
+    const stageHost  = document.getElementById('stageHost');
+    const zoomInput  = document.getElementById('zoom');
+    const toolBtns   = Array.from(document.querySelectorAll('.tool[data-tool]'));
+    const btnDelete  = document.getElementById('btnDelete');
+    const btnSaveAnno= document.getElementById('btnSaveAnno');
+    const btnReloadAnno = document.getElementById('btnReloadAnno');
 
-        return { ...data, DEMOGRAPHY: dem, VITAL_SIGNS: vit };
-    }
+    // STEP 2: Pager controls
+    const btnPrev    = document.getElementById('btnPrev');
+    const btnNext    = document.getElementById('btnNext');
+    const pageLabel  = document.getElementById('pageLabel');
 
-    drop.addEventListener('keydown', (e)=>{
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    // ===== PDF state =====
+    let pdf = null, page = null;
+    let TOTAL_PAGES = 0, CUR_PAGE = 1;
+    let viewportScale = parseInt(zoomInput.value, 10) / 100;
+
+    const ctx = pdfCanvas.getContext('2d');
+    let stage, layer, tool='pan', currentShape=null, penPts=[], selectedNode=null;
+
+    // Tools
+    toolBtns.forEach(b => b.onclick = () => {
+      toolBtns.forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      tool=b.dataset.tool;
+      if (stage) stage.draggable(tool==='pan');
     });
+    (toolBtns.find(b=>b.dataset.tool==='pan')||toolBtns[0]).click();
 
-    input.addEventListener('change', ()=>{
-        const file = input.files?.[0];
-        if (file) handleUpload(file);
-    });
+    function makeStage(w,h){
+      stageHost.style.width=w+'px'; stageHost.style.height=h+'px';
+      stage = new Konva.Stage({ container:'stageHost', width:w, height:h, draggable: tool==='pan' });
+      layer = new Konva.Layer(); stage.add(layer);
 
-    async function handleUpload(file){
-        panel.classList.remove('hidden');
-        meta.textContent = 'Memproses…';
-        out.textContent = '';
-
-        const form = new FormData();
-        form.append('pdf', file);
-
-        try{
-        const res = await fetch(ENDPOINT, { method:'POST', body: form });
-        if(!res.ok) throw new Error('Gagal memproses dokumen');
-
-        const data = await res.json();
-        // Coerce ONLY for display/download; server response stays untouched.
-        const coerced = coerceToStrings(data.structured_data ?? {});
-
-        const pretty = JSON.stringify(coerced, null, 2);
-        out.textContent = pretty;
-
-        const t = (data.processing_time!=null) ? `${data.processing_time}s` : '—';
-        meta.innerHTML = `Berkas: <strong>${file.name}</strong> • Waktu proses: <strong>${t}</strong>` +
-                        (data.error ? ` • <span style="color:#b42318">Error: ${data.error}</span>` : '');
-
-        // Download the coerced JSON
-        dl.onclick = ()=>{
-            const blob = new Blob([pretty], {type:'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = Object.assign(document.createElement('a'), {
-            href: url, download: file.name.replace(/\.[^.]+$/, '') + '.json'
-            });
-            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        };
-        }catch(err){
-        meta.textContent = err.message;
-        out.textContent = '{}';
+      stage.on('click tap', e=>{
+        if(e.target===stage){
+          if(selectedNode){ selectedNode.strokeEnabled(false); layer.draw(); selectedNode=null; }
+          return;
         }
+        const n = e.target.getParent().attrs.metaId ? e.target.getParent() : e.target;
+        if(n && n.attrs.isAnno){
+          if(selectedNode) selectedNode.strokeEnabled(false);
+          selectedNode=n; selectedNode.stroke('dodgerblue'); selectedNode.strokeEnabled(true); layer.draw();
+        }
+      });
+
+      stage.on('mousedown touchstart', ()=>{
+        if (tool==='pen'){
+          const p = stage.getPointerPosition(); penPts=[p];
+          currentShape = new Konva.Line({ points:[p.x,p.y], stroke:'#ff5252', strokeWidth:2, lineCap:'round', lineJoin:'round', isAnno:true });
+          layer.add(currentShape);
+        } else if (tool==='rect'){
+          const p = stage.getPointerPosition();
+          currentShape = new Konva.Rect({ x:p.x, y:p.y, width:0, height:0, stroke:'#00c853', strokeWidth:2, isAnno:true });
+          layer.add(currentShape);
+        }
+      });
+      stage.on('mousemove touchmove', ()=>{
+        if(!currentShape) return;
+        const p = stage.getPointerPosition();
+        if (tool==='pen'){
+          penPts.push(p); currentShape.points(penPts.flatMap(pt=>[pt.x,pt.y]));
+        } else if (tool==='rect'){
+          const sx=currentShape.x(), sy=currentShape.y();
+          currentShape.width(p.x-sx); currentShape.height(p.y-sy);
+        }
+        layer.batchDraw();
+      });
+      stage.on('mouseup touchend', ()=>{ currentShape=null; });
     }
 
-    clearBtn.addEventListener('click', ()=>{
-        panel.classList.add('hidden');
-        out.textContent = '{}';
-        meta.textContent = '';
-        input.value = '';
+    function norm(x,y,w,h){ return [x/w, y/h]; }
+    function denorm(nx,ny,w,h){ return [nx*w, ny*h]; }
+
+    // ====== STEP 2: render a specific page (with zoom + reload annos) ======
+    async function renderPage(num){
+      if (!pdf) return;
+      if (num < 1) num = 1;
+      if (num > TOTAL_PAGES) num = TOTAL_PAGES;
+      CUR_PAGE = num;
+
+      page = await pdf.getPage(CUR_PAGE);
+      const vp = page.getViewport({ scale: viewportScale });
+
+      pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
+      if (stage) stage.destroy();
+      makeStage(vp.width, vp.height);
+
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      await loadAnnotations();
+      updatePagerUI();
+    }
+
+    function updatePagerUI(){
+      pageLabel.textContent = `Page ${CUR_PAGE} of ${TOTAL_PAGES || '?'}`;
+      btnPrev.disabled = CUR_PAGE <= 1;
+      btnNext.disabled = CUR_PAGE >= TOTAL_PAGES;
+    }
+
+    // Old single-page renderer now delegates to the current page
+    async function renderPDF(){ await renderPage(CUR_PAGE); }
+
+    // Zoom → rerender same page
+    zoomInput.oninput = ()=>{ viewportScale = parseInt(zoomInput.value,10)/100; renderPage(CUR_PAGE); };
+
+    // STEP 2: Pager handlers + keyboard shortcuts
+    btnPrev.onclick = ()=>{ if (CUR_PAGE > 1) renderPage(CUR_PAGE-1); };
+    btnNext.onclick = ()=>{ if (CUR_PAGE < TOTAL_PAGES) renderPage(CUR_PAGE+1); };
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'ArrowLeft')  btnPrev.click();
+      if (e.key === 'ArrowRight') btnNext.click();
     });
-    </script>
+
+    // ===== Annotations =====
+    async function loadAnnotations(){
+      if(!DOC_ID || !PATIENT_ID) return;
+      const res = await fetch(ANN_LIST());
+      const data = await res.json();
+
+      if (layer) layer.destroy();
+      layer = new Konva.Layer(); stage.add(layer);
+      const W = stage.width(), H = stage.height();
+
+      (data.results || data).forEach(a=>{
+        const d = a.drawing_data || {};
+        if ((d.page || 1) !== CUR_PAGE) return;   // STEP 2: page-aware
+
+        if(d.type==='rect' && d.bbox){
+          const [x1n,y1n,x2n,y2n]=d.bbox;
+          const [x1,y1]=denorm(x1n,y1n,W,H), [x2,y2]=denorm(x2n,y2n,W,H);
+          const rect = new Konva.Rect({
+            x:x1, y:y1, width:x2-x1, height:y2-y1,
+            stroke:d.color||'#00c853', strokeWidth:d.width||2,
+            isAnno:true, metaId:a.id
+          });
+          layer.add(rect);
+        } else if(d.type==='pen' && d.points){
+          const pts=d.points.flatMap(([nx,ny])=>denorm(nx,ny,W,H)).flat();
+          const line=new Konva.Line({
+            points:pts, stroke:d.color||'#ff5252', strokeWidth:d.width||2,
+            lineCap:'round', lineJoin:'round', isAnno:true, metaId:a.id
+          });
+          layer.add(line);
+        }
+      });
+      layer.draw();
+    }
+
+    async function saveLastShape(){
+      if(!stage || !layer.children.length) { alert('Draw something first.'); return; }
+      const n = layer.children[layer.children.length-1];
+      const W=stage.width(), H=stage.height();
+      let payload=null;
+
+      if(n.className==='Line'){
+        const pts=n.points(); const pairs=[];
+        for(let i=0;i<pts.length;i+=2){ pairs.push(norm(pts[i],pts[i+1],W,H)); }
+        payload={ type:'pen', page:CUR_PAGE, points:pairs, width:2, color:'#ff5252' }; // STEP 2: page
+      }else if(n.className==='Rect'){
+        const x1=n.x(), y1=n.y(), x2=x1+n.width(), y2=y1+n.height();
+        const [nx1,ny1]=norm(x1,y1,W,H), [nx2,ny2]=norm(x2,y2,W,H);
+        payload={ type:'rect', page:CUR_PAGE, bbox:[nx1,ny1,nx2,ny2], width:2, color:'#00c853' }; // STEP 2: page
+      }else{
+        alert('Unsupported shape.'); return;
+      }
+
+      const res = await fetch(ANN_POST, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ document: DOC_ID, patient: PATIENT_ID, label:'', drawing_data: payload })
+      });
+      if(!res.ok){ alert('Save failed'); return; }
+      await loadAnnotations();
+    }
+
+    async function deleteSelected(){
+      if(!selectedNode){ alert('Select an annotation (click it).'); return; }
+      const id=selectedNode.attrs.metaId; if(!id){ alert('Only saved annotations can be deleted.'); return;}
+      if(!confirm('Delete this annotation?')) return;
+      const res = await fetch(ANN_ITEM(id), { method:'DELETE' });
+      if(res.status!==204){ alert('Delete failed'); return; }
+      await loadAnnotations();
+    }
+
+    btnSaveAnno.onclick = saveLastShape;
+    btnReloadAnno.onclick = loadAnnotations;
+    btnDelete.onclick = deleteSelected;
+
+    // ===== JSON editor =====
+    btnFormat.onclick = ()=>{
+      try{ jsonBox.value = JSON.stringify(JSON.parse(jsonBox.value), null, 2); }
+      catch(e){ alert('Invalid JSON: ' + e.message); }
+    };
+    btnSaveJSON.onclick = async ()=>{
+      if(!DOC_ID) return;
+      try{
+        const obj = JSON.parse(jsonBox.value);
+        saveStatus.textContent = 'Saving…';
+        const res = await fetch(DOC_ITEM(), {
+          method:'PATCH',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ payload_json: obj })
+        });
+        if(!res.ok) throw new Error(await res.text());
+        saveStatus.textContent = 'Saved ✓';
+        setTimeout(()=>saveStatus.textContent='', 2000);
+      }catch(e){ saveStatus.textContent = 'Error: ' + e.message; }
+    };
+
+    // ===== JSON Download =====
+    function downloadFile(name, content) {
+      const blob = new Blob([content], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+    document.getElementById("btnDownloadBefore").onclick = () => {
+      if (!ORIGINAL_JSON) return alert("No original JSON yet.");
+      downloadFile("ocr_original.json", JSON.stringify(ORIGINAL_JSON, null, 2));
+    };
+    document.getElementById("btnDownloadAfter").onclick = () => {
+      try {
+        const edited = JSON.parse(jsonBox.value);
+        downloadFile("ocr_edited.json", JSON.stringify(edited, null, 2));
+      } catch (e) { alert("Invalid JSON: " + e.message); }
+    };
+
+    // ===== Comments =====
+    async function loadComments(){
+      if(!DOC_ID) return;
+      const res = await fetch(COMMENTS_LIST());
+      const data = await res.json();
+      const items = data.results || data;
+      commentsBox.innerHTML='';
+      items.forEach(c=>{
+        const el=document.createElement('div');
+        el.className='comment';
+        el.innerHTML = `
+          <div class="muted">${c.author || 'Anonymous'} • ${new Date(c.created_at).toLocaleString()}</div>
+          <div>${(c.body||'').replace(/[<>&]/g, s=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[s]))}</div>
+          <div class="row" style="margin-top:6px">
+            <button class="tool" data-del="${c.id}">Delete</button>
+          </div>`;
+        el.querySelector('[data-del]').onclick = async ()=>{
+          if(!confirm('Delete this comment?')) return;
+          const r = await fetch(COMMENT_ITEM(c.id), { method:'DELETE' });
+          if(r.status===204) loadComments();
+        };
+        commentsBox.appendChild(el);
+      });
+    }
+    document.getElementById('btnAddComment').onclick = async ()=>{
+      if(!DOC_ID) return alert('Run OCR first.');
+      const body = commentInp.value.trim(); if(!body) return;
+      const author = authorInp.value.trim();
+      const res = await fetch(COMMENTS_POST, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ document: DOC_ID, patient: PATIENT_ID, author, body })
+      });
+      if(res.ok){ commentInp.value=''; loadComments(); }
+      else{ alert('Comment failed: ' + (await res.text())); }
+    };
+
+    // ===== OCR trigger =====
+    btnOCR.onclick = async ()=>{
+      const f = pdfInput.files?.[0];
+      if(!f){ alert('Pick a PDF first.'); return; }
+      const fd = new FormData();
+      fd.append('pdf', f, f.name);
+      const res = await fetch('/ocr_test_page/', { method:'POST', body: fd });
+      const data = await res.json();
+      if(!data.success){ alert('OCR error: ' + (data.error || 'Unknown')); return; }
+
+      // IDs + JSON
+      DOC_ID = data.document_id; PATIENT_ID = data.patient_id; PDF_URL = data.pdf_url;
+      docIdEl.textContent = DOC_ID; patIdEl.textContent = PATIENT_ID;
+      ORIGINAL_JSON = data.structured_data || {};
+      jsonBox.value = JSON.stringify(ORIGINAL_JSON, null, 2);
+
+      // reachability check
+      try{
+        const r = await fetch(PDF_URL, { method:'GET' });
+        if(!r.ok) throw new Error(`PDF not reachable (${r.status}) ${PDF_URL}`);
+      }catch(err){
+        console.error('PDF prefetch error:', err);
+        alert('Cannot access PDF at: ' + PDF_URL + '\nCheck MEDIA_URL and file path.');
+        return;
+      }
+
+      // load PDF (assumes pdfjsLib already loaded globally)
+      try{
+        const loadingTask = pdfjsLib.getDocument(PDF_URL);
+        pdf = await loadingTask.promise;
+        TOTAL_PAGES = pdf.numPages;               // STEP 2
+        CUR_PAGE = 1;                              // STEP 2
+        await renderPage(CUR_PAGE);                // STEP 2
+      }catch(err){
+        console.error('pdf.js load error:', err);
+        alert('Failed to load PDF: ' + (err?.message || err));
+      }
+
+      await loadComments();
+    };
+  </script>
 
 </body>
 </html>
-
--->

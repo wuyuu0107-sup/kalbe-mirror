@@ -551,38 +551,52 @@ class RegistrationFormTest(TestCase):
         self.assertIn('Passwords do not match', str(form.errors['__all__']))
     
     def test_direct_registration_clean_methods_coverage(self):
-        #Test direct calls to clean methods for additional coverage
-        form = RegistrationForm()
+        """Test direct calls to clean methods for additional coverage"""
         
         # Test clean_username with empty string
-        form.cleaned_data = {'username': ''}
-        with self.assertRaises(forms.ValidationError):
+        form = RegistrationForm()
+        form.cleaned_data = {}  # Initialize as empty dict first
+        form.cleaned_data['username'] = ''
+        with self.assertRaises(forms.ValidationError) as cm:
             form.clean_username()
-            
+        self.assertIn("Username cannot be empty", str(cm.exception))
+        
         # Test clean_username with short username
-        form.cleaned_data = {'username': 'ab'}
-        with self.assertRaises(forms.ValidationError):
+        form = RegistrationForm()
+        form.cleaned_data = {}
+        form.cleaned_data['username'] = 'ab'
+        with self.assertRaises(forms.ValidationError) as cm:
             form.clean_username()
-            
+        self.assertIn("Username must be at least 3 characters long", str(cm.exception))
+        
         # Test clean_email with empty email
-        form.cleaned_data = {'email': ''}
+        form = RegistrationForm()
+        form.cleaned_data = {}
+        form.cleaned_data['email'] = ''
         with self.assertRaises(forms.ValidationError):
             form.clean_email()
-            
+        
         # Test clean_password with empty password
-        form.cleaned_data = {'password': ''}
-        with self.assertRaises(forms.ValidationError):
+        form = RegistrationForm()
+        form.cleaned_data = {}
+        form.cleaned_data['password'] = ''
+        with self.assertRaises(forms.ValidationError) as cm:
             form.clean_password()
-            
+        self.assertIn("Password cannot be empty", str(cm.exception))
+        
         # Test clean_password without uppercase letter
-        form.cleaned_data = {'password': 'nouppercase123!'}  # Fixed: no uppercase
+        form = RegistrationForm()
+        form.cleaned_data = {}
+        form.cleaned_data['password'] = 'nouppercase123'
         with self.assertRaises(forms.ValidationError) as cm:
             form.clean_password()
         self.assertIn("Password must contain at least one uppercase letter", str(cm.exception))
-            
+        
         # Test clean_display_name with XSS characters
         for char in ['<', '>', '"', '/', '\\']:
-            form.cleaned_data = {'display_name': f'User{char}test'}
+            form = RegistrationForm()
+            form.cleaned_data = {}
+            form.cleaned_data['display_name'] = f'User{char}test'
             with self.assertRaises(forms.ValidationError) as cm:
                 form.clean_display_name()
             self.assertIn("Display name cannot contain", str(cm.exception))
@@ -590,7 +604,6 @@ class RegistrationFormTest(TestCase):
     def test_specific_coverage_targets(self):
         #Specific tests to hit the exact missing lines
         
-        # Target line 163: Password uppercase validation
         form_data = {
             'username': 'testuser',
             'password': 'lowercase123!',  # No uppercase letters
@@ -615,7 +628,6 @@ class RegistrationFormTest(TestCase):
         self.assertIn('display_name', form.errors)
     
     def test_direct_method_calls_for_100_percent_coverage(self):
-        #Direct method calls to ensure we hit lines 163 and 179
         
         # Create form instance for direct method testing
         reg_form = RegistrationForm()

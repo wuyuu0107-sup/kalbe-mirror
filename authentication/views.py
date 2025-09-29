@@ -3,8 +3,8 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
-from authentication.models import User
 from .forms import LoginForm, RegistrationForm
+from authentication.models import User
 import json
 import logging
 
@@ -60,6 +60,14 @@ def login(request):
         "message": "Login successful"
     }, status=200)
 
+
+@csrf_exempt  
+@require_POST
+def logout(request):
+    request.session.flush()
+    return JsonResponse({'message': 'Logged out'}, status=200)
+
+
 @csrf_exempt
 @require_POST
 def register_profile(request):
@@ -110,6 +118,7 @@ def register_profile(request):
         status=201
     )
 
+
 @csrf_exempt
 @require_POST
 def verify_email(request, token):
@@ -137,9 +146,3 @@ def protected_endpoint(request):
     if not request.user or not request.user.is_authenticated:
         return JsonResponse({"error": "unauthorized"}, status=401)
     return JsonResponse({"ok": True, "user": request.user.username}, status=200)
-
-@csrf_exempt  
-@require_POST
-def logout(request):
-    request.session.flush()
-    return JsonResponse({'message': 'Logged out'}, status=200)

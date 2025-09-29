@@ -7,3 +7,4 @@ urllib3
 django-cors-headers
 djangorestframework
 python-decouple==3.8
+dj-database-url==2.3.0

@@ -27,7 +27,7 @@ SECRET_KEY = config("SECRET_KEY_DJANGO")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "54.179.78.28"]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",

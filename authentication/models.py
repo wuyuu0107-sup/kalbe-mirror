@@ -38,3 +38,17 @@ class User(models.Model):
 
     def __str__(self):
         return self.username
+
+    @property
+    def is_authenticated(self):
+        """Return True when this model instance represents a real user account.
+
+        Rather than unconditionally returning True (which the user warned
+        against) or tying authentication to `is_verified` (which prevented
+        test-created users from being treated as authenticated), we consider
+        a user 'authenticated' when it has a persistent primary key value
+        (`user_id`). This matches the practical meaning in many Django code
+        paths: model instances represent authenticated users; anonymous
+        objects do not.
+        """
+        return bool(getattr(self, 'user_id', None))

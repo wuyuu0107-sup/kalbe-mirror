@@ -31,6 +31,9 @@ class DocumentViewSet(mixins.CreateModelMixin,
 
     queryset = Document.objects.all().order_by('-created_at')
     serializer_class = DocumentSerializer
+    # Require authenticated users for all document endpoints
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'], url_path='from-gemini')
     def from_gemini(self, request):
@@ -91,6 +94,8 @@ class PatientViewSet(mixins.CreateModelMixin,
 
     queryset = Patient.objects.all().order_by('id')
     serializer_class = PatientSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'external_id']
 
@@ -101,6 +106,8 @@ class AnnotationViewSet(viewsets.ModelViewSet):
     serializer_class = AnnotationSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
     def by_document_patient(self, request):
@@ -125,10 +132,14 @@ class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
 
 # ---------- Function-style Endpoints ----------
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
 def create_drawing_annotation(request, document_id, patient_id):
     try:
         body = json.loads(request.body.decode('utf-8'))
@@ -148,6 +159,8 @@ def create_drawing_annotation(request, document_id, patient_id):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     try:
         annotation = Annotation.objects.get(
@@ -174,5 +187,3 @@ def drawing_annotation(request, document_id, patient_id, annotation_id):
     elif request.method == "DELETE":
         annotation.delete()
         return HttpResponse(status=204)
-    
-

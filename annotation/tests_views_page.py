@@ -30,6 +30,7 @@ class ViewsPageTests(TestCase):
     def test_annotation_tester_page_renders(self):
         req: HttpRequest = self.rf.get("/fake/annotation/test/")
         resp = AnnotationTesterPage.as_view()(req)
+        resp.render()  # <--- force render
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Annotation Tester OK", resp.content)
 

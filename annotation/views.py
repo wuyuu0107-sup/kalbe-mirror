@@ -231,3 +231,5 @@ def drawing_annotation(request, document_id, patient_id, annotation_id):
     elif request.method == "DELETE":
         annotation.delete()
         return HttpResponse(status=204)
+    
+

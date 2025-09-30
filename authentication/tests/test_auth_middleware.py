@@ -43,19 +43,11 @@ class AuthenticatedUserMiddlewareTests(TestCase):
         self.assertLess(response.status_code, 400, f"Expected success/redirection status (< 400), got {response.status_code}. Response: {response.content}")
 
     def test_middleware_sets_user_context(self):
-        """Test that middleware properly sets user context when authenticated."""
-        response = self.client.get(self.protected_url)
-        # If access is granted (status < 400), it means the middleware allowed the request
-        # and likely set user context (though verifying internal request.user might be harder without a specific view)
-        # The primary check is that access wasn't denied.
-        if response.status_code < 400:
-            # Access was granted, so it was definitely not denied with 401/403
+            """Test that middleware allows access when user context is set via session."""
+            response = self.client.get(self.protected_url)
+            self.assertLess(response.status_code, 400, f"Access was denied (status {response.status_code}) for authenticated user. Response: {response.content}")
             self.assertNotEqual(response.status_code, 401)
             self.assertNotEqual(response.status_code, 403)
-        else:
-            # If access was denied, the test should fail, which is what we want
-            self.fail(f"Access was denied (status {response.status_code}) even for an authenticated user. Response: {response.content}")
-
 
 class UnauthenticatedUserMiddlewareTests(TestCase):
     """Tests for middleware behavior when user is not authenticated."""

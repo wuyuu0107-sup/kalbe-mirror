@@ -1,5 +1,8 @@
 from django.contrib import admin
 from django.urls import path, include
+from authentication.views import protected_endpoint
+from ocr.views import api_ocr
+
 
 # CSRF token endpoint (for SPA/Next.js to fetch a token)
 from accounts.csrf import csrf as csrf_view
@@ -12,4 +15,11 @@ urlpatterns = [
 
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
+    path('auth/', include('authentication.urls')),
+    path('api/protected-endpoint/', protected_endpoint),
+    path('api/ocr/', api_ocr),
+    path('ocr/', include('ocr.urls')),
+    path('csv/', include('csv_export.urls'))
+
 ]
+

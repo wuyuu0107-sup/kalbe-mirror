@@ -2,6 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import DocumentViewSet, PatientViewSet, AnnotationViewSet, create_drawing_annotation, drawing_annotation, CommentViewSet
+from annotation.views_page import viewer
 
 router = DefaultRouter()
 router.register(r'api/v1/documents', DocumentViewSet, basename='documents')
@@ -13,4 +14,6 @@ urlpatterns = [
     path('api/v1/documents/<int:document_id>/patients/<int:patient_id>/annotations/', create_drawing_annotation, name='create_drawing_annotation'),
     path('api/v1/documents/<int:document_id>/patients/<int:patient_id>/annotations/<int:annotation_id>/', drawing_annotation, name='drawing_annotation'),
     path('', include(router.urls)),
+    path('viewer/<int:document_id>/<int:patient_id>/', viewer, name='viewer')
+
 ]

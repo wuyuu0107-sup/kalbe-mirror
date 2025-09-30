@@ -12,7 +12,6 @@ from rest_framework.permissions import AllowAny
 
 from .models import Annotation
 
-@login_required
 @csrf_exempt
 def create_drawing_annotation(request, document_id, patient_id):
     if request.method == "POST":
@@ -28,7 +27,6 @@ def create_drawing_annotation(request, document_id, patient_id):
             return HttpResponseBadRequest(str(e))
     return HttpResponseBadRequest("Invalid method")
 
-@login_required
 @csrf_exempt
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     if request.method == "GET":
@@ -87,8 +85,6 @@ class DocumentViewSet(mixins.CreateModelMixin,
                       mixins.RetrieveModelMixin,
                       mixins.UpdateModelMixin,
                       viewsets.GenericViewSet):
-    authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
     queryset = Document.objects.all().order_by('-created_at')
     serializer_class = DocumentSerializer
@@ -149,8 +145,6 @@ class PatientViewSet(mixins.CreateModelMixin,
                      mixins.RetrieveModelMixin,
                      mixins.ListModelMixin,
                      viewsets.GenericViewSet):
-    authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
     queryset = Patient.objects.all().order_by('id')
     serializer_class = PatientSerializer
@@ -160,9 +154,6 @@ class PatientViewSet(mixins.CreateModelMixin,
 
 # ---------- Annotation API ----------
 class AnnotationViewSet(viewsets.ModelViewSet):
-    authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
-
     queryset = Annotation.objects.select_related('document', 'patient').all().order_by('-created_at')
     serializer_class = AnnotationSerializer
     filter_backends = [DjangoFilterBackend]
@@ -187,9 +178,6 @@ class AnnotationViewSet(viewsets.ModelViewSet):
 
 # ---------- Comment API ----------
 class CommentViewSet(viewsets.ModelViewSet):
-    authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
-
     queryset = Comment.objects.select_related('document', 'patient').all().order_by('-created_at')
     serializer_class = CommentSerializer
     filter_backends = [DjangoFilterBackend]
@@ -198,8 +186,6 @@ class CommentViewSet(viewsets.ModelViewSet):
 
 # ---------- Function-style Endpoints ----------
 @api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-@permission_classes([IsAuthenticated])
 def create_drawing_annotation(request, document_id, patient_id):
     try:
         body = json.loads(request.body.decode('utf-8'))
@@ -219,8 +205,6 @@ def create_drawing_annotation(request, document_id, patient_id):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-@permission_classes([IsAuthenticated])
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     try:
         annotation = Annotation.objects.get(

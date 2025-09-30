@@ -11,9 +11,11 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 import dj_database_url
 import os
 from dotenv import load_dotenv
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,12 +29,29 @@ load_dotenv(BASE_DIR / ".env")
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+
+SECRET_KEY = config("SECRET_KEY_DJANGO")
 SECRET_KEY = os.getenv("SECRET_KEY_DJANGO")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY_DJANGO is not set in environment")
 
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+
+
+ALLOWED_HOSTS = ["localhost", "54.179.78.28"]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 ALLOWED_HOSTS = [
     'backend-mirror-production.up.railway.app',
@@ -40,7 +59,7 @@ ALLOWED_HOSTS = [
 
 ]
 
-
+  
 # Application definition
 
 INSTALLED_APPS = [
@@ -50,12 +69,35 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "accounts",
+    "corsheaders",
     'authentication',
     'ocr',
     'csv_export',
 ]
+# Email — DEV only: email dikirim ke console/locmem (test)
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@kalbe.local"
+
+# Password validators — enforce min length
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# Security basics (dev values; prod => True + HTTPS)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+
+TIME_ZONE = "Asia/Jakarta"
+USE_TZ = True
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -88,6 +130,13 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+
+
+DATABASES = {
+    'default': dj_database_url.parse(
+        config("DATABASE_URL")
+    )
+}
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -149,3 +198,22 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", cast=int, default=587)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
+
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")  # <-- default kosong
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+
+# Kalau kredensial gak ada (CI), pakai console backend biar gak error
+if not EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# kalau DEFAULT_FROM_EMAIL gak ada di .env, pakai EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+EMAIL_TIMEOUT = 10

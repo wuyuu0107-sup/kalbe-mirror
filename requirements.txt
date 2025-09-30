@@ -6,6 +6,8 @@ requests
 urllib3
 django-cors-headers
 djangorestframework
+python-decouple==3.8
+dj-database-url==2.3.0
 numpy
 Pillow
 easyocr
@@ -13,4 +15,4 @@ pyspellchecker
 pymupdf
 google-generativeai
 dotenv
-dj_database_url
+

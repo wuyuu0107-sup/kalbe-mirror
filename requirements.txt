@@ -13,3 +13,4 @@ pyspellchecker
 pymupdf
 google-generativeai
 dotenv
+dj_database_url

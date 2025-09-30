@@ -148,7 +148,7 @@ class LoginEndpointTests(TestCase):
     def test_login_unverified_user(self):
         """Negative: unverified user → 403"""
         url = reverse(self.login_url_name)
-        unverified_user = User.objects.create(
+        User.objects.create(
             username="stranger",
             password=make_password("Password123"),
             email="stranger@email.com",

@@ -143,6 +143,15 @@ def verify_email(request, token):
 
 
 def protected_endpoint(request):
-    if not request.user or not request.user.is_authenticated:
+    user_id_from_session = request.session.get('user_id')
+    username_from_session = request.session.get('username')
+
+    if user_id_from_session and username_from_session:
+
+        return JsonResponse({
+            "ok": True,
+            "user_id": user_id_from_session,
+            "username": username_from_session
+        }, status=200)
+    else:
         return JsonResponse({"error": "unauthorized"}, status=401)
-    return JsonResponse({"ok": True, "user": request.user.username}, status=200)

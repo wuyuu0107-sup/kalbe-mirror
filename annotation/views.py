@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.permissions import BasePermission
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -101,13 +102,28 @@ class PatientViewSet(mixins.CreateModelMixin,
 
 
 # ---------- Annotation API ----------
+class IsResearcher(BasePermission):
+    """DRF permission: allow access only to users who have 'researcher' role."""
+
+    message = 'user must have researcher role'
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        roles = getattr(user, 'roles', []) or []
+        # roles may be stored as list of strings
+        return 'researcher' in roles
+
+
 class AnnotationViewSet(viewsets.ModelViewSet):
     queryset = Annotation.objects.select_related('document', 'patient').all().order_by('-created_at')
     serializer_class = AnnotationSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
+    # Only users with the 'researcher' role may access annotation APIs
+    permission_classes = [IsResearcher]
 
     @action(detail=False, methods=['get'])
     def by_document_patient(self, request):
@@ -126,6 +142,20 @@ class AnnotationViewSet(viewsets.ModelViewSet):
         return Response(ser.data, status=status.HTTP_200_OK)
 
 
+class IsResearcher(BasePermission):
+    """DRF permission: allow access only to users who have 'researcher' role."""
+
+    message = 'user must have researcher role'
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        roles = getattr(user, 'roles', []) or []
+        # roles may be stored as list of strings
+        return 'researcher' in roles
+
+
 # ---------- Comment API ----------
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.select_related('document', 'patient').all().order_by('-created_at')
@@ -133,12 +163,12 @@ class CommentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsResearcher]
 
 
 # ---------- Function-style Endpoints ----------
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def create_drawing_annotation(request, document_id, patient_id):
     try:
@@ -159,7 +189,7 @@ def create_drawing_annotation(request, document_id, patient_id):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     try:

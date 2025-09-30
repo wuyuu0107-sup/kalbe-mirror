@@ -1,4 +1,5 @@
-<!doctype html>
+
+<!--<!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
@@ -29,6 +30,7 @@
   </style>
 </head>
 <body>
+
   <header>
     <strong>OCR → Annotate</strong>
     <span class="pill">Doc: <span id="docId">–</span></span>
@@ -39,7 +41,7 @@
   </header>
 
   <main>
-    <!-- LEFT: PDF + Drawing -->
+    
     <section class="card">
       <header class="toolbar">
         <button class="tool" data-tool="pan">Pan</button>
@@ -51,13 +53,11 @@
         </label>
 
 
-        <!-- ⬇️ Add this pager block -->
         <div class="pill" style="display:flex;align-items:center;gap:6px;">
           <button id="btnPrev" class="tool" style="padding:4px 8px;">‹</button>
           <span id="pageLabel" class="muted">Page 1 of ?</span>
           <button id="btnNext" class="tool" style="padding:4px 8px;">›</button>
         </div>
-        <!-- ⬆️ -->
         <button id="btnSaveAnno" class="tool">Save Shape</button>
         <button id="btnReloadAnno" class="tool">Reload</button>
       </header>
@@ -69,7 +69,6 @@
       </div>
     </section>
 
-    <!-- RIGHT: JSON editor + Comments -->
     <section class="card">
       <header><strong style="padding-left:8px">OCR JSON</strong></header>
       <div class="body">
@@ -97,7 +96,6 @@
     </section>
   </main>
 
-  <!-- pdf.js (UMD) — reliable version -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     // Point the worker to the same version
@@ -105,11 +103,9 @@
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   </script>
 
-  <!-- Konva -->
   <script src="https://unpkg.com/konva@9.3.0/konva.min.js"></script>
 
   <script>
-    // ===== State =====
     let DOC_ID = null, PATIENT_ID = null, PDF_URL = null;
     let ORIGINAL_JSON = null;
 
@@ -446,3 +442,4 @@
 
 </body>
 </html>
+-->

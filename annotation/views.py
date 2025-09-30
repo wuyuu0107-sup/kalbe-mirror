@@ -26,6 +26,7 @@ from .serializers import DocumentSerializer, PatientSerializer, AnnotationSerial
 class DocumentViewSet(mixins.CreateModelMixin,
                       mixins.RetrieveModelMixin,
                       mixins.UpdateModelMixin,
+                      mixins.ListModelMixin,
                       viewsets.GenericViewSet):
 
     queryset = Document.objects.all().order_by('-created_at')

@@ -42,6 +42,12 @@ class AnnotationCRUDTests(TestCase):
             email='testuser@example.com',
             is_verified=True
         )
+        # ensure researcher role
+        try:
+            self.user.roles = ['researcher']
+            self.user.save(update_fields=['roles'])
+        except Exception:
+            pass
         # No session login; this avoids last_login + signal issues
         self.client.force_authenticate(user=self.user)
 
@@ -138,6 +144,24 @@ class AnnotationCRUDTests(TestCase):
         response = unauthenticated_client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
         self.assertEqual(response.status_code, 403)
 
+    def test_admin_cannot_access_function_endpoints(self):
+        # admin user should not be allowed to use researcher-only function endpoints
+        admin = User.objects.create(
+            username='adminfunc', password='pw', email='adminfunc@example.com', is_verified=True
+        )
+        try:
+            admin.roles = ['admin']
+            admin.save(update_fields=['roles'])
+        except Exception:
+            pass
+
+        admin_client = APIClient()
+        admin_client.force_authenticate(user=admin)
+
+        # attempt to list/create using the function endpoint paths
+        res = admin_client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
+        self.assertIn(res.status_code, (403, 401))
+
 
 class AnnotationAPITests(TestCase):
     def setUp(self):
@@ -150,6 +174,11 @@ class AnnotationAPITests(TestCase):
             email='testuser@example.com',
             is_verified=True
         )
+        try:
+            self.user.roles = ['researcher']
+            self.user.save(update_fields=['roles'])
+        except Exception:
+            pass
 
         # Simulate authentication by forcing an authenticated user for DRF tests
         self.client.force_authenticate(user=self.user)
@@ -247,6 +276,21 @@ class AnnotationAPITests(TestCase):
         res = unauthenticated_client.get(f'/api/v1/annotations/')
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_admin_cannot_access_annotations(self):
+        # admin role should be denied access to annotations API
+        admin = User.objects.create(username='adminapi', email='adminapi@example.com', password='pw', is_verified=True)
+        try:
+            admin.roles = ['admin']
+            admin.save(update_fields=['roles'])
+        except Exception:
+            pass
+
+        admin_client = APIClient()
+        admin_client.force_authenticate(user=admin)
+
+        res = admin_client.get('/api/v1/annotations/')
+        self.assertIn(res.status_code, (status.HTTP_403_FORBIDDEN, status.HTTP_401_UNAUTHORIZED))
+
 
 def make_pdf_bytes() -> bytes:
     # minimal-but-valid-enough PDF header for upload tests
@@ -262,6 +306,14 @@ class _AuthAPIMixin:
             email="api@test.local",
             password="pass12345",
         )
+        # ensure this user is a researcher for annotation access
+        try:
+            # if roles field exists, set it
+            self.user.roles = ['researcher']
+            self.user.save(update_fields=['roles'])
+        except Exception:
+            # older tests or different model may ignore
+            pass
         # If your tests/session logic expects .user_id, mirror it
         if not hasattr(self.user, "user_id"):
             self.user.user_id = self.user.id

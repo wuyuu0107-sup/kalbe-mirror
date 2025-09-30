@@ -18,7 +18,6 @@ from django.test import TestCase, Client
 from .models import Document, Patient
 
 
-
 # If your file already declared HAS_COMMENTS earlier, you can reuse it.
 try:
     from .models import Comment  # noqa: F401
@@ -138,8 +137,6 @@ class AnnotationCRUDTests(TestCase):
         unauthenticated_client = Client()
         response = unauthenticated_client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
         self.assertEqual(response.status_code, 405)
-
-
 
 
 class AnnotationAPITests(TestCase):

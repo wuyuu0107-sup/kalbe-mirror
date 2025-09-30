@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 from decouple import config
 import dj_database_url
@@ -108,6 +109,9 @@ WSGI_APPLICATION = 'kalbe_be.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+
+if os.getenv("CI") == "true" and not config("DATABASE_URL", default=""):
+    os.environ["DATABASE_URL"] = f"sqlite:///{BASE_DIR / 'test.sqlite3'}"
 
 DATABASES = {
     'default': dj_database_url.parse(

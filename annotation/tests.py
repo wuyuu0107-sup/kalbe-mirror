@@ -245,7 +245,6 @@ class AnnotationAPITests(TestCase):
     def test_unauthenticated_access(self):
         unauthenticated_client = APIClient()
         res = unauthenticated_client.get(f'/api/v1/annotations/')
-        # Now that the API requires authentication, unauthenticated requests should be 401
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
 

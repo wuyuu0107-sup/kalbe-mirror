@@ -1,79 +1,21 @@
-from django.http import JsonResponse, HttpResponseNotFound, HttpResponse, HttpResponseBadRequest
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse, HttpResponseNotFound, HttpResponse, HttpResponseBadRequest
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication, BasicAuthentication
-import json
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
-from rest_framework.permissions import AllowAny
-
-from .models import Annotation
-
-@csrf_exempt
-def create_drawing_annotation(request, document_id, patient_id):
-    if request.method == "POST":
-        try:
-            body = json.loads(request.body)
-            annotation = Annotation.objects.create(
-                document_id=document_id,
-                patient_id=patient_id,
-                drawing_data=body
-            )
-            return JsonResponse({"id": annotation.id, "drawing": annotation.drawing_data, "created": annotation.created_at, "updated": annotation.updated_at}, status=201)
-        except Exception as e:
-            return HttpResponseBadRequest(str(e))
-    return HttpResponseBadRequest("Invalid method")
-
-@csrf_exempt
-def drawing_annotation(request, document_id, patient_id, annotation_id):
-    if request.method == "GET":
-        try:
-            annotation = Annotation.objects.get(id=annotation_id, document_id=document_id, patient_id=patient_id)
-            return JsonResponse({"id": annotation.id, "drawing": annotation.drawing_data, "created": annotation.created_at, "updated": annotation.updated_at})
-        except Annotation.DoesNotExist:
-            return HttpResponseNotFound("Annotation not found")
-        except Exception as e:
-            return HttpResponseBadRequest(str(e))
-
-    elif request.method == "PUT":
-        try:
-            body = json.loads(request.body)
-            annotation = Annotation.objects.get(id=annotation_id, document_id=document_id, patient_id=patient_id)
-            annotation.drawing_data = body
-            annotation.save()
-            return JsonResponse({"id": annotation.id, "drawing": annotation.drawing_data})
-        except Annotation.DoesNotExist:
-            return HttpResponseNotFound("Annotation not found")
-        except Exception as e:
-            return HttpResponseBadRequest(str(e))
-
-    elif request.method == "DELETE":
-        try:
-            annotation = Annotation.objects.get(id=annotation_id, document_id=document_id, patient_id=patient_id)
-            annotation.delete()
-            return HttpResponse(status=204)
-        except Annotation.DoesNotExist:
-            return HttpResponseNotFound("Annotation not found")
-        except Exception as e:
-            return HttpResponseBadRequest(str(e))
-
-    return HttpResponseBadRequest("Invalid method")
-
 # annotation/views.py
 
 import os, re, json
+
 from django.http import JsonResponse, HttpResponseNotFound, HttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+
 from rest_framework import viewsets, mixins, filters, status
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+
 from django_filters.rest_framework import DjangoFilterBackend
+
 import google.generativeai as genai
 
 from .models import Document, Patient, Annotation, Comment

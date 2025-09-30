@@ -13,6 +13,10 @@ from unittest.mock import patch, MagicMock
 from rest_framework.test import APIClient
 from rest_framework import status
 from annotation.models import Annotation
+from django.urls import reverse
+from django.test import TestCase, Client
+from .models import Document, Patient
+
 
 
 # If your file already declared HAS_COMMENTS earlier, you can reuse it.
@@ -667,10 +671,6 @@ if HAS_COMMENTS:
             )
             self.assertEqual(upd.status_code, 200)
             self.assertEqual(upd.data["body"], "second")
-
-from django.urls import reverse
-from django.test import TestCase, Client
-from .models import Document, Patient
 
 class ViewsPageTests(TestCase):
     def setUp(self):

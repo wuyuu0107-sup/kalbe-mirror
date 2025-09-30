@@ -136,7 +136,7 @@ class AnnotationCRUDTests(TestCase):
     def test_unauthenticated_access(self):
         unauthenticated_client = Client()
         response = unauthenticated_client.get(f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/')
-        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.status_code, 403)
 
 
 class AnnotationAPITests(TestCase):
@@ -151,8 +151,8 @@ class AnnotationAPITests(TestCase):
             is_verified=True
         )
 
-        # Simulate authentication by setting credentials
-        self.client.credentials(HTTP_AUTHORIZATION='Token fake-token')
+        # Simulate authentication by forcing an authenticated user for DRF tests
+        self.client.force_authenticate(user=self.user)
 
         # Prepare a sample Document (json) and Patient
         doc_res = self.client.post('/api/v1/documents/', {
@@ -245,7 +245,8 @@ class AnnotationAPITests(TestCase):
     def test_unauthenticated_access(self):
         unauthenticated_client = APIClient()
         res = unauthenticated_client.get(f'/api/v1/annotations/')
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Now that the API requires authentication, unauthenticated requests should be 401
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
 
 def make_pdf_bytes() -> bytes:

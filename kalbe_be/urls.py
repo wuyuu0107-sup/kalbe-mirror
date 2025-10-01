@@ -16,14 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from ocr.views import api_ocr
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Direct API endpoint for OCR (avoid nesting include which caused
     # requests to /api/ocr/ to resolve to the ocr_test_page view).
-    path('api/ocr/', api_ocr),
-    # UI and other OCR routes live under /ocr/
     path('ocr/', include('ocr.urls')),
     path('csv/', include('csv_export.urls'))
 ]

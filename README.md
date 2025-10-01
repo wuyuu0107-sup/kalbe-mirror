@@ -81,6 +81,11 @@ make a .env
 fill with
 
 SECRET_KEY_DJANGO=whatever-long-random-string
-GEMINI_API_KEY=gemini key
+GEMINI_API_KEY=AIzaSyB1icMcUwHldfUY4LMpQneP9OGlNFjsD2o
 DJANGO_DEBUG=1
-DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost, 54.179.78.28
+DATABASE_URL=postgresql://postgres.jfgndcfxzgxbyxjlamgg:neverbackdownneverwhat111@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+DATABASE_URL_DIRECT=postgresql://postgres.jfgndcfxzgxbyxjlamgg:neverbackdownneverwhat111@aws-1-ap-southeast-1.supabase.com:5432/postgres?sslmode=require
+SUPABASE_URL=https://jfgndcfxzgxbyxjlamgg.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=supabase_service_role_key
+SUPABASE_BUCKET=ocr

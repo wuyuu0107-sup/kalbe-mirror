@@ -1,7 +1,7 @@
 django
 gunicorn
 whitenoise
-psycopg2-binary>=2.9
+psycopg2-binary
 requests
 urllib3
 dj_database_url
@@ -9,8 +9,8 @@ django-filter
 python-decouple
 django-cors-headers
 djangorestframework
-Pillow
 pyspellchecker
 pymupdf
 google-generativeai
-python-dotenv
+dotenv
+

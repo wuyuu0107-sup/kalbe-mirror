@@ -11,24 +11,14 @@ from dotenv import load_dotenv
 
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-import mimetypes
 from django.conf import settings
 
 from annotation.models import Document, Patient
 from supabase import create_client, Client
 import os, time, json, re, mimetypes
-from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import render
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
-from django.views.decorators.csrf import csrf_exempt
-
 from dotenv import load_dotenv
-import google.generativeai as genai
-from supabase import create_client, Client
-
-from annotation.models import Document, Patient
 
 
 # --- PDF support flag for tests / optional dependency ---

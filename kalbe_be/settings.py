@@ -7,81 +7,126 @@ Docs:
 - https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 import os
 import dj_database_url
 from decouple import config
 from dotenv import load_dotenv
 
-# ----------------------------------------------------
-# Paths & Environment
-# ----------------------------------------------------
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
 load_dotenv(BASE_DIR / ".env")
 STATICFILES_DIRS = [
-    BASE_DIR / "static",        # <--- add this if you store static/ at backend/static
+    BASE_DIR / "static",        
 ]
 
-# ----------------------------------------------------
-# Core Settings
-# ----------------------------------------------------
+
 # SECURITY WARNING: keep the secret key used in production secret!
+
+SECRET_KEY = config("SECRET_KEY_DJANGO")
 SECRET_KEY = os.getenv("SECRET_KEY_DJANGO")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY_DJANGO is not set in environment")
 
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    "backend-mirror-production.up.railway.app",
+
+ALLOWED_HOSTS = ["*"]
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://backend-mirror-production.up.railway.app",
 ]
 
-# ----------------------------------------------------
-# Applications
-# ----------------------------------------------------
+CORS_ALLOW_METHODS = [  
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [ 
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+  
+# Application definition
+
 INSTALLED_APPS = [
-    # Django
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-
-    # Third-party
-    "rest_framework",
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    "accounts",
     "corsheaders",
-    "django_filters",
-
-    # Local apps
+    'authentication',
+    'ocr',
+    'csv_export',
     "annotation",
+    "django_filters",
+    "rest_framework",
+]
+# Email — DEV only: email dikirim ke console/locmem (test)
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "noreply@kalbe.local"
+
+# Password validators — enforce min length
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    'corsheaders',
     "ocr",
-    "authentication",
+    "csv_export"
 ]
 
-# ----------------------------------------------------
-# Middleware
-# ----------------------------------------------------
+# Security basics (dev values; prod => True + HTTPS)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+
+TIME_ZONE = "Asia/Jakarta"
+USE_TZ = True
+
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = "kalbe_be.urls"
 
-# ----------------------------------------------------
-# Django REST Framework
-# ----------------------------------------------------
+
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
@@ -91,14 +136,8 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
 }
 
-# ----------------------------------------------------
-# CORS
-# ----------------------------------------------------
-CORS_ALLOW_ALL_ORIGINS = True
 
-# ----------------------------------------------------
-# Templates
-# ----------------------------------------------------
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -117,9 +156,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "kalbe_be.wsgi.application"
 
-# ----------------------------------------------------
-# Database
-# ----------------------------------------------------
 DATABASES = {
     'default': dj_database_url.parse(
         config("DATABASE_URL")
@@ -139,30 +175,11 @@ else:
         }
     }
 
-# ----------------------------------------------------
-# Password validation
-# ----------------------------------------------------
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        "OPTIONS": {"min_length": 8},
-    },
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
 
-# ----------------------------------------------------
-# Internationalization
-# ----------------------------------------------------
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
 USE_I18N = True
-USE_TZ = True
 
-# ----------------------------------------------------
-# Static & Media
-# ----------------------------------------------------
+
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -172,5 +189,25 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # ----------------------------------------------------
 # Default primary key field type
-# ----------------------------------------------------
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", cast=int, default=587)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
+
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")  # <-- default kosong
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+
+# Kalau kredensial gak ada (CI), pakai console backend biar gak error
+if not EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# kalau DEFAULT_FROM_EMAIL gak ada di .env, pakai EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+EMAIL_TIMEOUT = 10

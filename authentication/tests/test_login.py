@@ -75,14 +75,14 @@ class LoginEndpointTests(TestCase):
 
     def test_login_nonexistent_credentials(self):
         url = reverse(self.login_url_name)
-        payload = {"username": "doesnotexist", "password": "whatever"}
+        payload = {"username": "doesnotexist", "password": "Password123"}
         response = self._post_json(url, payload)
         self.assertEqual(response.status_code, 401, response.content)
         self.assertIn("error", response.json())
 
     def test_login_invalid_credentials(self):
         url = reverse(self.login_url_name)
-        payload = {"username": self.username, "password": "wrongpass"}
+        payload = {"username": self.username, "password": "Password123"}
         response = self._post_json(url, payload)
         self.assertEqual(response.status_code, 401, response.content)
         self.assertIn("error", response.json())
@@ -148,13 +148,13 @@ class LoginEndpointTests(TestCase):
     def test_login_unverified_user(self):
         """Negative: unverified user → 403"""
         url = reverse(self.login_url_name)
-        unverified_user = User.objects.create(
+        User.objects.create(
             username="stranger",
-            password=make_password("danger123"),
+            password=make_password("Password123"),
             email="stranger@email.com",
             is_verified=False
         )
-        payload = {"username": "stranger", "password": "danger123"}
+        payload = {"username": "stranger", "password": "Password123"}
         response = self._post_json(url, payload)
         self.assertEqual(response.status_code, 403, response.content)
         data = response.json()

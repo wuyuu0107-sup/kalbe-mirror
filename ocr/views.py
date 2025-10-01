@@ -2,21 +2,15 @@ import os
 import re
 import time
 import json
-import numpy as np
-from PIL import Image
 
-from django.http import HttpResponseBadRequest, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 
-import easyocr
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-from .reader import get_reader
-from .utils import correct_word
-
-# --- PDF support flag for tests / optional dependency ---
+# --- PDF support flag for tests / optional dependency --- jawa
 try:
     import fitz  # PyMuPDF
     HAS_PDF = True
@@ -24,67 +18,6 @@ except ImportError:
     fitz = None  # type: ignore
     HAS_PDF = False
 
-
-@csrf_exempt
-def api_ocr(request):
-    if request.method != "POST":
-        return HttpResponseBadRequest("POST an image or PDF file with the 'file' key.")
-
-    f = request.FILES.get("file")
-    if not f:
-        return JsonResponse({"error": "No file uploaded under 'file'."}, status=400)
-
-    file_ext = os.path.splitext(f.name)[1].lower()
-
-    if file_ext == ".pdf":
-        if not HAS_PDF:
-            return JsonResponse({"error": "PDF support not available"}, status=500)
-        try:
-            pdf_bytes = f.read()
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")  # type: ignore[arg-type]
-        except Exception:
-            # Keep 200 per your current behavior if invalid PDF when HAS_PDF available
-            return JsonResponse({"error": "Invalid PDF.", "success": False}, status=200)
-
-        pages = []
-        for idx in range(doc.page_count):
-            page = doc.load_page(idx)
-            pix = page.get_pixmap()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            arr = np.array(img)
-            reader = easyocr.Reader(["en", "id"], gpu=False)
-            text = "\n".join(t[1] for t in reader.readtext(arr, detail=1, paragraph=False))
-            pages.append({"text": text})
-
-        result = {
-            "filename": f.name,
-            "method": "ocr",
-            "pages": pages,
-            "success": True,
-            "error": None,
-        }
-        return JsonResponse(result)
-
-    elif file_ext in [".png", ".jpg", ".jpeg"]:
-        try:
-            img = Image.open(f).convert("RGB")
-        except Exception:
-            return JsonResponse({"error": "Invalid image."}, status=400)
-
-        arr = np.array(img)
-        reader = easyocr.Reader(["en", "id"], gpu=False)
-        text = "\n".join(t[1] for t in reader.readtext(arr, detail=1, paragraph=False))
-        result = {
-            "filename": f.name,
-            "method": "ocr",
-            "pages": [{"text": text}],
-            "success": True,
-            "error": None,
-        }
-        return JsonResponse(result)
-
-    else:
-        return JsonResponse({"error": "Unsupported file type."}, status=400)
 
 
 @csrf_exempt
@@ -200,48 +133,3 @@ def ocr_test_page(request):
     return render(request, "ocr.html")
 
 
-@csrf_exempt
-def ocr_image(request):
-    if request.method != "POST":
-        return HttpResponseBadRequest("POST an image or PDF file with the 'file' key.")
-
-    f = request.FILES.get("file")
-    if not f:
-        return HttpResponseBadRequest("No file uploaded under 'file'.")
-
-    results = []
-    if f.name.lower().endswith(".pdf"):
-        try:
-            pdf_bytes = f.read()
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")  # type: ignore[arg-type]
-        except Exception:
-            return HttpResponseBadRequest("Invalid PDF.")
-        for idx in range(doc.page_count):
-            page = doc.load_page(idx)
-            pix = page.get_pixmap()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            arr = np.array(img)
-            reader = get_reader(langs=["en", "id"], gpu=False)
-            page_results = reader.readtext(arr, detail=1, paragraph=False)
-            results.extend(page_results)
-    else:
-        try:
-            img = Image.open(f).convert("RGB")
-        except Exception:
-            return HttpResponseBadRequest("Invalid image.")
-        arr = np.array(img)
-        reader = get_reader(langs=["en", "id"], gpu=False)
-        results = reader.readtext(arr, detail=1, paragraph=False)
-
-    payload = {"results": _normalize_results(results)}
-    return HttpResponse(json.dumps(payload), content_type="application/json")
-
-
-def _normalize_results(results):
-    """(box, text, conf) -> dict with only plain Python types."""
-    norm = []
-    for box, text, conf in results:
-        b = np.asarray(box, dtype=float).tolist()
-        corrected = correct_word(str(text))
-        norm.append({"box": b, "text": corrected, "confidence": float(conf)})
-    return norm

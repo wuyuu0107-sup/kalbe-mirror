@@ -9,15 +9,15 @@ class Document(models.Model):
     meta = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)  # keep as is
     updated_at = models.DateTimeField(auto_now=True)
+    payload_json_text = models.TextField(blank=True, null=True)
+
 
 
 class Patient(models.Model):
-    """
-    Minimal patient record so we can attach annotations per (doc, patient).
-    If you already have Patient elsewhere, swap ForeignKey target accordingly.
-    """
-    external_id = models.CharField(max_length=128, blank=True, default="")
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=128)
+    external_id = models.CharField(max_length=128, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)  # <-- must be here
+    updated_at = models.DateTimeField(auto_now=True)      # <-- and here
 
     def __str__(self):
         return self.name

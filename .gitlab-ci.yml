@@ -21,7 +21,7 @@ test:
   stage: test
   script:
     - python manage.py migrate --noinput
-    - python manage.py test
+    - python manage.py test --keepdb
   artifacts:
     when: always
     reports:

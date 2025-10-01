@@ -6,3 +6,11 @@ requests
 urllib3
 dj_database_url
 django-filter
+python-decouple
+django-cors-headers
+djangorestframework
+Pillow
+pyspellchecker
+pymupdf
+google-generativeai
+python-dotenv

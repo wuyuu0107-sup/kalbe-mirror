@@ -41,18 +41,8 @@ if not SECRET_KEY:
 DEBUG = True
 
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    "54.179.78.28",
-    "backend-mirror-production.up.railway.app",
-]
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
+ALLOWED_HOSTS = ["*"]
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
@@ -61,8 +51,27 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "https://backend-mirror-production.up.railway.app",
+
+CORS_ALLOW_METHODS = [  
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 
+CORS_ALLOW_HEADERS = [ 
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
   
 # Application definition
@@ -90,6 +99,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    'corsheaders',
+    "ocr",
+    "csv_export"
 ]
 
 # Security basics (dev values; prod => True + HTTPS)

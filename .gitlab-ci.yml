@@ -26,6 +26,7 @@ test:
   stage: test
   script:
     - python manage.py migrate --noinput
+    - python manage.py test --keepdb
     - coverage run --source='.' manage.py test
   artifacts:
     when: always

@@ -86,7 +86,7 @@ class UserModelTest(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(response.status_code, 200)
         self.assertTrue(self.user.is_verified)
-        self.assertEqual(response.json()["message"], "Email verified successfully")
+        self.assertEqual(response.json()["message"], "Email verified successfully! Welcome email sent.")
         
     def test_verify_email_invalid_token(self):
         client = Client()

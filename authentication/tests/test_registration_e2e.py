@@ -45,7 +45,7 @@ class RegistrationE2ETests(TestCase):
         
         response_data = response.json()
         self.assertIn("message", response_data)
-        self.assertEqual(response_data["message"], "Registration is successful. Please log in")
+        self.assertEqual(response_data["message"], "Registration successful! Welcome email sent. You can now log in.")
         self.assertIn("user_id", response_data)
         
         # Step 4: Verify user exists in database

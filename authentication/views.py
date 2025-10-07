@@ -171,11 +171,8 @@ def register_profile(request):
                 display_name=display_name,
                 email=email,
                 roles=roles or [],
-                is_verified=True,  # Auto-verify email on registration
+                is_verified=False, 
             )
-            
-            # Send welcome email since user is auto-verified
-            send_welcome_email(u)
             
     except IntegrityError:
         return JsonResponse({"error": "user already exists"}, status=409)

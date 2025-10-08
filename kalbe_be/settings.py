@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'ocr',
     'csv_export',
     "annotation",
+    "dataset",
     "django_filters",
     "rest_framework",
 ]

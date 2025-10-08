@@ -47,6 +47,14 @@ deploy:
     - |
       ssh "$EC2_USER@$EC2_HOST" << 'EOF'
         echo "✅ Successfully SSH inside"
+        cd $DEPLOY_PATH
+        git pull origin $DEPLOY_BRANCH
+        source venv/bin/activate
+        pip install -r requirements.txt
+        python manage.py migrate --noinput
+        python manage.py collectstatic --noinput --clear
+        sudo systemctl restart $SERVICE_NAME
+        echo "Deployment completed successfully."
       EOF
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'

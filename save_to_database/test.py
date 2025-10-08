@@ -1,0 +1,101 @@
+import io
+import os
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.exceptions import ValidationError
+from django.test import TestCase
+from django.utils import timezone
+from .models import CSV
+
+
+class CSVModelTests(TestCase):
+    def setUp(self):
+        # Create a temporary CSV file in memory for all tests
+        self.csv_content = b"name,age\nAlice,25\nBob,30\n"
+        self.uploaded_file = SimpleUploadedFile(
+            "test.csv", self.csv_content, content_type="text/csv"
+        )
+
+    # ------------------------
+    # POSITIVE TESTS
+    # ------------------------
+    def test_create_valid_csv(self):
+        """✅ Model should save correctly with all fields populated."""
+        csv = CSV.objects.create(
+            name="Valid CSV",
+            file=self.uploaded_file,
+            source_json={"source": "ocr"},
+            record_count=2,
+            notes="Sample dataset"
+        )
+        self.assertEqual(csv.name, "Valid CSV")
+        self.assertTrue(csv.file.name.startswith("datasets/csvs/"))
+        self.assertEqual(csv.record_count, 2)
+        self.assertEqual(csv.source_json, {"source": "ocr"})
+        self.assertEqual(csv.notes, "Sample dataset")
+        self.assertEqual(str(csv), "Valid CSV")
+        self.assertIsNotNone(csv.created_at)
+
+    def test_default_values_applied(self):
+        """✅ record_count defaults to 0 and optional fields can be blank."""
+        csv = CSV.objects.create(name="Defaults", file=self.uploaded_file)
+        self.assertEqual(csv.record_count, 0)
+        self.assertIsNone(csv.source_json)
+        self.assertEqual(csv.notes, "")
+
+    def test_auto_created_timestamp(self):
+        """✅ created_at should be automatically populated."""
+        csv = CSV.objects.create(name="Timestamp", file=self.uploaded_file)
+        self.assertLess(abs((csv.created_at - timezone.now()).total_seconds()), 5)
+
+    def test_file_upload_path(self):
+        """✅ Uploaded files should be stored under datasets/csvs/."""
+        csv = CSV.objects.create(name="Path Test", file=self.uploaded_file)
+        self.assertIn("datasets/csvs/", csv.file.name)
+
+    # ------------------------
+    # NEGATIVE TESTS
+    # ------------------------
+    def test_missing_required_name_field(self):
+        """❌ Model should not save without a name."""
+        with self.assertRaises(ValidationError):
+            csv = CSV(file=self.uploaded_file)
+            csv.full_clean()  # triggers validation
+
+    def test_missing_required_file_field(self):
+        """❌ Model should not save without a file."""
+        with self.assertRaises(ValidationError):
+            csv = CSV(name="No File Provided")
+            csv.full_clean()
+
+    def test_name_too_long(self):
+        """❌ Name exceeding max_length=255 should raise an error."""
+        long_name = "A" * 256
+        with self.assertRaises(ValidationError):
+            csv = CSV(name=long_name, file=self.uploaded_file)
+            csv.full_clean()
+
+    def test_invalid_json_field(self):
+        """❌ Non-serializable JSON should fail validation."""
+        with self.assertRaises(ValueError):
+            CSV.objects.create(name="Invalid JSON", file=self.uploaded_file, source_json=set([1,2,3]))
+
+    def test_negative_record_count(self):
+        """❌ Negative record count is currently allowed; note for future validation."""
+        csv = CSV(name="Negative Count", file=self.uploaded_file, record_count=-5)
+        csv.full_clean()  # passes by default
+        self.assertEqual(csv.record_count, -5)
+
+    def test_blank_name_validation(self):
+        """❌ Empty name string should fail validation."""
+        with self.assertRaises(ValidationError):
+            csv = CSV(name="", file=self.uploaded_file)
+            csv.full_clean()
+
+    # ------------------------
+    # CLEANUP
+    # ------------------------
+    def tearDown(self):
+        """Clean up uploaded files after test."""
+        for csv in CSV.objects.all():
+            if csv.file and os.path.exists(csv.file.path):
+                os.remove(csv.file.path)

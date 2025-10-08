@@ -24,7 +24,7 @@ class RecentFileServiceTests(TestCase):
         ]
 
         with mock.patch("dashboard.services.recent_files.get_storage", return_value=FakeStorage(sample)):
-            out = get_recent_files(limit=3)
+            out = get_recent_files()
         
         self.assertEqual([f["name"] for f in out], ["c.csv", "b.csv", "a.csv"])
         self.assertTrue({"name", "updated_at", "size", "path"}.issubset(out[0].keys()))

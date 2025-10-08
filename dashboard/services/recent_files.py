@@ -1,9 +1,9 @@
 from datetime import datetime, MINYEAR
 from ..storage import get_storage
 
-def get_recent_files(limit=10):
+def get_recent_files():
     storage = get_storage()
-    items = list(storage.list_csv(limit=limit*3))
+    items = list(storage.list_csv())
 
     norm = []
     for i in items:
@@ -13,4 +13,4 @@ def get_recent_files(limit=10):
         norm.append({**i, "updated_at": u})
 
     norm.sort(key=lambda x: x["updated_at"] or datetime(MINYEAR, 1, 1), reverse=True)
-    return norm[:limit]
+    return norm

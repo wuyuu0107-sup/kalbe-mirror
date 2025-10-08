@@ -218,4 +218,4 @@ EMAIL_TIMEOUT = 10
 
 # Gemini
 GEMINI_API_KEY = config("GEMINI_API_KEY")
-GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
+GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash") 

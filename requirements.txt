@@ -13,4 +13,4 @@ pyspellchecker
 pymupdf
 google-generativeai
 dotenv
-
+supabase

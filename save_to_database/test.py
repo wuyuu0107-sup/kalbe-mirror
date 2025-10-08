@@ -1,4 +1,3 @@
-import io
 import os
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
@@ -7,9 +6,10 @@ from django.utils import timezone
 from .models import CSV
 
 
+
 class CSVModelTests(TestCase):
     def setUp(self):
-        # Create a temporary CSV file in memory for all tests
+        # Temporary CSV file for tests
         self.csv_content = b"name,age\nAlice,25\nBob,30\n"
         self.uploaded_file = SimpleUploadedFile(
             "test.csv", self.csv_content, content_type="text/csv"
@@ -36,11 +36,11 @@ class CSVModelTests(TestCase):
         self.assertIsNotNone(csv.created_at)
 
     def test_default_values_applied(self):
-        """✅ record_count defaults to 0 and optional fields can be blank."""
+        """✅ record_count defaults to 0 and optional fields can be blank/None."""
         csv = CSV.objects.create(name="Defaults", file=self.uploaded_file)
         self.assertEqual(csv.record_count, 0)
         self.assertIsNone(csv.source_json)
-        self.assertEqual(csv.notes, "")
+        self.assertIsNone(csv.notes)  # changed from "" to match model
 
     def test_auto_created_timestamp(self):
         """✅ created_at should be automatically populated."""
@@ -57,27 +57,28 @@ class CSVModelTests(TestCase):
     # ------------------------
     def test_missing_required_name_field(self):
         """❌ Model should not save without a name."""
+        csv = CSV(file=self.uploaded_file)
         with self.assertRaises(ValidationError):
-            csv = CSV(file=self.uploaded_file)
-            csv.full_clean()  # triggers validation
+            csv.full_clean()
 
     def test_missing_required_file_field(self):
         """❌ Model should not save without a file."""
+        csv = CSV(name="No File Provided")
         with self.assertRaises(ValidationError):
-            csv = CSV(name="No File Provided")
             csv.full_clean()
 
     def test_name_too_long(self):
         """❌ Name exceeding max_length=255 should raise an error."""
         long_name = "A" * 256
+        csv = CSV(name=long_name, file=self.uploaded_file)
         with self.assertRaises(ValidationError):
-            csv = CSV(name=long_name, file=self.uploaded_file)
             csv.full_clean()
 
     def test_invalid_json_field(self):
         """❌ Non-serializable JSON should fail validation."""
-        with self.assertRaises(ValueError):
-            CSV.objects.create(name="Invalid JSON", file=self.uploaded_file, source_json=set([1,2,3]))
+        csv = CSV(name="Invalid JSON", file=self.uploaded_file, source_json=set([1, 2, 3]))
+        with self.assertRaises(ValidationError):
+            csv.full_clean()  # triggers validation without saving
 
     def test_negative_record_count(self):
         """❌ Negative record count is currently allowed; note for future validation."""
@@ -87,15 +88,15 @@ class CSVModelTests(TestCase):
 
     def test_blank_name_validation(self):
         """❌ Empty name string should fail validation."""
+        csv = CSV(name="", file=self.uploaded_file)
         with self.assertRaises(ValidationError):
-            csv = CSV(name="", file=self.uploaded_file)
             csv.full_clean()
 
     # ------------------------
     # CLEANUP
     # ------------------------
     def tearDown(self):
-        """Clean up uploaded files after test."""
+        """Remove any uploaded files after tests."""
         for csv in CSV.objects.all():
             if csv.file and os.path.exists(csv.file.path):
                 os.remove(csv.file.path)

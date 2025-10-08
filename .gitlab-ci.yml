@@ -49,10 +49,9 @@ deploy:
         echo "✅ Successfully SSH inside"
         cd /home/ec2-user/backend-mirror
         git pull origin main
-        pip3 install --user -r requirements.txt
         python3 manage.py migrate --noinput
         python3 manage.py collectstatic --noinput --clear
-        sudo systemctl restart $SERVICE_NAME
+        sudo systemctl restart kalbe-data
         echo "Deployment completed successfully."
       EOF
   rules:

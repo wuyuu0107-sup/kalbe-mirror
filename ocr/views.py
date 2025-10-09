@@ -6,6 +6,7 @@ import json
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
+<<<<<<< HEAD
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -22,6 +23,13 @@ from dotenv import load_dotenv
 
 
 # --- PDF support flag for tests / optional dependency ---
+=======
+
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# --- PDF support flag for tests / optional dependency --- jawa
+>>>>>>> 17e659b0d21719202587460e8ad2afafc3f7de74
 try:
     import fitz  # PyMuPDF
     HAS_PDF = True
@@ -39,6 +47,7 @@ SECTION_ORDER = [
     "CLINICAL_CHEMISTRY",
 ]
 
+<<<<<<< HEAD
 def order_sections(d: dict) -> dict:
     head = {k: d[k] for k in SECTION_ORDER if k in d}
     tail = {k: v for k, v in d.items() if k not in head}
@@ -257,6 +266,8 @@ def normalize_payload(extracted: dict) -> dict:
     }
     ordered.update(extras)
     return ordered
+=======
+>>>>>>> 17e659b0d21719202587460e8ad2afafc3f7de74
 
 @csrf_exempt
 def health(request):

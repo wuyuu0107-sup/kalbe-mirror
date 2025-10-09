@@ -9,12 +9,24 @@ import uuid
 class UserModelTest(TestCase):
 
     def setUp(self):
+        # Unverfied user
         self.user = User.objects.create(
             username="testuser",
-            password="strongpassword",
+            password="password123",
             display_name="Test User",
             email="test@example.com",
-            roles=["admin", "researcher"]
+            is_verified=False,
+            roles=["admin", "researcher"],
+        )
+
+        # Verified user
+        self.verified_user = User.objects.create(
+            username="verifieduser",
+            password="password123",
+            display_name="Verified User",
+            email="verified@example.com",
+            is_verified=True,
+            roles=["admin", "researcher"],
         )
 
     def test_user_creation(self):

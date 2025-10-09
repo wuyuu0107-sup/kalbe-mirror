@@ -152,3 +152,26 @@ def get_intent_json(nl_question: str, *, request_id: str | None = None) -> str:
 
     # Kembalikan string satu baris
     return json.dumps(obj, separators=(",", ":"))
+                      
+def ask_gemini_text(prompt: str) -> str:
+    """
+    Minimal free-text answerer (no JSON). Raises GeminiError/GeminiBlocked on issues.
+    """
+    model = _get_model()
+    try:
+        resp = model.generate_content(
+            [str(prompt or "").strip()],
+            generation_config={"temperature": 0, "max_output_tokens": 256},
+            request_options={"timeout": DEFAULT_DEADLINE_S},
+        )
+    except Exception as e:
+        raise GeminiError(f"request_failed: {e}")
+
+    fb = getattr(resp, "prompt_feedback", None)
+    if fb and getattr(fb, "block_reason", None):
+        raise GeminiBlocked(f"blocked: {fb.block_reason}")
+
+    text = _extract_text(resp)
+    if not text.strip():
+        raise GeminiError("empty_response")
+    return text.strip()

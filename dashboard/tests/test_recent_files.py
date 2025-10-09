@@ -7,10 +7,13 @@ class RecentFilesViewsTests(TestCase):
     def setUp(self):
         self.client = Client()
 
-    @mock.patch("dashboard.services.recent_files.get_recent_files")
+    @mock.patch("dashboard.views.get_recent_files")
     def test_recent_files_json_returns_iso(self, mock_service):
         mock_service.return_value = [
-            {"name":"x.csv","updated_at": dt.datetime(2025,10,7,12,0), "size": 2048, "path":"x.csv"}
+            {"name":"x.csv",
+             "updated_at": dt.datetime(2025,10,7,12,0), 
+             "size": 2048, 
+             "path":"x.csv"}
         ]
 
         url = reverse("dashboard:recent-files-json")

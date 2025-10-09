@@ -15,6 +15,8 @@ urlpatterns = [
     # CSRF endpoint used by the frontend: GET http://localhost:8000/api/csrf/
     path("api/csrf/", csrf_view),
 
+    path("api/chat/", include("chat.urls")),
+
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
     path('auth/', include('authentication.urls')),

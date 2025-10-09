@@ -63,7 +63,7 @@ class RegisterEndpointTests(TestCase):
         data = r.json()
         self.assertIn("user_id", data)
         self.assertIn("message", data)
-        self.assertEqual(data["message"], "Registration is successful. Please log in")
+        self.assertEqual(data["message"], "Registration successful! Welcome email sent. You can now log in.")
 
         # user_id value (kept from your existing expectation)
         u = User.objects.get(username="dummy")

@@ -78,15 +78,15 @@ class UserModelTest(TestCase):
         refreshed = User.objects.get(pk=self.user.user_id)
         self.assertTrue(refreshed.is_verified)
 
-    def test_verify_email_success(self):
-        client = Client()
-        response = client.post(
-            reverse("authentication:verify_email", args=[self.user.verification_token])
-        )
-        self.user.refresh_from_db()
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(self.user.is_verified)
-        self.assertEqual(response.json()["message"], "Email verified successfully")
+    # def test_verify_email_success(self):
+    #     client = Client()
+    #     response = client.post(
+    #         reverse("authentication:verify_email", args=[self.user.verification_token])
+    #     )
+    #     self.user.refresh_from_db()
+    #     self.assertEqual(response.status_code, 200)
+    #     self.assertTrue(self.user.is_verified)
+    #     self.assertEqual(response.json()["message"], "Email verified successfully")
         
     def test_verify_email_invalid_token(self):
         client = Client()

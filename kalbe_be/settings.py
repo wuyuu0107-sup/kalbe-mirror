@@ -181,6 +181,9 @@ USE_I18N = True
 
 
 STATIC_URL = "/static/"
+# Dev: For static files
+STATICFILES_DIRS = [BASE_DIR / "static"]  
+# Prod: where collectstatic gathers all files
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 

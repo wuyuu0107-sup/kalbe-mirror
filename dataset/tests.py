@@ -23,12 +23,12 @@ class DatasetFileManagementTests(TestCase):
         self.list_create_url = reverse("csvfile_list_create")
 
         # Users
-        self.admin = User.objects.create(
-            username="admin_user",
-            password="AdminPass123",
-            display_name="Admin User",
-            email="admin@example.com",
-            roles=["admin"],
+        self.researcher = User.objects.create(
+            username="researcher_user",
+            password="ResearcherPass123",
+            display_name="Researcher User",
+            email="researcher@example.com",
+            roles=["researcher"],
             is_verified=True,
         )
         self.normal_user = User.objects.create(
@@ -39,12 +39,12 @@ class DatasetFileManagementTests(TestCase):
             roles=["user"],
             is_verified=True,
         )
-        self.unverified_admin = User.objects.create(
-            username="unverified_admin",
-            password="AdminPass123",
-            display_name="Unverified Admin",
-            email="uadmin@example.com",
-            roles=["admin"],
+        self.unverified_researcher = User.objects.create(
+            username="unverified_researcher",
+            password="ResearcherPass123",
+            display_name="Unverified Researcher",
+            email="uresearcher@example.com",
+            roles=["researcher"],
             is_verified=False,
         )
 
@@ -85,14 +85,14 @@ class DatasetFileManagementTests(TestCase):
         r = self.client.post(self.list_create_url, {"file": file})
         self.assertEqual(r.status_code, 403)
 
-    def test_unverified_admin_is_forbidden(self):
-        self._login(self.unverified_admin)
+    def test_unverified_researcher_is_forbidden(self):
+        self._login(self.unverified_researcher)
         r = self.client.get(self.list_create_url)
         self.assertEqual(r.status_code, 403)
 
     # CRUD + download tests
-    def test_admin_can_upload_list_retrieve_download_and_delete(self):
-        self._login(self.admin)
+    def test_researcher_can_upload_list_retrieve_download_and_delete(self):
+        self._login(self.researcher)
 
         # Upload
         upload_resp = self._upload_csv()
@@ -140,13 +140,13 @@ class DatasetFileManagementTests(TestCase):
         self.assertFalse(CSVFile.objects.filter(pk=obj_id).exists())
 
     def test_upload_without_file_returns_400(self):
-        self._login(self.admin)
+        self._login(self.researcher)
         resp = self.client.post(self.list_create_url, {})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("detail", resp.json())
 
     def test_download_missing_file_returns_404(self):
-        self._login(self.admin)
+        self._login(self.researcher)
         # Upload one file
         upload_resp = self._upload_csv(name="missing.csv", content=b"col\nval\n")
         self.assertEqual(upload_resp.status_code, 201)

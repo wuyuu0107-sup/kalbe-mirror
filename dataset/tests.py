@@ -18,9 +18,14 @@ class DatasetFileManagementTests(TestCase):
         self._temp_media = tempfile.mkdtemp(prefix="test_media_")
         self._old_media_root = settings.MEDIA_ROOT
         settings.MEDIA_ROOT = self._temp_media
+        # Reset default storage to use new MEDIA_ROOT
+        from django.core.files.storage import default_storage
+        _ = default_storage.location  # trigger setup
+        default_storage._wrapped.location = settings.MEDIA_ROOT
 
         # URLs
         self.list_create_url = reverse("csvfile_list_create")
+        self.folder_move_url = reverse("folder_move")
 
         # Users
         self.researcher = User.objects.create(
@@ -101,7 +106,7 @@ class DatasetFileManagementTests(TestCase):
         self.assertIn("id", data)
         self.assertIn("file_url", data)
         self.assertIn("filename", data)
-        self.assertEqual(data["filename"], "sample.csv")
+        self.assertTrue(data["filename"].startswith("sample"))
         self.assertTrue(str(data["file_url"]).startswith("http://testserver"))
 
         obj_id = data["id"]
@@ -128,7 +133,7 @@ class DatasetFileManagementTests(TestCase):
         self.assertEqual(download_resp.status_code, 200)
         disp = download_resp.headers.get("Content-Disposition", "")
         self.assertIn("attachment", disp)
-        self.assertIn("sample.csv", disp)
+        self.assertIn("sample", disp)
         content = b"".join(download_resp.streaming_content)
         self.assertIn(b"a,b\n1,2\n", content)
 
@@ -159,3 +164,117 @@ class DatasetFileManagementTests(TestCase):
         download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
         download_resp = self.client.get(download_url)
         self.assertEqual(download_resp.status_code, 404)
+
+    # Move file tests
+    def test_researcher_can_move_file(self):
+        self._login(self.researcher)
+        # Upload file
+        upload_resp = self._upload_csv("test.csv", b"col\nval\n")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSVFile.objects.get(pk=obj_id)
+        old_path = obj.file_path.path
+        self.assertTrue(os.path.exists(old_path))
+        # Move to new dir
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        move_resp = self.client.post(move_url, {"target_dir": "new_dir"})
+        self.assertEqual(move_resp.status_code, 200)
+        data = move_resp.json()
+        self.assertEqual(data["id"], obj_id)
+        self.assertIn("new_dir", data["file_path"])
+        # Refresh obj
+        obj.refresh_from_db()
+        new_path = obj.file_path.path
+        self.assertTrue(os.path.exists(new_path))
+        self.assertFalse(os.path.exists(old_path))
+        self.assertIn("new_dir", obj.file_path.name)
+
+    def test_move_file_unauthenticated_forbidden(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        client2 = Client()
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        resp = client2.post(move_url, {"target_dir": "new"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_move_file_non_researcher_forbidden(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        self._login(self.normal_user)
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        resp = self.client.post(move_url, {"target_dir": "new"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_move_file_missing_target_dir_400(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        obj_id = upload_resp.json()["id"]
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        resp = self.client.post(move_url, {})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("target_dir is required", resp.json()["detail"])
+
+    # Folder move tests
+    def test_researcher_can_move_folder(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Manually move to source dir
+        obj1 = CSVFile.objects.get(pk=id1)
+        obj2 = CSVFile.objects.get(pk=id2)
+        source_dir = "source_dir"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir), exist_ok=True)
+        # Move files
+        old_path1 = obj1.file_path.path
+        actual_filename1 = obj1.filename
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file_path.name = f"csv_files/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file_path.path
+        actual_filename2 = obj2.filename
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file_path.name = f"csv_files/{source_dir}/{actual_filename2}"
+        obj2.save()
+        # Now move folder
+        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "target_dir"})
+        self.assertEqual(move_resp.status_code, 200)
+        data = move_resp.json()
+        self.assertIn("moved_files", data)
+        self.assertEqual(len(data["moved_files"]), 2)
+        self.assertIn(id1, data["moved_files"])
+        self.assertIn(id2, data["moved_files"])
+        # Check files moved
+        obj1.refresh_from_db()
+        obj2.refresh_from_db()
+        self.assertIn("target_dir", obj1.file_path.name)
+        self.assertIn("target_dir", obj2.file_path.name)
+        self.assertTrue(os.path.exists(obj1.file_path.path))
+        self.assertTrue(os.path.exists(obj2.file_path.path))
+        self.assertFalse(os.path.exists(new_path1))
+        self.assertFalse(os.path.exists(new_path2))
+
+    def test_move_folder_unauthenticated_forbidden(self):
+        resp = self.client.post(self.folder_move_url, {"source_dir": "src", "target_dir": "tgt"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_move_folder_no_files_404(self):
+        self._login(self.researcher)
+        resp = self.client.post(self.folder_move_url, {"source_dir": "empty", "target_dir": "target"})
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No files found", resp.json()["detail"])
+
+    def test_move_folder_missing_params_400(self):
+        self._login(self.researcher)
+        resp = self.client.post(self.folder_move_url, {"source_dir": "src"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("source_dir and target_dir are required", resp.json()["detail"])

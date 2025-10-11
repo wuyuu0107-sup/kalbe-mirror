@@ -52,6 +52,14 @@ class DatasetFileManagementTests(TestCase):
             roles=["researcher"],
             is_verified=False,
         )
+        self.admin = User.objects.create(
+            username="admin_user",
+            password="AdminPass123",
+            display_name="Admin User",
+            email="admin@example.com",
+            roles=["admin"],
+            is_verified=True,
+        )
 
     def tearDown(self):
         # Restore settings and remove temp dir
@@ -94,6 +102,31 @@ class DatasetFileManagementTests(TestCase):
         self._login(self.unverified_researcher)
         r = self.client.get(self.list_create_url)
         self.assertEqual(r.status_code, 403)
+
+    def test_admin_access_is_forbidden(self):
+        self._login(self.admin)
+        # List
+        r = self.client.get(self.list_create_url)
+        self.assertEqual(r.status_code, 403)
+        # Create
+        file = SimpleUploadedFile("x.csv", b"x,y\n", content_type="text/csv")
+        r = self.client.post(self.list_create_url, {"file": file})
+        self.assertEqual(r.status_code, 403)
+
+    def test_admin_move_file_forbidden(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        self._login(self.admin)
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        resp = self.client.post(move_url, {"target_dir": "new"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_admin_move_folder_forbidden(self):
+        self._login(self.admin)
+        resp = self.client.post(self.folder_move_url, {"source_dir": "src", "target_dir": "tgt"})
+        self.assertEqual(resp.status_code, 403)
 
     # CRUD + download tests
     def test_researcher_can_upload_list_retrieve_download_and_delete(self):

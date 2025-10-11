@@ -20,7 +20,7 @@ class DatasetFileManagementTests(TestCase):
         settings.MEDIA_ROOT = self._temp_media
 
         # URLs
-        self.list_create_url = reverse("csvfile-list-create")
+        self.list_create_url = reverse("csvfile_list_create")
 
         # Users
         self.admin = User.objects.create(
@@ -117,13 +117,13 @@ class DatasetFileManagementTests(TestCase):
         self.assertTrue(any(it["id"] == obj_id for it in items))
 
         # Retrieve
-        detail_url = reverse("csvfile-detail-destroy", kwargs={"pk": obj_id})
+        detail_url = reverse("csvfile_detail_destroy", kwargs={"pk": obj_id})
         detail_resp = self.client.get(detail_url)
         self.assertEqual(detail_resp.status_code, 200)
         self.assertEqual(detail_resp.json()["id"], obj_id)
 
         # Download
-        download_url = reverse("csvfile-download", kwargs={"pk": obj_id})
+        download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
         download_resp = self.client.get(download_url)
         self.assertEqual(download_resp.status_code, 200)
         disp = download_resp.headers.get("Content-Disposition", "")
@@ -156,6 +156,6 @@ class DatasetFileManagementTests(TestCase):
         os.remove(obj.file_path.path)
         self.assertFalse(os.path.exists(obj.file_path.path))
         # Try download
-        download_url = reverse("csvfile-download", kwargs={"pk": obj_id})
+        download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
         download_resp = self.client.get(download_url)
         self.assertEqual(download_resp.status_code, 404)

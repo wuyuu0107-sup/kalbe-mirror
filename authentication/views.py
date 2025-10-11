@@ -15,14 +15,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def send_otp_email(user):
+    """Send OTP verification email to user"""
+    try:
+        # Generate OTP
+        otp_code = user.generate_otp()
+        
+        subject = "Verify Your Email - OTP Code"
+        message = f"""
+        Hello {user.display_name},
+        
+        Your OTP verification code is: {otp_code}
+        
+        This code will expire in 10 minutes.
+        
+        Please enter this code on the website to verify your email address.
+        
+        If you didn't create this account, please ignore this email.
+        
+        Best regards,
+        Kalbe Platform Team
+        """
+        
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info(f"OTP verification email sent to {user.email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send OTP email to {user.email}: {str(e)}")
+        return False
+
+
 def send_welcome_email(user):
-    """Send welcome email to newly registered user"""
+    """Send welcome email to newly verified user"""
     try:
         subject = "Welcome to Kalbe Platform!"
         message = f"""
         Hello {user.display_name},
         
-        Welcome to Kalbe Platform! Your account has been successfully created and verified.
+        Welcome to Kalbe Platform! Your email has been successfully verified.
         
         Username: {user.username}
         Email: {user.email}
@@ -44,37 +80,6 @@ def send_welcome_email(user):
         return True
     except Exception as e:
         logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
-        return False
-
-
-def send_verification_email(user):
-    """Send email verification email to user"""
-    try:
-        subject = "Verify Your Email Address"
-        message = f"""
-        Hello {user.display_name},
-        
-        Please verify your email address by clicking the link below:
-        
-        Verification Link: /verify-email/{user.verification_token}
-        
-        If you didn't create this account, please ignore this email.
-        
-        Best regards,
-        Kalbe Platform Team
-        """
-        
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-        logger.info(f"Verification email sent to {user.email}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
         return False
 
 @csrf_exempt
@@ -104,27 +109,41 @@ def login(request):
             errors[field] = error_list[0]  # Get first error for each field
         return JsonResponse({"errors": errors, "error": errors}, status=400)
     
-    # Try to authenticate user
-    user = form.authenticate()
-    if user is None:
-        return JsonResponse({"error": "invalid credentials"}, status=401)
+    # Get username and password from form
+    username = form.cleaned_data['username']
+    password = form.cleaned_data['password']
     
-    # Check if user is verified (optional check)
-    if not user.is_verified:
-        return JsonResponse({
-            "error": "Email not verified", 
-            "message": "Please verify your email before logging in"
-        }, status=403)
-    
-    request.session['user_id'] = str(user.user_id)
-    request.session['username'] = user.username
-    
-    return JsonResponse({
-        "user_id": f"user {user.user_id}",
-        "username": user.username,
-        "display_name": user.display_name,
-        "message": "Login successful"
-    }, status=200)
+    try:
+        user = User.objects.get(username=username)
+        
+        # Check password using the form's authenticate method
+        if form.authenticate():
+            # Check if email is verified
+            if not user.is_verified:
+                return JsonResponse({
+                    "error": "Email not verified", 
+                    "message": "Please verify your email before logging in"
+                }, status=403)
+            
+            # Set session and login
+            request.session['user_id'] = str(user.user_id)
+            request.session['username'] = user.username
+            
+            return JsonResponse({
+                "user_id": f"user {user.user_id}",
+                "username": user.username,
+                "display_name": user.display_name,
+                "email": user.email,
+                "message": "Login successful"
+            }, status=200)
+        else:
+            # Simple invalid credentials response
+            return JsonResponse({
+                "error": "Invalid username or password"
+            }, status=401)
+                
+    except User.DoesNotExist:
+        return JsonResponse({"error": "Invalid username or password"}, status=401)
 
 
 @csrf_exempt  
@@ -171,8 +190,11 @@ def register_profile(request):
                 display_name=display_name,
                 email=email,
                 roles=roles or [],
-                is_verified=False, 
+                is_verified=False,  # Not verified until OTP is confirmed
             )
+            
+            # Send OTP email instead of verification link
+            otp_sent = send_otp_email(u)
             
     except IntegrityError:
         return JsonResponse({"error": "user already exists"}, status=409)
@@ -180,11 +202,97 @@ def register_profile(request):
     return JsonResponse(
         {
             "user_id": f"user {u.user_id}",
-            "message": "Registration successful! Welcome email sent. You can now log in.",
-            "email_sent": True
+            "message": "Registration successful! Please check your email for OTP verification code.",
+            "otp_sent": otp_sent,
+            "instructions": "Enter the 6-digit code from your email to verify your account."
         },
         status=201
     )
+
+
+@csrf_exempt
+@require_POST
+def verify_otp(request):
+    """Verify OTP code sent to user's email"""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        username = data.get('username')
+        otp_code = data.get('otp_code')
+        
+        if not username or not otp_code:
+            return JsonResponse({"error": "Username and OTP code are required"}, status=400)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    try:
+        user = User.objects.get(username=username)
+        
+        if user.is_verified:
+            return JsonResponse({"message": "Account already verified"}, status=200)
+        
+        # Verify OTP
+        if user.verify_otp(otp_code):
+            # Send welcome email after successful verification
+            welcome_sent = send_welcome_email(user)
+            
+            return JsonResponse({
+                "success": True,
+                "message": "Email verified successfully! Welcome email sent.",
+                "details": "You can now log in to your account",
+                "welcome_email_sent": welcome_sent
+            }, status=200)
+        else:
+            # Check if OTP has expired
+            if user.is_otp_expired():
+                return JsonResponse({
+                    "error": "OTP code has expired. Please request a new one."
+                }, status=400)
+            else:
+                return JsonResponse({
+                    "error": "Invalid OTP code. Please check and try again."
+                }, status=400)
+                
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+
+
+@csrf_exempt
+@require_POST
+def resend_otp(request):
+    """Resend OTP code to user's email"""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        username = data.get('username')
+        
+        if not username:
+            return JsonResponse({"error": "Username is required"}, status=400)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    try:
+        user = User.objects.get(username=username)
+        
+        if user.is_verified:
+            return JsonResponse({"message": "Account already verified"}, status=200)
+        
+        # Send new OTP email
+        otp_sent = send_otp_email(user)
+        
+        if otp_sent:
+            return JsonResponse({
+                "success": True,
+                "message": "New OTP code sent to your email",
+                "instructions": "Please check your email for the 6-digit verification code"
+            }, status=200)
+        else:
+            return JsonResponse({
+                "error": "Failed to send OTP email. Please try again later."
+            }, status=500)
+                
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
 
 
 @csrf_exempt
@@ -226,6 +334,3 @@ def protected_endpoint(request):
         }, status=200)
     else:
         return JsonResponse({"error": "unauthorized"}, status=401)
-
-
-

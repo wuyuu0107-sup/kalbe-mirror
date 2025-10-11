@@ -19,6 +19,6 @@ def get_recent_features(user, limit=4):
     agg =  (
         features.values("feature_key")
             .annotate(last_used_at=Max("used_at"), count=Count("id"))     
-            .order_by("-last_used_at")[:limit]
+            .order_by("-last_used_at", "feature_key")[:limit]
     )
     return list(agg)

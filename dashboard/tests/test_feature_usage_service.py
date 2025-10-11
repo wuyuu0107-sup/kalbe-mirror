@@ -2,6 +2,7 @@ import datetime as dt
 from unittest import mock
 from django.test import TestCase
 from authentication.models import User
+from django.utils import timezone
 
 # features / service imports
 from dashboard.services.feature_usage import record_feature_use, get_recent_features
@@ -17,14 +18,17 @@ class FeatureUsageServiceTests(TestCase):
             is_verified=True
         )
     
-    def test_record_ang_get_recent_distinct(self):
-        t0 = dt.datetime(2025, 10, 7, 10, 0, 0)
+    def test_record_and_get_recent_distinct(self):
+        t0 = timezone.make_aware(dt.datetime(2025, 10, 7, 10, 0, 0))
         with mock.patch("django.utils.timezone.now", return_value=t0):
             record_feature_use(self.user, "Scan ke CSV")
 
-        t1 = dt.datetime(2025, 10, 7, 11, 0, 0)
+        t1 = timezone.make_aware(dt.datetime(2025, 10, 7, 11, 0, 0))
         with mock.patch("django.utils.timezone.now", return_value=t1):
             record_feature_use(self.user, "Scan ke CSV")
+
+        t2 = timezone.make_aware(dt.datetime(2025, 10, 7, 11, 1, 0))  # strictly later
+        with mock.patch("django.utils.timezone.now", return_value=t2):
             record_feature_use(self.user, "Import File")
         
         # Export distinct by feature, ordered by most recent use

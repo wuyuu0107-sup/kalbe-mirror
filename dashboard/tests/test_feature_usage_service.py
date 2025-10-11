@@ -13,7 +13,8 @@ class FeatureUsageServiceTests(TestCase):
             password="sTrongpassword!1",
             display_name="Test User",
             email="test@example.com",
-            roles=["researcher"]
+            roles=["researcher"],
+            is_verified=True
         )
     
     def test_record_ang_get_recent_distinct(self):
@@ -41,7 +42,8 @@ class FeatureUsageServiceTests(TestCase):
             password="sTrongpassword!1",
             display_name="Alice",
             email="alice@example.com",
-            roles=["researcher"]
+            roles=["researcher"],
+            is_verified=True
         )
 
         record_feature_use(self.user, "Scan ke CSV")

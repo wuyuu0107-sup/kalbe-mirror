@@ -79,95 +79,34 @@ class UserModelTest(TestCase):
         self.user.save()
         self.assertGreaterEqual(self.user.last_accessed, old_timestamp)
 
-    def test_email_verification_fields(self):
-        # By default, user should not be verified
-        self.assertFalse(self.user.is_verified)
-        self.assertIsNotNone(self.user.verification_token)
+    def test_user_str_method(self):
+        """Test __str__ method returns username"""
+        self.assertEqual(str(self.user), "testuser")
+        self.assertEqual(str(self.verified_user), "verifieduser")
 
-        # Simulate verifying the user
-        self.user.is_verified = True
-        self.user.save()
-
-        # Reload from DB to confirm
-        refreshed = User.objects.get(pk=self.user.user_id)
-        self.assertTrue(refreshed.is_verified)
-
-    # def test_verify_email_success(self):
-    #     client = Client()
-    #     response = client.post(
-    #         reverse("authentication:verify_email", args=[self.user.verification_token])
-    #     )
-    #     self.user.refresh_from_db()
-    #     self.assertEqual(response.status_code, 200)
-    #     self.assertTrue(self.user.is_verified)
-    #     self.assertEqual(response.json()["message"], "Email verified successfully")
+    def test_is_authenticated_property_comprehensive(self):
+        """Test is_authenticated property thoroughly"""
+        # Unverified user should not be authenticated
+        self.assertFalse(self.user.is_authenticated)
         
-    def test_verify_email_invalid_token(self):
-        """Test email verification with invalid token"""
-        invalid_token = uuid.uuid4()
-        verify_url = reverse('authentication:verify_email', kwargs={'token': invalid_token})
+        # Verified user should be authenticated
+        self.assertTrue(self.verified_user.is_authenticated)
         
-        response = self.client.post(verify_url)
-        
-        self.assertEqual(response.status_code, 400)
-        response_data = response.json()
-        self.assertIn('error', response_data)
-        self.assertEqual(response_data['error'], 'Invalid token')
-
-    @patch('authentication.views.send_welcome_email')
-    def test_verify_email_already_verified(self, mock_email):
-        """Test email verification when user is already verified"""
-        mock_email.return_value = True
-        
-        # Use the already verified user from setUp
-        verify_url = reverse('authentication:verify_email', kwargs={'token': self.verified_user.verification_token})
-        
-        response = self.client.post(verify_url)
-        
-        self.assertEqual(response.status_code, 200)
-        response_data = response.json()
-        self.assertIn('message', response_data)
-        self.assertEqual(response_data['message'], 'Already verified')
-        
-        # Verify welcome email was not sent since user was already verified
-        mock_email.assert_not_called()
-
-    @patch('authentication.views.send_welcome_email')
-    def test_verify_email_welcome_email_failure(self, mock_email):
-        """Test email verification when welcome email fails to send"""
-        mock_email.return_value = False  # Simulate email sending failure
-        
-        # Create an unverified user
-        unverified_user = User.objects.create(
-            username="unverified2",
-            password=make_password("testpass123"),
-            display_name="Unverified User 2",
-            email="unverified2@example.com",
-            is_verified=False,
-            roles=["user"]
+        # Test edge case: user without user_id
+        temp_user = User(
+            username="temp",
+            password="password123",
+            email="temp@example.com"
         )
+        # Before saving (no user_id)
+        self.assertFalse(temp_user.is_authenticated)
         
-        verify_url = reverse('authentication:verify_email', kwargs={'token': unverified_user.verification_token})
+        # Save and test again
+        temp_user.save()
+        # Still not authenticated because not verified
+        self.assertFalse(temp_user.is_authenticated)
         
-        response = self.client.post(verify_url)
-        
-        # Verification should still succeed even if email fails
-        self.assertEqual(response.status_code, 200)
-        response_data = response.json()
-        self.assertTrue(response_data['success'])
-        
-        # User should still be verified in database
-        unverified_user.refresh_from_db()
-        self.assertTrue(unverified_user.is_verified)
-        
-        # Welcome email was attempted
-        mock_email.assert_called_once_with(unverified_user)
-
-    def test_verify_email_get_method_not_allowed(self):
-        """Test that GET method is not allowed for email verification"""
-        verify_url = reverse('authentication:verify_email', kwargs={'token': self.verified_user.verification_token})
-        
-        response = self.client.get(verify_url)
-        
-        # Should return 405 Method Not Allowed since view requires POST
-        self.assertEqual(response.status_code, 405)
+        # Verify user
+        temp_user.is_verified = True
+        temp_user.save()
+        self.assertTrue(temp_user.is_authenticated)

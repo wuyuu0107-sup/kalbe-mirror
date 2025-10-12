@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from .models import CSV
 from save_to_database.utility.json_to_csv_bytes import json_to_csv_bytes
-#from save_to_database.utility.validate_payload import validate_payload
+from save_to_database.utility.validate_payload import validate_payload
 
 
 logger = logging.getLogger(__name__)

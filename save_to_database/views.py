@@ -1,6 +1,6 @@
 import json
 import logging
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
@@ -97,3 +97,71 @@ def create_csv_record(request):
                 'details': str(e)
             }, status=500)
             
+def update_converted_csv(instance: CSV, name: str, json_data):
+    """
+    Update an existing CSV file with new JSON data and overwrite it. Returns updated file.
+    """
+
+    # convert
+    csv_bytes = json_to_csv_bytes(json_data)
+    csv_file = ContentFile(csv_bytes, name=f"{name}.csv")
+
+    # update fields
+    instance.name = name
+    instance.source_json = json_data
+    instance.file.save(csv_file.name, csv_file, save=False)  # replace stored file
+
+    # clear uploaded_url since file changed
+    instance.uploaded_url = None
+
+    instance.save()
+    return instance
+
+
+@csrf_exempt
+def update_csv_record(request, pk):
+    """
+    Update existing CSV file
+    PUT /save-to-database/update/<pk>/
+    Body: {"name": "...", "source_json": ...}
+    """
+
+    if request.method != 'PUT':
+        return JsonResponse({'error': 'Only PUT allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = data.get('name', '').strip()
+
+    if not name:
+        return JsonResponse({'error': 'Name is required'}, status=400)
+
+    source_json = data.get('source_json')
+
+    if source_json is None:
+        return JsonResponse({'error': 'source_json is required'}, status=400)
+
+
+    instance = get_object_or_404(CSV, pk=pk)
+
+    try:
+
+        updated = update_converted_csv(instance, name, source_json)
+
+        return JsonResponse({
+            'id': updated.id,
+            'name': updated.name,
+            'file_url': updated.file.url if updated.file else None,
+            'uploaded_url': updated.uploaded_url,
+            'created_at': updated.created_at.isoformat()
+        }, status=200)
+    
+    except Exception as e:
+        logger.exception("Error updating CSV record")
+        return JsonResponse({
+            'error': 'Failed to update CSV record',
+            'details': str(e)
+        }, status=500)

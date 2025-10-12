@@ -1,8 +1,11 @@
 import os
+import json
 from unittest.mock import patch, MagicMock
+from django.http import JsonResponse
 from django.test import TestCase
 from save_to_database.utility.json_to_csv_bytes import json_to_csv_bytes
 from save_to_database.utility.upload_csv_to_supabase import upload_csv_to_supabase
+from save_to_database.utility.validate_payload import validate_payload
 
 
 class JsonToCsvBytesPositiveTests(TestCase):
@@ -282,3 +285,53 @@ class TestLine50Coverage(TestCase):
             
             # Should return the path as fallback
             self.assertEqual(result, "test/path.csv")
+
+class ValidatePayloadTests(TestCase):
+
+    def test_valid_payload_dict(self):
+        """Valid JSON dict should return payload dict and no error."""
+        raw_body = json.dumps({"name": "dataset1", "source_json": [{"a": 1}]})
+        payload, error = validate_payload(raw_body)
+        self.assertIsNone(error)
+        self.assertEqual(payload['name'], "dataset1")
+        self.assertEqual(payload['source_json'], [{"a": 1}])
+
+    def test_valid_payload_list(self):
+        """Valid JSON list for source_json should work."""
+        raw_body = json.dumps({"name": "dataset2", "source_json": []})
+        payload, error = validate_payload(raw_body)
+        self.assertIsNone(error)
+        self.assertEqual(payload['name'], "dataset2")
+        self.assertEqual(payload['source_json'], [])
+
+    def test_missing_name(self):
+        """Missing 'name' should return JsonResponse error."""
+        raw_body = json.dumps({"source_json": [{"a": 1}]})
+        payload, error = validate_payload(raw_body)
+        self.assertIsInstance(error, JsonResponse)
+        self.assertIsNone(payload)
+        self.assertEqual(error.status_code, 400)
+
+    def test_empty_name(self):
+        """Empty string name should return JsonResponse error."""
+        raw_body = json.dumps({"name": "  ", "source_json": [{"a": 1}]})
+        payload, error = validate_payload(raw_body)
+        self.assertIsInstance(error, JsonResponse)
+        self.assertIsNone(payload)
+        self.assertEqual(error.status_code, 400)
+
+    def test_missing_source_json(self):
+        """Missing source_json should return JsonResponse error."""
+        raw_body = json.dumps({"name": "dataset3"})
+        payload, error = validate_payload(raw_body)
+        self.assertIsInstance(error, JsonResponse)
+        self.assertIsNone(payload)
+        self.assertEqual(error.status_code, 400)
+
+    def test_invalid_json(self):
+        """Malformed JSON should return JsonResponse error."""
+        raw_body = "this is not json"
+        payload, error = validate_payload(raw_body)
+        self.assertIsInstance(error, JsonResponse)
+        self.assertIsNone(payload)
+        self.assertEqual(error.status_code, 400)

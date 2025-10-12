@@ -8,6 +8,7 @@ class CSV(models.Model):
     source_json = models.JSONField(blank=True, null=True)
     record_count = models.IntegerField(default=0)
     notes = models.TextField(blank=True, null=True)
+    uploaded_url = models.URLField(blank=True, null=True)
 
     def __str__(self):
         return self.name

@@ -70,7 +70,7 @@ class CSVModelTests(TestCase):
 
     def test_invalid_json_field(self):
         """ Non-serializable JSON should fail validation."""
-        csv = CSV(name="Invalid JSON", file=self.uploaded_file, source_json=set([1, 2, 3]))
+        csv = CSV(name="Invalid JSON", file=self.uploaded_file, source_json={1, 2, 3})
         with self.assertRaises(ValidationError):
             csv.full_clean()  # triggers validation without saving
 

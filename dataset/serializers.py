@@ -1,6 +1,6 @@
 import os
 from rest_framework import serializers
-from .models import CSVFile
+from save_to_database.models import CSV
 
 
 class CSVFileSerializer(serializers.ModelSerializer):
@@ -8,9 +8,11 @@ class CSVFileSerializer(serializers.ModelSerializer):
     filename = serializers.SerializerMethodField()
     size = serializers.SerializerMethodField()
     directory = serializers.SerializerMethodField()
+    file_path = serializers.SerializerMethodField()  # Add for compatibility
+    uploaded_at = serializers.SerializerMethodField()  # Map to created_at
 
     class Meta:
-        model = CSVFile
+        model = CSV
         fields = [
             "id",
             "file_path",
@@ -22,10 +24,18 @@ class CSVFileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["file_url", "filename", "size", "directory", "uploaded_at", "id"]
 
+    def get_file_path(self, obj):
+        # Return the file field as file_path for compatibility
+        return obj.file.name if obj.file else None
+
+    def get_uploaded_at(self, obj):
+        # Map created_at to uploaded_at
+        return obj.created_at
+
     def get_file_url(self, obj):
         request = self.context.get("request")
         try:
-            url = obj.file_path.url
+            url = obj.file.url
         except ValueError:
             return None
         if request is not None:
@@ -33,21 +43,21 @@ class CSVFileSerializer(serializers.ModelSerializer):
         return url
 
     def get_filename(self, obj):
-        return os.path.basename(obj.file_path.name) if obj.file_path else None
+        return os.path.basename(obj.file.name) if obj.file else None
 
     def get_size(self, obj):
         try:
-            return obj.file_path.size
+            return obj.file.size
         except Exception:
             return None
 
     def get_directory(self, obj):
-        if not obj.file_path or not obj.file_path.name:
+        if not obj.file or not obj.file.name:
             return ""
-        path = obj.file_path.name
-        # Assuming upload_to='csv_files/', extract after 'csv_files/' up to last '/'
-        if path.startswith('csv_files/'):
-            relative_path = path[9:]  # Remove 'csv_files/'
+        path = obj.file.name
+        # Assuming upload_to='datasets/csvs/', extract after 'datasets/csvs/' up to last '/'
+        if path.startswith('datasets/csvs/'):
+            relative_path = path[13:]  # Remove 'datasets/csvs/'
             directory = os.path.dirname(relative_path)
             return directory if directory else ""
         return ""

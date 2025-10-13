@@ -1,10 +1,10 @@
 from django.contrib import admin
-from .models import CSVFile
+from save_to_database.models import CSV
 
 
-@admin.register(CSVFile)
-class CSVFileAdmin(admin.ModelAdmin):
-    list_display = ("id", "filename", "uploaded_at")
-    readonly_fields = ("uploaded_at",)
-    search_fields = ("file_path",)
-    ordering = ("-uploaded_at",)
+@admin.register(CSV)
+class CSVAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "created_at")
+    readonly_fields = ("created_at",)
+    search_fields = ("name", "file")
+    ordering = ("-created_at",)

@@ -8,7 +8,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from authentication.models import User
-from .models import CSVFile
+from save_to_database.models import CSV
 
 
 class DatasetFileManagementTests(TestCase):
@@ -143,9 +143,9 @@ class DatasetFileManagementTests(TestCase):
         self.assertTrue(str(data["file_url"]).startswith("http://testserver"))
 
         obj_id = data["id"]
-        obj = CSVFile.objects.get(pk=obj_id)
-        self.assertTrue(os.path.exists(obj.file_path.path))
-        self.assertTrue(obj.file_path.name.startswith("csv_files/"))
+        obj = CSV.objects.get(pk=obj_id)
+        self.assertTrue(os.path.exists(obj.file.path))
+        self.assertTrue(obj.file.name.startswith("datasets/csvs/"))
 
         # List
         list_resp = self.client.get(self.list_create_url)
@@ -174,8 +174,8 @@ class DatasetFileManagementTests(TestCase):
         delete_resp = self.client.delete(detail_url)
         self.assertIn(delete_resp.status_code, (200, 204))
         # File should be removed from the filesystem
-        self.assertFalse(os.path.exists(obj.file_path.path))
-        self.assertFalse(CSVFile.objects.filter(pk=obj_id).exists())
+        self.assertFalse(os.path.exists(obj.file.path))
+        self.assertFalse(CSV.objects.filter(pk=obj_id).exists())
 
     def test_upload_without_file_returns_400(self):
         self._login(self.researcher)
@@ -189,10 +189,10 @@ class DatasetFileManagementTests(TestCase):
         upload_resp = self._upload_csv(name="missing.csv", content=b"col\nval\n")
         self.assertEqual(upload_resp.status_code, 201)
         obj_id = upload_resp.json()["id"]
-        obj = CSVFile.objects.get(pk=obj_id)
+        obj = CSV.objects.get(pk=obj_id)
         # Remove underlying file to simulate external deletion
-        os.remove(obj.file_path.path)
-        self.assertFalse(os.path.exists(obj.file_path.path))
+        os.remove(obj.file.path)
+        self.assertFalse(os.path.exists(obj.file.path))
         # Try download
         download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
         download_resp = self.client.get(download_url)
@@ -205,8 +205,8 @@ class DatasetFileManagementTests(TestCase):
         upload_resp = self._upload_csv("test.csv", b"col\nval\n")
         self.assertEqual(upload_resp.status_code, 201)
         obj_id = upload_resp.json()["id"]
-        obj = CSVFile.objects.get(pk=obj_id)
-        old_path = obj.file_path.path
+        obj = CSV.objects.get(pk=obj_id)
+        old_path = obj.file.path
         self.assertTrue(os.path.exists(old_path))
         # Move to new dir
         move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
@@ -217,10 +217,10 @@ class DatasetFileManagementTests(TestCase):
         self.assertIn("new_dir", data["file_path"])
         # Refresh obj
         obj.refresh_from_db()
-        new_path = obj.file_path.path
+        new_path = obj.file.path
         self.assertTrue(os.path.exists(new_path))
         self.assertFalse(os.path.exists(old_path))
-        self.assertIn("new_dir", obj.file_path.name)
+        self.assertIn("new_dir", obj.file.name)
 
     def test_move_file_unauthenticated_forbidden(self):
         self._login(self.researcher)
@@ -260,23 +260,23 @@ class DatasetFileManagementTests(TestCase):
         upload2 = self._upload_csv("file2.csv")
         id2 = upload2.json()["id"]
         # Manually move to source dir
-        obj1 = CSVFile.objects.get(pk=id1)
-        obj2 = CSVFile.objects.get(pk=id2)
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
         source_dir = "source_dir"
         # Create source dir
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir), exist_ok=True)
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
         # Move files
-        old_path1 = obj1.file_path.path
-        actual_filename1 = obj1.filename
-        new_path1 = os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir, actual_filename1)
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
         os.rename(old_path1, new_path1)
-        obj1.file_path.name = f"csv_files/{source_dir}/{actual_filename1}"
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
         obj1.save()
-        old_path2 = obj2.file_path.path
-        actual_filename2 = obj2.filename
-        new_path2 = os.path.join(settings.MEDIA_ROOT, 'csv_files', source_dir, actual_filename2)
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
         os.rename(old_path2, new_path2)
-        obj2.file_path.name = f"csv_files/{source_dir}/{actual_filename2}"
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
         obj2.save()
         # Now move folder
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "target_dir"})
@@ -289,10 +289,10 @@ class DatasetFileManagementTests(TestCase):
         # Check files moved
         obj1.refresh_from_db()
         obj2.refresh_from_db()
-        self.assertIn("target_dir", obj1.file_path.name)
-        self.assertIn("target_dir", obj2.file_path.name)
-        self.assertTrue(os.path.exists(obj1.file_path.path))
-        self.assertTrue(os.path.exists(obj2.file_path.path))
+        self.assertIn("target_dir", obj1.file.name)
+        self.assertIn("target_dir", obj2.file.name)
+        self.assertTrue(os.path.exists(obj1.file.path))
+        self.assertTrue(os.path.exists(obj2.file.path))
         self.assertFalse(os.path.exists(new_path1))
         self.assertFalse(os.path.exists(new_path2))
 

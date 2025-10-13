@@ -12,7 +12,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from rest_framework.test import APIClient
 from rest_framework import status
+from rest_framework import serializers
 from annotation.models import Annotation
+from annotation.serializers import AnnotationSerializer
 from django.urls import reverse
 from django.test import TestCase, Client
 from .models import Document, Patient
@@ -882,3 +884,35 @@ class ViewsPageTests(TestCase):
         self.patient = Patient.objects.create(name="Test Patient", external_id="T-1")
         self.document = Document.objects.create(content_url="/media/placeholder.pdf")
 
+class AnnotationSerializerValidationTests(TestCase):
+    def setUp(self):
+        self.doc = Document.objects.create(source="json", payload_json={"key": "value"})
+        self.patient = Patient.objects.create(name="Patient X")
+
+    def test_validate_drawing_data_invalid_type(self):
+        """Should raise ValidationError if drawing_data is not a dict"""
+        serializer = AnnotationSerializer(data={
+            "document": self.doc.id,
+            "patient": self.patient.id,
+            "drawing_data": "this-is-not-a-dict"
+        })
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("drawing_data", serializer.errors)
+        self.assertIn("must be a JSON object", str(serializer.errors["drawing_data"]))
+
+    def test_validate_drawing_data_valid_dict(self):
+        """Should accept valid dict and return same value"""
+        serializer = AnnotationSerializer(data={
+            "document": self.doc.id,
+            "patient": self.patient.id,
+            "drawing_data": {"tool": "pen", "points": [[1, 2], [3, 4]]}
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        validated_data = serializer.validated_data
+        self.assertIsInstance(validated_data["drawing_data"], dict)
+        self.assertEqual(validated_data["drawing_data"]["tool"], "pen")
+class PatientModelTests(TestCase):
+    def test_str_returns_name(self):
+        """__str__ should return the patient's name."""
+        patient = Patient.objects.create(name="Bob")
+        self.assertEqual(str(patient), "Bob")

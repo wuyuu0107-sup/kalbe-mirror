@@ -3,6 +3,7 @@ import shutil
 import tempfile
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -19,7 +20,6 @@ class DatasetFileManagementTests(TestCase):
         self._old_media_root = settings.MEDIA_ROOT
         settings.MEDIA_ROOT = self._temp_media
         # Reset default storage to use new MEDIA_ROOT
-        from django.core.files.storage import default_storage
         _ = default_storage.location  # trigger setup
         default_storage._wrapped.location = settings.MEDIA_ROOT
 

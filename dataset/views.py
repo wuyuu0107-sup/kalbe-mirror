@@ -23,7 +23,6 @@ class CSVFileListCreateView(generics.ListCreateAPIView):
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
             return Response({"detail": "No file provided under 'file' field."}, status=status.HTTP_400_BAD_REQUEST)
-        import os
         name = os.path.splitext(uploaded_file.name)[0]
         instance = CSV.objects.create(name=name, file=uploaded_file, source_json=None)
         serializer = self.get_serializer(instance, context={"request": request})
@@ -73,7 +72,7 @@ class CSVFileDownloadView(generics.GenericAPIView):
             file = obj.file.open("rb")
         except FileNotFoundError:
             raise Http404("File not found")
-        import os
+
         filename = os.path.basename(obj.file.name) if obj.file else "download.csv"
         response = FileResponse(file, as_attachment=True, filename=filename)
         return response
@@ -87,7 +86,7 @@ class CSVFileMoveView(generics.GenericAPIView):
         target_dir = request.data.get('target_dir')
         if not target_dir:
             return Response({"detail": "target_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
-        import os
+
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
         new_path = f"datasets/csvs/{target_dir}/{filename}"
         # Ensure target dir exists

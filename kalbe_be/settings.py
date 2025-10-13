@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "dataset",
     "django_filters",
     "rest_framework",
+    "save_to_database",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

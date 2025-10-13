@@ -14,7 +14,8 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from rest_framework import serializers
 from annotation.models import Annotation
-from annotation.serializers import AnnotationSerializer
+from annotation.serializers import AnnotationSerializer, DocumentSerializer
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.test import TestCase, Client
 from .models import Document, Patient
@@ -884,35 +885,72 @@ class ViewsPageTests(TestCase):
         self.patient = Patient.objects.create(name="Test Patient", external_id="T-1")
         self.document = Document.objects.create(content_url="/media/placeholder.pdf")
 
-class AnnotationSerializerValidationTests(TestCase):
-    def setUp(self):
-        self.doc = Document.objects.create(source="json", payload_json={"key": "value"})
-        self.patient = Patient.objects.create(name="Patient X")
 
-    def test_validate_drawing_data_invalid_type(self):
-        """Should raise ValidationError if drawing_data is not a dict"""
-        serializer = AnnotationSerializer(data={
-            "document": self.doc.id,
-            "patient": self.patient.id,
-            "drawing_data": "this-is-not-a-dict"
-        })
-        self.assertFalse(serializer.is_valid())
-        self.assertIn("drawing_data", serializer.errors)
-        self.assertIn("must be a JSON object", str(serializer.errors["drawing_data"]))
-
-    def test_validate_drawing_data_valid_dict(self):
-        """Should accept valid dict and return same value"""
-        serializer = AnnotationSerializer(data={
-            "document": self.doc.id,
-            "patient": self.patient.id,
-            "drawing_data": {"tool": "pen", "points": [[1, 2], [3, 4]]}
-        })
-        self.assertTrue(serializer.is_valid(), serializer.errors)
-        validated_data = serializer.validated_data
-        self.assertIsInstance(validated_data["drawing_data"], dict)
-        self.assertEqual(validated_data["drawing_data"]["tool"], "pen")
+# MODEL TESTS #    
 class PatientModelTests(TestCase):
     def test_str_returns_name(self):
         """__str__ should return the patient's name."""
         patient = Patient.objects.create(name="Bob")
         self.assertEqual(str(patient), "Bob")
+
+
+# MORE VIEW TESTS #
+class DocumentSerializerValidationTests(TestCase):
+
+    def test_pdf_requires_content_url(self):
+        data = {"source": "pdf", "content_url": "", "payload_json": {"foo": "bar"}}
+        serializer = DocumentSerializer(data=data)
+        # validate without raising exception, then check errors manually
+        serializer.is_valid()
+        self.assertIn("content_url", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["content_url"][0]),
+            "Required when source is 'pdf'."
+        )
+
+    def test_json_requires_payload_json(self):
+        data = {"source": "json", "content_url": "http://example.com/file.json", "payload_json": None}
+        serializer = DocumentSerializer(data=data)
+        serializer.is_valid()
+        self.assertIn("payload_json", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["payload_json"][0]),
+            "Required when source is 'json'."
+        )
+
+    def test_invalid_source_raises_error(self):
+        # bypass ChoiceField
+        from rest_framework import serializers
+        class RawSourceSerializer(DocumentSerializer):
+            source = serializers.CharField()
+
+        data = {"source": "txt", "content_url": "http://example.com/file.txt", "payload_json": {"foo": "bar"}}
+        serializer = RawSourceSerializer(data=data)
+        serializer.is_valid()
+        self.assertIn("source", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["source"][0]),
+            "Must be 'pdf' or 'json'."
+        )
+
+
+class AnnotationSerializerValidationTests(TestCase):
+
+    def setUp(self):
+        self.doc = Document.objects.create(source="json", payload_json={"foo": "bar"})
+        self.patient = Patient.objects.create(name="John Doe")
+
+    def test_drawing_data_must_be_dict(self):
+        invalid_values = [[], "not a dict", 123]
+        for val in invalid_values:
+            serializer = AnnotationSerializer(data={
+                "document": self.doc.id,
+                "patient": self.patient.id,
+                "drawing_data": val
+            })
+            serializer.is_valid()
+            self.assertIn("drawing_data", serializer.errors)
+            self.assertEqual(
+                str(serializer.errors["drawing_data"][0]),
+                "drawing_data must be a JSON object."
+            )

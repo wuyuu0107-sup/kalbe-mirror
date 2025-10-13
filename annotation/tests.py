@@ -7,18 +7,19 @@ from rest_framework import status
 import os
 import io
 import json
+import types
+import unittest
 import base64
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from rest_framework.test import APIClient
 from rest_framework import status
-from rest_framework import serializers
 from annotation.models import Annotation
+from annotation import views
 from annotation.serializers import AnnotationSerializer, DocumentSerializer
-from django.core.exceptions import ValidationError
-from django.urls import reverse
 from django.test import TestCase, Client
 from .models import Document, Patient
+from unittest.mock import patch, MagicMock
 
 
 # If your file already declared HAS_COMMENTS earlier, you can reuse it.
@@ -954,3 +955,69 @@ class AnnotationSerializerValidationTests(TestCase):
                 str(serializer.errors["drawing_data"][0]),
                 "drawing_data must be a JSON object."
             )
+
+
+class AnnotationUtilsTests(unittest.TestCase):
+
+    def test_get_supabase_returns_none(self):
+
+        # Unset env variables
+        os.environ.pop("SUPABASE_URL", None)
+        os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
+
+        result = views._get_supabase()
+        self.assertIsNone(result)
+
+    @patch("annotation.views.create_client")
+    def test_get_supabase_returns_client(self, mock_create_client):
+        os.environ["SUPABASE_URL"] = "https://fake.supabase.io"
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "fake-key"
+
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        result = views._get_supabase()
+        mock_create_client.assert_called_once_with("https://fake.supabase.io", "fake-key")
+        self.assertEqual(result, mock_client)
+
+
+    @patch("annotation.views.normalize_payload", new=lambda x: x)
+    @patch("annotation.views.order_sections", new=lambda x: x)
+    def test_normalize_payload_and_order_sections_fallback(self):
+        input_data = {"foo": "bar"}
+        self.assertEqual(views.normalize_payload(input_data), input_data)
+        self.assertEqual(views.order_sections(input_data), input_data)
+
+        # Return unchanged input
+        input_data = {"foo": "bar"}
+        self.assertEqual(views.normalize_payload(input_data), input_data)
+        self.assertEqual(views.order_sections(input_data), input_data)
+
+
+    def test_storage_upload_bytes_calls_upload(self):
+        mock_bucket = MagicMock()
+        mock_storage = MagicMock()
+        mock_storage.from_.return_value = mock_bucket
+        mock_bucket.upload.return_value = {"status": "ok"}
+
+        mock_client = MagicMock()
+        mock_client.storage = mock_storage
+
+        data = b"hello world"
+        path = "test/path/file.txt"
+        content_type = "text/plain"
+
+        result = views._storage_upload_bytes(mock_client, "my-bucket", path, data, content_type)
+
+        mock_storage.from_.assert_called_once_with("my-bucket")
+        mock_bucket.upload.assert_called_once_with(
+            path=path,
+            file=data,
+            file_options={"contentType": content_type, "upsert": "true"},
+        )
+
+        self.assertEqual(result, {"status": "ok"})
+
+
+if __name__ == "__main__":
+    unittest.main()

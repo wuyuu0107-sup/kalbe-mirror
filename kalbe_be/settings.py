@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "annotation",
     "django_filters",
     "rest_framework",
+    "save_to_database",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -181,6 +182,9 @@ USE_I18N = True
 
 
 STATIC_URL = "/static/"
+# Dev: For static files
+STATICFILES_DIRS = [BASE_DIR / "static"]  
+# Prod: where collectstatic gathers all files
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 

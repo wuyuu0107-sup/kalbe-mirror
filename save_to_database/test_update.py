@@ -3,7 +3,19 @@ import json
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.files.base import ContentFile
+from unittest.mock import patch
 from save_to_database.models import CSV
+
+class ViewsTestCase(TestCase):
+    """Base test case with common setup."""
+    
+    def setUp(self):
+        self.client = Client()
+        self.sample_json = [{"name": "John", "age": 30}]
+        self.valid_data = {
+            "name": "test-dataset",
+            "source_json": self.sample_json
+        }
 
 class UpdateCsvRecordViewTests(TestCase):
     def setUp(self):

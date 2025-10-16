@@ -7,4 +7,5 @@ urlpatterns = [
     path("", views.test_page, name="test_page"),
     path("create/", views.create_csv_record, name="create_csv_record"),
     path("update/<int:pk>/", views.update_csv_record, name="update_csv_record"),
+    path("delete/<int:pk>/", views.delete_csv_record, name="delete_csv_record"),
 ]

@@ -122,3 +122,26 @@ def update_csv_record(request, pk):
     except Exception as e:
         logger.exception("Error updating CSV record")
         return JsonResponse({'error': 'Failed to update CSV record', 'details': str(e)}, status=500)
+    
+
+@csrf_exempt
+def delete_csv_record(request, pk):
+
+    """Delete an existing CSV record and its associated file."""
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Only DELETE method allowed'}, status=405)
+
+
+    instance = get_object_or_404(CSV, pk=pk)
+
+
+    try:
+        if instance.file:
+            instance.file.delete(save=False)
+        instance.delete()
+        logger.info(f"CSV record {pk} deleted successfully")
+        return JsonResponse({'message': f'CSV record {pk} deleted successfully.'}, status=200)
+    
+    except Exception as e:
+        logger.exception("Error deleting CSV record")
+        return JsonResponse({'error': 'Failed to delete CSV record', 'details': str(e)}, status=500)

@@ -26,7 +26,7 @@ class DeleteCsvRecordTests(TestCase):
         )
 
 
-# POSITIVE TEST #
+    # POSITIVE TEST #
     def test_delete_existing_csv_record(self):
         """Deleting existing CSV record should return 200 and remove it"""
         response = self.client.delete(self.valid_delete_url)
@@ -34,7 +34,7 @@ class DeleteCsvRecordTests(TestCase):
         self.assertFalse(CSV.objects.filter(id=self.csv.id).exists())
 
 
-# NEGATIVE TEST #
+    # NEGATIVE TEST #
     def test_delete_nonexistent_csv_record(self):
         """Deleting non-existent CSV record should return 404"""
         response = self.client.delete(self.invalid_delete_url)

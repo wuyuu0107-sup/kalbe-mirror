@@ -335,3 +335,46 @@ class ValidatePayloadTests(TestCase):
         self.assertIsInstance(error, JsonResponse)
         self.assertIsNone(payload)
         self.assertEqual(error.status_code, 400)
+
+
+class UploadCsvToSupabaseExceptionTests(TestCase):
+    """Test exception handling in upload_csv_to_supabase."""
+
+    @patch.dict(os.environ, {
+        'SUPABASE_UPLOAD_ENABLED': 'true',
+        'SUPABASE_URL': 'https://test.supabase.co',
+        'SUPABASE_SERVICE_ROLE_KEY': 'test-key'
+    })
+
+    def test_double_upload_failure_triggers_500_path(self):
+        """Simulate first and second upload failing to cover the exception block."""
+
+        with patch('builtins.__import__') as mock_import:
+
+            mock_supabase = MagicMock()
+            mock_client = MagicMock()
+            mock_bucket = MagicMock()
+            
+            # Simulate supabase import
+            def side_effect(name, *args, **kwargs):
+                if name == 'supabase':
+                    return mock_supabase
+                return __import__(name, *args, **kwargs)
+            mock_import.side_effect = side_effect
+            
+            mock_supabase.create_client.return_value = mock_client
+            mock_client.storage.from_.return_value = mock_bucket
+            
+            # Both upload attempts raise an exception
+            mock_bucket.upload.side_effect = Exception("Forced upload failure")
+            
+            # Patch logger suppress logging and allows assertion
+            with patch('save_to_database.utility.upload_csv_to_supabase.logger') as mock_logger:
+                result = upload_csv_to_supabase(b"test,data", "bucket", "path.csv")
+                
+                self.assertIsNone(result)
+                
+                mock_logger.exception.assert_called_with("Supabase upload failed")
+                
+                # Ensure upload was attempted twice
+                self.assertEqual(mock_bucket.upload.call_count, 2)

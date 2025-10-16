@@ -18,11 +18,8 @@ from supabase import create_client, Client
 from .models import Document, Patient, Annotation, Comment
 from .serializers import DocumentSerializer, PatientSerializer, AnnotationSerializer, CommentSerializer
 
-
-
-# Optional: reuse your normalizer if available
 try:
-    from ocr.views import normalize_payload, order_sections  # if you want same schema/ordering here
+    from ocr.views import normalize_payload, order_sections
 except Exception:
     normalize_payload = lambda x: x
     order_sections = lambda x: x
@@ -82,6 +79,7 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
             "contentType": "application/json",
             "upsert": "true",
         })
+
         # Prefer public URL; fallback to a signed URL
         try:
             pub = supabase.storage.from_(bucket).get_public_url(path)
@@ -95,6 +93,7 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
         if isinstance(signed, dict):
             return signed.get("signedURL") or signed.get("signed_url")
         return signed
+    
     except Exception:
         return None
 
@@ -108,6 +107,7 @@ class IsResearcher(BasePermission):
         if not user or not getattr(user, 'is_authenticated', False):
             return False
         roles = getattr(user, 'roles', []) or []
+        
         # roles may be stored as list of strings
         return 'researcher' in roles
 

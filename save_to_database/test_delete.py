@@ -1,6 +1,7 @@
 from django.urls import reverse
 from django.core.files.base import ContentFile
 from django.test import TestCase, Client
+from unittest import mock
 from save_to_database.models import CSV
 
 
@@ -39,3 +40,20 @@ class DeleteCsvRecordTests(TestCase):
         """Deleting non-existent CSV record should return 404"""
         response = self.client.delete(self.invalid_delete_url)
         self.assertEqual(response.status_code, 404)
+
+
+    # EDGE CASES #
+    def test_delete_wrong_method(self):
+        """Sending GET or POST should return 405"""
+        response = self.client.get(self.valid_delete_url)
+        self.assertEqual(response.status_code, 405)
+        response = self.client.post(self.valid_delete_url)
+        self.assertEqual(response.status_code, 405)
+
+
+    def test_delete_raises_exception(self):
+        """Simulate exception during file delete to trigger 500"""
+        with mock.patch.object(CSV, 'delete', side_effect=Exception("Forced error")):
+            response = self.client.delete(self.valid_delete_url)
+            self.assertEqual(response.status_code, 500)
+            self.assertIn('Failed to delete CSV record', response.json()['error'])

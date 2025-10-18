@@ -5,6 +5,10 @@ class ChatSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user_id = models.UUIDField()
     title = models.CharField(max_length=120, blank=True)
+    # NEW:
+    updated_at = models.DateTimeField(auto_now=True)
+    last_message_preview = models.CharField(max_length=140, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
 class ChatMessage(models.Model):

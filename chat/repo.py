@@ -1,7 +1,8 @@
-import os, psycopg
+import os
+import psycopg
 
 class DB:
-    def __init__(self):
+    def _init_(self):
         self.conn = psycopg.connect(os.getenv("DATABASE_URL"), autocommit=True)
 
     def fetch_one(self, sql, params=None):

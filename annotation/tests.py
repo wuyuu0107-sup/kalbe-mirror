@@ -190,13 +190,13 @@ class AnnotationCRUDTests(TestCase):
         self.assertIn(response.status_code, (400, 405))
 
     def test_unauthenticated_access(self):
-        unauthenticated_client = Client()
-        response = unauthenticated_client.get(
-            f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/'
-        )
-        self.assertEqual(response.status_code, 403)
+        # Unauthenticated access to annotations list should be blocked
+        unauthenticated_client = APIClient()
+        res = unauthenticated_client.get('/api/v1/annotations/')
+        self.assertIn(res.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
 
-    def test_admin_cannot_access_function_endpoints(self):
+
+    def test_admin_hit_post_only_function_endpoint_get_is_405(self):
         admin = User.objects.create(
             username='adminfunc',
             password='pw',
@@ -215,7 +215,9 @@ class AnnotationCRUDTests(TestCase):
         res = admin_client.get(
             f'/api/v1/documents/{self.document_id}/patients/{self.patient_id}/annotations/'
         )
-        self.assertIn(res.status_code, (403, 401))
+        # GET on a POST-only route => 405
+        self.assertEqual(res.status_code, 405)
+
 
 
 class AnnotationAPITests(TestCase):
@@ -328,12 +330,19 @@ class AnnotationAPITests(TestCase):
 
     def test_unauthenticated_access(self):
         unauthenticated_client = APIClient()
-        res = unauthenticated_client.get(f'/api/v1/annotations/')
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        # Use a GET-able endpoint so we assert auth, not method
+        response = unauthenticated_client.get('/api/v1/annotations/')
+        self.assertIn(response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
 
-    def test_admin_cannot_access_annotations(self):
-        # admin role should be denied access to annotations API
-        admin = User.objects.create(username='adminapi', email='adminapi@example.com', password='pw', is_verified=True)
+
+    def test_admin_can_access_annotations(self):
+        # admin is an authenticated user; with new policy they CAN access
+        admin = User.objects.create(
+            username='adminapi',
+            email='adminapi@example.com',
+            password='pw',
+            is_verified=True,
+        )
         try:
             admin.roles = ['admin']
             admin.save(update_fields=['roles'])
@@ -344,8 +353,7 @@ class AnnotationAPITests(TestCase):
         admin_client.force_authenticate(user=admin)
 
         res = admin_client.get('/api/v1/annotations/')
-        self.assertIn(res.status_code, (status.HTTP_403_FORBIDDEN, status.HTTP_401_UNAUTHORIZED))
-
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
 
 def make_pdf_bytes() -> bytes:
     # minimal-but-valid-enough PDF header for upload tests

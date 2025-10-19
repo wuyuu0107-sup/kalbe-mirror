@@ -120,7 +120,6 @@ class DocumentViewSet(mixins.CreateModelMixin,
     queryset = Document.objects.all().order_by('-created_at')
     serializer_class = DocumentSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
 
     @action(detail=False, methods=['post'], url_path='from-gemini', permission_classes=[AllowAny])
@@ -212,7 +211,6 @@ class PatientViewSet(mixins.CreateModelMixin,
     queryset = Patient.objects.all().order_by('id')
     serializer_class = PatientSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'external_id']
@@ -225,7 +223,6 @@ class AnnotationViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsResearcher]
 
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
@@ -252,12 +249,10 @@ class CommentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsResearcher]
 
 
 
 @api_view(['POST'])
-@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def create_drawing_annotation(request, document_id, patient_id):
     try:
@@ -288,7 +283,6 @@ def create_drawing_annotation(request, document_id, patient_id):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     try:

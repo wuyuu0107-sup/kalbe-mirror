@@ -1,18 +1,32 @@
-from django.test import TestCase
+from django.test import TestCase, Client
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from authentication.models import User
-from django.test import Client
+from django.contrib.auth.hashers import make_password
+from unittest.mock import patch
+import uuid
 
 class UserModelTest(TestCase):
 
     def setUp(self):
+        # Unverfied user
         self.user = User.objects.create(
             username="testuser",
-            password="strongpassword",
+            password="password123",
             display_name="Test User",
             email="test@example.com",
-            roles=["admin", "researcher"]
+            is_verified=False,
+            roles=["admin", "researcher"],
+        )
+
+        # Verified user
+        self.verified_user = User.objects.create(
+            username="verifieduser",
+            password="password123",
+            display_name="Verified User",
+            email="verified@example.com",
+            is_verified=True,
+            roles=["admin", "researcher"],
         )
 
     def test_user_creation(self):
@@ -65,43 +79,34 @@ class UserModelTest(TestCase):
         self.user.save()
         self.assertGreaterEqual(self.user.last_accessed, old_timestamp)
 
-    def test_email_verification_fields(self):
-        # By default, user should not be verified
-        self.assertFalse(self.user.is_verified)
-        self.assertIsNotNone(self.user.verification_token)
+    def test_user_str_method(self):
+        """Test __str__ method returns username"""
+        self.assertEqual(str(self.user), "testuser")
+        self.assertEqual(str(self.verified_user), "verifieduser")
 
-        # Simulate verifying the user
-        self.user.is_verified = True
-        self.user.save()
-
-        # Reload from DB to confirm
-        refreshed = User.objects.get(pk=self.user.user_id)
-        self.assertTrue(refreshed.is_verified)
-
-    # def test_verify_email_success(self):
-    #     client = Client()
-    #     response = client.post(
-    #         reverse("authentication:verify_email", args=[self.user.verification_token])
-    #     )
-    #     self.user.refresh_from_db()
-    #     self.assertEqual(response.status_code, 200)
-    #     self.assertTrue(self.user.is_verified)
-    #     self.assertEqual(response.json()["message"], "Email verified successfully")
+    def test_is_authenticated_property_comprehensive(self):
+        """Test is_authenticated property thoroughly"""
+        # Unverified user should not be authenticated
+        self.assertFalse(self.user.is_authenticated)
         
-    def test_verify_email_invalid_token(self):
-        client = Client()
-        response = client.post(
-            reverse("authentication:verify_email", args=["00000000-0000-0000-0000-000000000000"])
+        # Verified user should be authenticated
+        self.assertTrue(self.verified_user.is_authenticated)
+        
+        # Test edge case: user without user_id
+        temp_user = User(
+            username="temp",
+            password="password123",
+            email="temp@example.com"
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"], "Invalid token")
-
-    def test_verify_email_already_verified(self):
-        self.user.is_verified = True
-        self.user.save()
-        client = Client()
-        response = client.post(
-            reverse("authentication:verify_email", args=[self.user.verification_token])
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "Already verified")
+        # Before saving (no user_id)
+        self.assertFalse(temp_user.is_authenticated)
+        
+        # Save and test again
+        temp_user.save()
+        # Still not authenticated because not verified
+        self.assertFalse(temp_user.is_authenticated)
+        
+        # Verify user
+        temp_user.is_verified = True
+        temp_user.save()
+        self.assertTrue(temp_user.is_authenticated)

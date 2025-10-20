@@ -113,31 +113,34 @@ class SignalTests(TestCase):
     @patch('save_to_database.signals.upload_csv_to_supabase')
     @patch('save_to_database.signals.json_to_csv_bytes')
     def test_path_generation(self, mock_convert, mock_upload):
-        """Signal should generate correct file paths."""
+        """Signal should generate correct date-prefixed file paths."""
+        import datetime
+
         mock_convert.return_value = b"test,data"
         mock_upload.return_value = "https://example.com/test.csv"
-        
-        csv_record = CSV.objects.create(
-            name="test dataset with spaces",
-            file=self.csv_file,
-            source_json=self.sample_json
-        )
-        
-        # Check that upload was called and verify the path argument
+
+        fixed_date = datetime.date(2025, 10, 20)
+        with patch('save_to_database.signals.datetime') as mock_datetime:
+            mock_datetime.datetime.now.return_value = datetime.datetime(2025, 10, 20)
+            mock_datetime.date = datetime.date
+
+            csv_record = CSV.objects.create(
+                name="test dataset with spaces",
+                file=self.csv_file,
+                source_json=self.sample_json
+            )
+
         mock_upload.assert_called_once()
-        
-        # Get the call arguments
         call_args = mock_upload.call_args
         if call_args:
             args, kwargs = call_args
-            
-            # Check if path is in args or kwargs
             if len(args) >= 3:
                 actual_path = args[2]
             else:
                 actual_path = kwargs.get('path', '')
-            
-            expected_path = f"csvs/{csv_record.id}-test_dataset_with_spaces.csv"
+
+            expected_name = "test_dataset_with_spaces"
+            expected_path = f"csvs/{fixed_date}_{csv_record.id}_{expected_name}.csv"
             self.assertEqual(actual_path, expected_path)
         else:
             self.fail("upload_csv_to_supabase was not called with expected arguments")

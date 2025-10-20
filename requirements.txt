@@ -14,4 +14,3 @@ pymupdf
 google-generativeai
 dotenv
 supabase
-

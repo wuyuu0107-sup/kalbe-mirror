@@ -3,6 +3,10 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from datetime import timedelta
 from authentication.models import User
+import os
+
+# Test constants to avoid hardcoded sensitive data
+TEST_PASSWORD = os.environ.get('TEST_PASSWORD', 'TestSec@123#Pass')
 
 
 class SecurityFeaturesTest(TestCase):
@@ -11,7 +15,7 @@ class SecurityFeaturesTest(TestCase):
     def setUp(self):
         self.user = User.objects.create(
             username="securitytest",
-            password=make_password("password123"),
+            password=make_password(TEST_PASSWORD),
             display_name="Security Test",
             email="security@example.com",
             is_verified=True
@@ -96,7 +100,7 @@ class SecurityFeaturesTest(TestCase):
         self.assertFalse(self.user.is_account_locked())
         
         # Increment 4 times (should not lock)
-        for i in range(4):
+        for _ in range(4):  # Use underscore for unused loop variable
             result = self.user.increment_failed_login()
             self.assertFalse(result)
             self.assertFalse(self.user.is_account_locked())

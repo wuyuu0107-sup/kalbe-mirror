@@ -12,6 +12,9 @@ from authentication.models import User
 import json
 import logging
 
+# Constants for error messages
+INVALID_PAYLOAD_MSG = "invalid payload"
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -94,11 +97,11 @@ def login(request):
         try:
             text = raw.decode('utf-8')
         except UnicodeDecodeError:
-            return JsonResponse({"error": "invalid payload"}, status=400)
+            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "invalid payload"}, status=400)
+            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
 
     # Create form instance with data
     form = LoginForm(data)
@@ -110,9 +113,8 @@ def login(request):
             errors[field] = error_list[0]  # Get first error for each field
         return JsonResponse({"errors": errors, "error": errors}, status=400)
     
-    # Get username and password from form
+    # Get username from form
     username = form.cleaned_data['username']
-    password = form.cleaned_data['password']
     
     try:
         user = User.objects.get(username=username)
@@ -177,7 +179,7 @@ def register_profile(request):
     try: 
         data = json.loads(request.body.decode() or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid payload"}, status=400)
+        return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
     
     # Create form instance with data
     form = RegistrationForm(data)

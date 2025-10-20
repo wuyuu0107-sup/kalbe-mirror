@@ -6,6 +6,7 @@ from django.utils import timezone
 
 # features / service imports
 from dashboard.services.feature_usage import record_feature_use, get_recent_features
+from dashboard.models import FeatureUsage
 
 class FeatureUsageServiceTests(TestCase):
     def setUp(self):
@@ -17,6 +18,26 @@ class FeatureUsageServiceTests(TestCase):
             roles=["researcher"],
             is_verified=True
         )
+
+    def test_record_feature_use_handles_exception_in_is_authenticated(self):
+        class BrokenUser:
+            @property
+            def is_authenticated(self):
+                raise RuntimeError("Simulated error")
+
+        user = BrokenUser()
+
+        # Ensure no FeatureUsage exists before
+        self.assertEqual(FeatureUsage.objects.count(), 0)
+
+        # Call the function — should hit the except branch
+        record_feature_use(user, "feature_x")
+
+        # Ensure a FeatureUsage was created with user=None
+        usage = FeatureUsage.objects.first()
+        self.assertIsNotNone(usage)
+        self.assertIsNone(usage.user)
+        self.assertEqual(usage.feature_key, "feature_x")
     
     def test_record_and_get_recent_distinct(self):
         t0 = timezone.make_aware(dt.datetime(2025, 10, 7, 10, 0, 0))

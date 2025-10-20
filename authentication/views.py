@@ -5,6 +5,7 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
@@ -116,6 +117,12 @@ def login(request):
     try:
         user = User.objects.get(username=username)
         
+        # 🚨 NEW: Check if account is locked BEFORE password check
+        if user.is_account_locked():
+            return JsonResponse({
+                "error": "Account is temporarily locked due to too many failed attempts. Please try again later."
+            }, status=423)  # 423 Locked
+        
         # Check password using the form's authenticate method
         if form.authenticate():
             # Check if email is verified
@@ -125,6 +132,9 @@ def login(request):
                     "message": "Please verify your email before logging in"
                 }, status=403)
             
+            # 🚨 NEW: Reset failed attempts on successful login
+            user.reset_failed_login_attempts()
+            
             # Set session and login
             request.session['user_id'] = str(user.user_id)
             request.session['username'] = user.username
@@ -133,17 +143,25 @@ def login(request):
                 "user_id": f"user {user.user_id}",
                 "username": user.username,
                 "display_name": user.display_name,
-                "email": user.email,
+                "email" : user.email,
                 "message": "Login successful"
             }, status=200)
         else:
-            # Simple invalid credentials response
-            return JsonResponse({
-                "error": "Invalid username or password"
-            }, status=401)
+            # 🚨 NEW: Increment failed attempts on wrong password
+            account_locked = user.increment_failed_login()
+            
+            if account_locked:
+                return JsonResponse({
+                    "error": "Account is temporarily locked for 30 minutes due to too many failed attempts. Please try again later."
+                }, status=423)
+            else:
+                # Don't show remaining attempts for security reasons
+                return JsonResponse({
+                    "error": "Invalid credentials"
+                }, status=401)
                 
     except User.DoesNotExist:
-        return JsonResponse({"error": "Invalid username or password"}, status=401)
+        return JsonResponse({"error": "invalid credentials"}, status=401)
 
 
 @csrf_exempt  

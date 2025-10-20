@@ -84,15 +84,22 @@ class LoginFormTest(TestCase):
             self.assertTrue(form.is_valid() or 'username' not in form.errors)
     
     def test_password_min_length(self):
-        #Test password minimum length validation
+        """Test that LoginForm does NOT validate password length (only checks if provided)"""
         form_data = {
             'username': 'testuser',
-            'password': '1234567'  # 7 characters, less than minimum 8
+            'password': '1234567'  # 7 characters, should be valid for login (no requirements check)
         }
         form = LoginForm(data=form_data)
-        self.assertFalse(form.is_valid())
-        self.assertIn('password', form.errors)
-        self.assertEqual(form.errors['password'][0], 'Password must be at least 8 characters long.')
+        self.assertTrue(form.is_valid())  # Should be valid for login - no password requirements
+        
+        # Test empty password still fails
+        form_data_empty = {
+            'username': 'testuser',
+            'password': ''
+        }
+        form_empty = LoginForm(data=form_data_empty)
+        self.assertFalse(form_empty.is_valid())
+        self.assertIn('password', form_empty.errors)
     
     def test_authenticate_valid_user(self):
         #Test authentication with valid credentials

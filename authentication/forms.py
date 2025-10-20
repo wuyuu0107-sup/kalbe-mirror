@@ -29,7 +29,12 @@ class LoginForm(forms.Form):
         return validate_username(username)
 
     def clean_password(self):
-        return validate_password(self.cleaned_data.get('password'))
+        # For login, just return the password without validation
+        # We only need to check if it matches, not if it meets requirements
+        password = self.cleaned_data.get('password')
+        if not password:
+            raise forms.ValidationError('Password is required.')
+        return password
 
     def authenticate(self):
         if not self.is_valid():

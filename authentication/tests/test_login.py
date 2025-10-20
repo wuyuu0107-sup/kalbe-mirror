@@ -4,6 +4,10 @@ from django.contrib.auth.hashers import make_password
 from authentication.models import User
 import json
 import uuid
+import os
+
+# Test constants to avoid hardcoded sensitive data
+TEST_PASSWORD = os.environ.get('TEST_PASSWORD', 'TestSec@123#Pass')
 
 class LoginEndpointTests(TestCase):
     def setUp(self):
@@ -11,7 +15,7 @@ class LoginEndpointTests(TestCase):
         self.login_url_name = "authentication:login"
         self.logout_url_name = "authentication:logout"
         self.username = f"user_{uuid.uuid4().hex[:6]}"
-        self.password = "KalbePPL2025"
+        self.password = TEST_PASSWORD
 
         self.user = User.objects.create(
             username=self.username,
@@ -150,11 +154,11 @@ class LoginEndpointTests(TestCase):
         url = reverse(self.login_url_name)
         User.objects.create(
             username="stranger",
-            password=make_password("Password123"),
+            password=make_password(TEST_PASSWORD),
             email="stranger@email.com",
             is_verified=False
         )
-        payload = {"username": "stranger", "password": "Password123"}
+        payload = {"username": "stranger", "password": TEST_PASSWORD}
         response = self._post_json(url, payload)
         self.assertEqual(response.status_code, 403, response.content)
         data = response.json()

@@ -154,7 +154,7 @@ class DocumentViewSet(mixins.CreateModelMixin,
             text = (resp.text or "").strip()
             text = re.sub(r"^```json\s*", "", text, flags=re.M)
             text = re.sub(r"^```", "", text, flags=re.M)
-            text = re.sub(r"\s*```$", "", text)
+            text = re.sub(r"(?:\s*```)+\Z", "", text)
 
             try:
                 structured = json.loads(text)
@@ -332,5 +332,3 @@ def drawing_annotation(request, document_id, patient_id, annotation_id):
     elif request.method == "DELETE":
         annotation.delete()
         return HttpResponse(status=204)
-
-

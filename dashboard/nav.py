@@ -1,5 +1,4 @@
 # dashboard/nav.py
-from typing import Dict
 
 # Human labels for known path segments
 SEGMENT_LABELS = {

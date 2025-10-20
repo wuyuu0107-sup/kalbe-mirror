@@ -1,14 +1,13 @@
-# from django.shortcuts import render
 from __future__ import annotations
 from urllib.parse import unquote
-
+from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
-from django.contrib.auth.decorators import login_required
 
-from .nav import SEGMENT_LABELS, looks_like_id
+# Uncomment when being used
+# from django.contrib.auth.decorators import login_required
+
 # from .nav import try_label_annotation  # uncomment if you added it
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
+from .nav import SEGMENT_LABELS, looks_like_id
 
 # Services Import
 from dashboard.services.recent_files import get_recent_files
@@ -70,9 +69,6 @@ def breadcrumbs_json(request):
         crumbs.append({"href": href, "label": label})
 
     return JsonResponse(crumbs, safe=False)
-
-
-from django.shortcuts import render
 
 def breadcrumbs_demo(request):
     return render(request, "dashboard/breadcrumbs_demo.html")

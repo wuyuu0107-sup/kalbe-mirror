@@ -1,6 +1,5 @@
 from django.test import TestCase
 from authentication.models import User
-from django.utils import timezone
 from dashboard.models import FeatureUsage
 from django.contrib.auth.hashers import make_password
 

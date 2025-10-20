@@ -5,6 +5,7 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
@@ -124,21 +125,12 @@ def login(request):
         
         # Check password using the form's authenticate method
         if form.authenticate():
-            # 🚨 NEW: Use the secure authentication check
-            if not user.is_authenticated:
-                # Reset failed attempts but don't allow login due to other security issues
-                user.reset_failed_login_attempts()
-                
-                # Give specific error messages
-                if not user.is_verified:
-                    return JsonResponse({
-                        "error": "Email not verified", 
-                        "message": "Please verify your email before logging in"
-                    }, status=403)
-                else:
-                    return JsonResponse({
-                        "error": "Account security check failed."
-                    }, status=403)
+            # Check if email is verified
+            if not user.is_verified:
+                return JsonResponse({
+                    "error": "Email not verified", 
+                    "message": "Please verify your email before logging in"
+                }, status=403)
             
             # 🚨 NEW: Reset failed attempts on successful login
             user.reset_failed_login_attempts()

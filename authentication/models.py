@@ -90,7 +90,16 @@ class User(models.Model):
         """Check if account is currently locked due to failed login attempts"""
         if not self.account_locked_until:
             return False
-        return timezone.now() < self.account_locked_until
+            
+        # Check if lock period has expired
+        if timezone.now() >= self.account_locked_until:
+            # Auto-unlock: clear lock time and reset failed attempts
+            self.account_locked_until = None
+            self.failed_login_attempts = 0
+            self.save(update_fields=['account_locked_until', 'failed_login_attempts'])
+            return False
+            
+        return True  # Still locked
 
     def increment_failed_login(self):
         """Increment failed login attempts and lock account if limit reached"""

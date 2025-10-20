@@ -89,31 +89,30 @@ class ViewsErrorHandlingTest(TestCase):
         data = response.json()
         self.assertIn("Account is temporarily locked due to too many failed attempts", data["error"])
 
-    def test_login_security_check_failed_path(self):
-        """Test login when security check fails but password is correct - covers line 139"""
-        # Create user that is verified but will fail other security checks
+    def test_login_unverified_email_path(self):
+        """Test login when email is not verified - covers line 139"""
+        # Create user with unverified email
         user = User.objects.create(
-            username="securityfail",
+            username="unverified",
             password=make_password("TestPassword123"),
-            display_name="Security Fail",
-            email="securityfail@example.com",
-            is_verified=True,
-            is_active=False  # Make user inactive to fail security check
+            display_name="Unverified",
+            email="unverified@example.com",
+            is_verified=False  # Email not verified
         )
         
         response = self.client.post(
             reverse('authentication:login'),
             data=json.dumps({
-                "username": "securityfail",
+                "username": "unverified",
                 "password": "TestPassword123"
             }),
             content_type='application/json'
         )
         
-        # Should return 403 with security check failed message
+        # Should return 403 with email not verified message
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        self.assertEqual(data["error"], "Account security check failed.")
+        self.assertEqual(data["error"], "Email not verified")
 
     def test_login_account_locked_after_failed_attempts(self):
         """Test login when account gets locked after failed attempts - covers line 162"""

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Conversion Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .section { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        textarea { width: 100%; height: 300px; font-family: monospace; }
+        button { background: #007cba; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #005a87; }
+        .result { background: #f9f9f9; padding: 10px; margin-top: 10px; border-radius: 3px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        .preview { max-height: 200px; overflow: auto; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 CSV Conversion & Upload Test</h1>
+    
+    <div class="container">
+        <!-- JSON Input Section -->
+        <div class="section">
+            <h3>📝 JSON Input</h3>
+            <textarea id="jsonInput" placeholder="Enter your nested JSON here...">
+[
+  {
+    "id": 1,
+    "name": "John Alison",
+    "contact": {
+      "email": "john@example.com",
+      "phone": "+1-555-0123",
+      "address": {
+        "street": "123 Main St",
+        "city": "Springfield",
+        "country": "USA"
+      }
+    },
+    "skills": ["Python", "Django", "React"],
+    "experience": {
+      "years": 5,
+      "companies": [
+        {"name": "TechCorp", "role": "Developer", "duration": "2019-2022"},
+        {"name": "StartupXYZ", "role": "Senior Dev", "duration": "2022-2024"}
+      ]
+    },
+    "active": true
+  },
+  {
+    "id": 2,
+    "name": "Bob Smith",
+    "contact": {
+      "email": "bob@example.com",
+      "phone": "+1-555-0456",
+      "address": {
+        "street": "456 Oak Ave",
+        "city": "Portland",
+        "country": "USA"
+      }
+    },
+    "skills": ["JavaScript", "Node.js", "MongoDB"],
+    "experience": {
+      "years": 3,
+      "companies": [
+        {"name": "WebCorp", "role": "Junior Dev", "duration": "2021-2024"}
+      ]
+    },
+    "active": false
+  }
+]
+            </textarea>
+            
+            <div style="margin-top: 10px;">
+                <input type="text" id="datasetName" placeholder="Dataset name (e.g., 'employee-data')" 
+                       value="sample-nested-data" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                
+                <button onclick="previewCSV()">🔍 Preview CSV</button>
+                <button onclick="saveToDatabase()" style="background: #28a745;">💾 Save to Database</button>
+                <button onclick="loadSampleData()" style="background: #6c757d;">📋 Load Sample</button>
+            </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="section">
+            <h3>📊 CSV Preview</h3>
+            <div id="csvPreview" class="preview">Click "Preview CSV" to see flattened data...</div>
+            
+            <h3 style="margin-top: 20px;">📡 Save Results</h3>
+            <div id="saveResult" class="result">Click "Save to Database" to test upload...</div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data loader
+        function loadSampleData() {
+            const sampleData = [
+                {
+                    "patient_id": "P001",
+                    "name": "Alison Bro",
+                    "medical_history": {
+                        "allergies": ["Penicillin", "Shellfish"],
+                        "conditions": ["Hypertension", "Diabetes"],
+                        "medications": [
+                            {"name": "Metformin", "dosage": "500mg", "frequency": "twice daily"},
+                            {"name": "Lisinopril", "dosage": "10mg", "frequency": "once daily"}
+                        ]
+                    },
+                    "vitals": {
+                        "blood_pressure": "140/90",
+                        "heart_rate": 72,
+                        "temperature": 98.6
+                    },
+                    "insurance": {
+                        "provider": "HealthCorp",
+                        "policy_number": "HC123456",
+                        "coverage": {
+                            "deductible": 1000,
+                            "out_of_pocket_max": 5000
+                        }
+                    }
+                }
+            ];
+            
+            document.getElementById('jsonInput').value = JSON.stringify(sampleData, null, 2);
+            document.getElementById('datasetName').value = 'medical-records-sample';
+        }
+
+        // Preview CSV conversion
+        function previewCSV() {
+            const jsonText = document.getElementById('jsonInput').value.trim();
+            const previewDiv = document.getElementById('csvPreview');
+            
+            if (!jsonText) {
+                previewDiv.innerHTML = '<span style="color: red;">Please enter JSON data</span>';
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonText);
+                const flattened = Array.isArray(data) ? data.map(flattenObject) : [flattenObject(data)];
+                
+                // Create CSV preview
+                if (flattened.length > 0) {
+                    const headers = Object.keys(flattened[0]);
+                    let csvPreview = '<strong>Headers:</strong><br>' + headers.join(' | ') + '<br><br>';
+                    csvPreview += '<strong>Sample Rows:</strong><br>';
+                    
+                    flattened.slice(0, 3).forEach((row, i) => {
+                        csvPreview += `Row ${i + 1}: ` + headers.map(h => row[h] || '').join(' | ') + '<br>';
+                    });
+                    
+                    previewDiv.innerHTML = csvPreview;
+                } else {
+                    previewDiv.innerHTML = '<span style="color: orange;">No data to preview</span>';
+                }
+            } catch (error) {
+                previewDiv.innerHTML = `<span style="color: red;">Invalid JSON: ${error.message}</span>`;
+            }
+        }
+
+        // Flatten nested objects (client-side preview only)
+        function flattenObject(obj, parent = '', sep = '.') {
+            let result = {};
+            for (let key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    const newKey = parent ? `${parent}${sep}${key}` : key;
+                    if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+                        Object.assign(result, flattenObject(obj[key], newKey, sep));
+                    } else if (Array.isArray(obj[key])) {
+                        result[newKey] = JSON.stringify(obj[key]);
+                    } else {
+                        result[newKey] = obj[key];
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Save to database
+        async function saveToDatabase() {
+            const jsonText = document.getElementById('jsonInput').value.trim();
+            const name = document.getElementById('datasetName').value.trim();
+            const resultDiv = document.getElementById('saveResult');
+            
+            if (!jsonText || !name) {
+                resultDiv.innerHTML = '<div class="error">Please provide both JSON data and dataset name</div>';
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonText);
+                resultDiv.innerHTML = '<div>🔄 Saving to database...</div>';
+                
+                const response = await fetch('/save-to-database/create/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        source_json: data
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ <strong>Success!</strong><br>
+                            Dataset ID: ${result.id}<br>
+                            Name: ${result.name}<br>
+                            <small>Signal will auto-convert to CSV and upload to Supabase</small>
+                        </div>
+                    `;
+                } else {
+                    const error = await response.text();
+                    resultDiv.innerHTML = `<div class="error">❌ Save failed: ${error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Get CSRF token for Django
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>

@@ -2,11 +2,14 @@ image: python:3.12
 
 stages:
   - test
+  - deploy
 
 variables:
   PYTHONUNBUFFERED: 1
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  DJANGO_SETTINGS_MODULE: "kalbe_be.settings"
+  DJANGO_SETTINGS_MODULE: "kalbe_be.test_settings"
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: "0"
 
 cache:
   paths:
@@ -16,15 +19,41 @@ before_script:
   - python -V
   - pip install --upgrade pip
   - pip install -r requirements.txt
+  - pip install coverage
 
 test:
+  image: python:3.12
   stage: test
   script:
     - python manage.py migrate --noinput
-    - python manage.py test
+    - python manage.py test --keepdb
+    - coverage run --source='.' manage.py test
   artifacts:
     when: always
     reports:
       junit: reports/junit.xml
-    paths:
-      - reports/
+
+deploy:
+  stage: deploy
+  image: python:3.12
+  before_script:
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      ssh "$EC2_USER@$EC2_HOST" << 'EOF'
+        echo "✅ Successfully SSH inside"
+        cd /home/ec2-user/backend-mirror
+        git pull origin main
+        python3 manage.py migrate --noinput
+        python3 manage.py collectstatic --noinput --clear
+        sudo systemctl restart kalbe-data
+        echo "Deployment completed successfully."
+      EOF
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  needs: ["test"]

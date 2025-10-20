@@ -38,6 +38,10 @@ class User(models.Model):
     otp_expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # Security fields for failed login attempts
+    failed_login_attempts = models.IntegerField(default=0)
+    account_locked_until = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = 'username'  
     REQUIRED_FIELDS = ['email']  
@@ -53,7 +57,9 @@ class User(models.Model):
         A user is considered authenticated if ALL of the following are true:
         1. User has a valid user_id (exists in database)
         2. User email is verified
-        3. User was created (not a temporary/invalid account)
+        3. User account is active
+        4. User account is not locked due to failed login attempts
+        5. User was created (not a temporary/invalid account)
         
         Returns:
             bool: True if user meets all security requirements, False otherwise
@@ -66,12 +72,57 @@ class User(models.Model):
         if not getattr(self, 'is_verified', False):
             return False
             
+        # Check if account is active
+        if not getattr(self, 'is_active', True):
+            return False
+            
+        # Check if account is locked due to failed login attempts
+        if self.is_account_locked():
+            return False
+            
         # Check if user has a creation timestamp (prevents temporary accounts)
         if not getattr(self, 'created_at', None):
             return False
             
         return True
 
+    def is_account_locked(self):
+        """Check if account is currently locked due to failed login attempts"""
+        if not self.account_locked_until:
+            return False
+            
+        # Check if lock period has expired
+        if timezone.now() >= self.account_locked_until:
+            # Auto-unlock: clear lock time and reset failed attempts
+            self.account_locked_until = None
+            self.failed_login_attempts = 0
+            self.save(update_fields=['account_locked_until', 'failed_login_attempts'])
+            return False
+            
+        return True  # Still locked
+
+    def increment_failed_login(self):
+        """Increment failed login attempts and lock account if limit reached"""
+        self.failed_login_attempts += 1
+        
+        # Lock account after 5 failed attempts for 30 minutes
+        if self.failed_login_attempts >= 5:
+            self.account_locked_until = timezone.now() + timedelta(minutes=30)
+            self.save(update_fields=['failed_login_attempts', 'account_locked_until'])
+            return True  # Account is now locked
+        else:
+            self.save(update_fields=['failed_login_attempts'])
+            return False  # Account not locked yet
+
+    def reset_failed_login_attempts(self):
+        """Reset failed login attempts and unlock account on successful login"""
+        self.failed_login_attempts = 0
+        self.account_locked_until = None
+        self.save(update_fields=['failed_login_attempts', 'account_locked_until'])
+
+    def get_remaining_login_attempts(self):
+        """Get number of remaining login attempts before account lock"""
+        return max(0, 5 - self.failed_login_attempts)
 
     def generate_otp(self, otp_validity_minutes=10):
         """Generate OTP code and set expiry time"""

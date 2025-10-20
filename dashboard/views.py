@@ -1,4 +1,12 @@
 # from django.shortcuts import render
+from __future__ import annotations
+from urllib.parse import unquote
+
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.contrib.auth.decorators import login_required
+
+from .nav import SEGMENT_LABELS, looks_like_id
+# from .nav import try_label_annotation  # uncomment if you added it
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 
@@ -23,3 +31,48 @@ def recent_features_json(request):
             it["last_used_at"] = it["last_used_at"].isoformat()
             
     return JsonResponse(items, safe=False)
+
+# dashboard/views.py
+
+def breadcrumbs_json(request):
+    """
+    GET /dashboard/breadcrumbs/?path=/annotation/123/edit
+    Returns:
+    [
+      {"href": "/", "label": "Home"},
+      {"href": "/annotation", "label": "Annotations"},
+      {"href": "/annotation/123", "label": "123" | model title},
+      {"href": "/annotation/123/edit", "label": "Edit"}
+    ]
+    """
+    path = request.GET.get("path")
+    if not path:
+        return HttpResponseBadRequest('Missing "path" query param')
+    path = unquote(path)
+
+    parts = [p for p in path.split("/") if p]  # drop empty segments
+    crumbs = [{"href": "/", "label": "Home"}]
+
+    for i, seg in enumerate(parts):
+        href = "/" + "/".join(parts[: i + 1])
+
+        # 1) known segment label?
+        label = SEGMENT_LABELS.get(seg)
+
+        # 2) optional: dynamic lookup when the previous segment is 'annotation'
+        # if not label and i > 0 and parts[i - 1] == "annotation":
+        #     label = try_label_annotation(seg) or label
+
+        # 3) default formatting
+        if not label:
+            label = seg if looks_like_id(seg) else seg.replace("-", " ").capitalize()
+
+        crumbs.append({"href": href, "label": label})
+
+    return JsonResponse(crumbs, safe=False)
+
+
+from django.shortcuts import render
+
+def breadcrumbs_demo(request):
+    return render(request, "dashboard/breadcrumbs_demo.html")

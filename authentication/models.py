@@ -34,7 +34,7 @@ class User(models.Model):
 
     is_verified = models.BooleanField(default=False)
     verification_token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    otp_code = models.CharField(max_length=6, null=True, blank=True)
+    otp_code = models.CharField(max_length=6, blank=True, default='')
     otp_expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -145,7 +145,7 @@ class User(models.Model):
         # Check if OTP has expired
         if timezone.now() > self.otp_expires_at:
             # Clear expired OTP
-            self.otp_code = None
+            self.otp_code = ''
             self.otp_expires_at = None
             self.save(update_fields=['otp_code', 'otp_expires_at'])
             return False
@@ -154,7 +154,7 @@ class User(models.Model):
         if self.otp_code == provided_otp:
             # Mark as verified and clear OTP
             self.is_verified = True
-            self.otp_code = None
+            self.otp_code = ''
             self.otp_expires_at = None
             self.save(update_fields=['is_verified', 'otp_code', 'otp_expires_at'])
             return True

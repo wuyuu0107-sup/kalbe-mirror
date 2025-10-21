@@ -88,6 +88,9 @@ INSTALLED_APPS = [
     "save_to_database",
     "activity_log",
 ]
+
+# Custom user model
+AUTH_USER_MODEL = 'authentication.User'
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "noreply@kalbe.local"
@@ -117,6 +120,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'authentication.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'activity_log.middleware.UserInRequestMiddleware',

@@ -53,38 +53,45 @@ class User(models.Model):
     def is_authenticated(self):
         """
         Secure authentication check that validates multiple security criteria.
-        
+
         A user is considered authenticated if ALL of the following are true:
         1. User has a valid user_id (exists in database)
         2. User email is verified
         3. User account is active
         4. User account is not locked due to failed login attempts
         5. User was created (not a temporary/invalid account)
-        
+
         Returns:
             bool: True if user meets all security requirements, False otherwise
         """
         # Check if user has valid ID (basic existence check)
         if not getattr(self, 'user_id', None):
             return False
-            
+
         # Check if email is verified (security requirement)
         if not getattr(self, 'is_verified', False):
             return False
-            
+
         # Check if account is active
         if not getattr(self, 'is_active', True):
             return False
-            
+
         # Check if account is locked due to failed login attempts
         if self.is_account_locked():
             return False
-            
+
         # Check if user has a creation timestamp (prevents temporary accounts)
         if not getattr(self, 'created_at', None):
             return False
-            
+
         return True
+
+    @property
+    def is_anonymous(self):
+        """
+        Returns True if the user is not authenticated.
+        """
+        return not self.is_authenticated
 
     def is_account_locked(self):
         """Check if account is currently locked due to failed login attempts"""

@@ -25,8 +25,8 @@ def log_activity(user, activity_type, description, content_object=None):
         content_object: Optional related object
     """
     # Handle both User instances and user IDs
-    user_id = user.id if hasattr(user, 'id') else user
-    
+    user_id = user.user_id if hasattr(user, 'user_id') else user
+
     activity = Activity.objects.create(
         user_id=user_id,
         activity_type=activity_type,

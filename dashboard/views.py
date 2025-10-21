@@ -2,6 +2,7 @@ from __future__ import annotations
 from urllib.parse import unquote
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
+from authentication.models import User
 
 # Uncomment when being used
 # from django.contrib.auth.decorators import login_required
@@ -24,7 +25,16 @@ def recent_files_json(request):
     return JsonResponse(items, safe=False)
 
 def recent_features_json(request):
-    items = get_recent_features(request.user)
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    try:
+        user = User.objects.get(user_id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+
+    items = get_recent_features(user)
     for it in items:
         if hasattr(it.get("last_used_at"), "isoformat"):
             it["last_used_at"] = it["last_used_at"].isoformat()

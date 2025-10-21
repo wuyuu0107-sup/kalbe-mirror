@@ -18,11 +18,8 @@ from supabase import create_client, Client
 from .models import Document, Patient, Annotation, Comment
 from .serializers import DocumentSerializer, PatientSerializer, AnnotationSerializer, CommentSerializer
 
-
-
-# Optional: reuse your normalizer if available
 try:
-    from ocr.views import normalize_payload, order_sections  # if you want same schema/ordering here
+    from ocr.views import normalize_payload, order_sections
 except Exception:
     normalize_payload = lambda x: x
     order_sections = lambda x: x
@@ -82,6 +79,7 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
             "contentType": "application/json",
             "upsert": "true",
         })
+
         # Prefer public URL; fallback to a signed URL
         try:
             pub = supabase.storage.from_(bucket).get_public_url(path)
@@ -95,6 +93,7 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
         if isinstance(signed, dict):
             return signed.get("signedURL") or signed.get("signed_url")
         return signed
+    
     except Exception:
         return None
 
@@ -108,6 +107,7 @@ class IsResearcher(BasePermission):
         if not user or not getattr(user, 'is_authenticated', False):
             return False
         roles = getattr(user, 'roles', []) or []
+        
         # roles may be stored as list of strings
         return 'researcher' in roles
 
@@ -120,7 +120,6 @@ class DocumentViewSet(mixins.CreateModelMixin,
     queryset = Document.objects.all().order_by('-created_at')
     serializer_class = DocumentSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
 
     @action(detail=False, methods=['post'], url_path='from-gemini', permission_classes=[AllowAny])
@@ -212,7 +211,6 @@ class PatientViewSet(mixins.CreateModelMixin,
     queryset = Patient.objects.all().order_by('id')
     serializer_class = PatientSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
 
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'external_id']
@@ -225,7 +223,6 @@ class AnnotationViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsResearcher]
 
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
@@ -252,12 +249,10 @@ class CommentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['document', 'patient']
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsResearcher]
 
 
 
 @api_view(['POST'])
-@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def create_drawing_annotation(request, document_id, patient_id):
     try:
@@ -288,7 +283,6 @@ def create_drawing_annotation(request, document_id, patient_id):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsResearcher])
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 def drawing_annotation(request, document_id, patient_id, annotation_id):
     try:

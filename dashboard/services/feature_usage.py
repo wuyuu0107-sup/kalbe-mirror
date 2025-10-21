@@ -1,24 +1,46 @@
-from django.db.models import Max, Count
 from django.utils import timezone
+from django.db.models import Max, Count
+from authentication.models import User  # adjust import to your user model
 from dashboard.models import FeatureUsage
 
-def record_feature_use(user, feature_key: str):
+def record_feature_use(request, feature_key: str):
     try:
-        is_valid = bool(user and getattr(user, "is_authenticated", False))
-    except Exception:
-        is_valid = False
+        real_user = None
 
-    FeatureUsage.objects.create(
-        user=user if is_valid else None,
-        feature_key=feature_key,
-        used_at = timezone.now(),
-    )
+        if not real_user and request:
+            user_id = request.session.get("user_id")
+            if user_id:
+                real_user = User.objects.filter(user_id=user_id).first()
 
-def get_recent_features(user, limit=4):
-    features = FeatureUsage.objects.filter(user=user)
-    agg =  (
-        features.values("feature_key")
-            .annotate(last_used_at=Max("used_at"), count=Count("id"))     
+        FeatureUsage.objects.create(
+            user=real_user,
+            feature_key=feature_key,
+            used_at=timezone.now(),
+        )
+
+    except Exception as e:
+        print(f"[record_feature_use] Error: {e}")
+
+
+def get_recent_features(request, limit=4):
+    try:
+        user = None
+
+        user_id = request.session.get("user_id")
+        if user_id:
+            user = User.objects.filter(user_id=user_id).first()
+
+        if not user:
+            return []
+        
+        features = (
+            FeatureUsage.objects.filter(user=user)
+            .values("feature_key")
+            .annotate(last_used_at=Max("used_at"), count=Count("id"))
             .order_by("-last_used_at", "feature_key")[:limit]
-    )
-    return list(agg)
+        )
+        return list(features)
+    
+    except Exception as e:
+        print(f"[get_recent_features] Error: {e}")
+        return []

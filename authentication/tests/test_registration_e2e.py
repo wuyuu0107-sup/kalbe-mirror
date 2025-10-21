@@ -11,16 +11,6 @@ class RegistrationE2ETests(TestCase):
         self.client = Client()
         self.registration_url = reverse("authentication:register")
     
-    # def test_registration_happy_path_e2e(self):
-    #     """
-    #     Test the complete happy path for user registration:
-    #     1. Send valid registration data via API
-    #     2. Verify successful response (201 Created)
-    #     3. Verify user is created in database
-    #     4. Verify password is properly hashed
-    #     5. Verify all user data is stored correctly
-    #     6. Verify user can login with the registered credentials
-    #     """
         
     #     # Step 1: Prepare valid registration data
     #     registration_data = {
@@ -107,10 +97,6 @@ class RegistrationE2ETests(TestCase):
     #     # Step 10: Verify login response contains correct user info
     #     self.assertEqual(login_response_data["user_id"], f"user {created_user.user_id}")
     
-    # def test_registration_with_minimal_required_data(self):
-    #     """
-    #     Test registration with only the minimum required fields.
-    #     """
         
     #     minimal_data = {
     #         "username": "minimaluser",

@@ -1,12 +1,19 @@
 from django.test import TestCase
-from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from authentication.models import User
 from .models import Activity
 from .views import log_activity, ActivityViewSet
 
 class ActivityModelTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.user = User.objects.create(
+            username='testuser',
+            password='testpass',
+            email='testuser@example.com',
+            is_verified=True,
+            is_active=True,
+            otp_code='123456'
+        )
 
     def test_create_activity(self):
         activity = Activity.objects.create(
@@ -35,13 +42,20 @@ class ActivityModelTest(TestCase):
             activity_type='comment',
             description='Test comment',
             content_type=ct,
-            object_id=self.user.id
+            object_id=self.user.user_id
         )
         self.assertEqual(activity.content_object, self.user)
 
 class LogActivityTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='loguser', password='testpass')
+        self.user = User.objects.create(
+            username='loguser',
+            password='testpass',
+            email='loguser@example.com',
+            is_verified=True,
+            is_active=True,
+            otp_code='123456'
+        )
 
     def test_log_activity_basic(self):
         activity = log_activity(
@@ -64,12 +78,24 @@ class LogActivityTest(TestCase):
 
 class ActivityViewSetTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='apiuser', password='testpass')
+        self.user = User.objects.create(
+            username='apiuser',
+            password='testpass',
+            email='apiuser@example.com',
+            is_verified=True,
+            is_active=True,
+            otp_code='123456'
+        )
         Activity.objects.create(user=self.user, activity_type='ocr', description='API OCR')
         Activity.objects.create(user=self.user, activity_type='comment', description='API Comment')
 
     def test_list_activities_authenticated(self):
         self.client.force_login(self.user)
+        # Set session data that the middleware expects
+        session = self.client.session
+        session['user_id'] = str(self.user.user_id)
+        session['username'] = self.user.username
+        session.save()
         response = self.client.get('/api/activities/')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(len(response.json()) >= 2)

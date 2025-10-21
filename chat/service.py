@@ -36,8 +36,9 @@ from urllib.parse import urlparse
 def _jwt_role(api_key: str) -> str | None:
     # Supabase keys = JWT. Ambil payload (bagian tengah) dan baca claim 'role'
     try:
-        parts = api_key.split(".")
-        if len(parts) < 2: return None
+        parts = (api_key or "").split(".")
+        if len(parts) < 2:
+            return None
         pad = '=' * (-len(parts[1]) % 4)
         payload = base64.urlsafe_b64decode(parts[1] + pad)
         data = _json.loads(payload.decode("utf-8"))
@@ -47,7 +48,7 @@ def _jwt_role(api_key: str) -> str | None:
 
 def _project_ref_from_url(url: str) -> str | None:
     try:
-        host = urlparse(url).netloc
+        host = urlparse(url or "").netloc
         # typical host: abcdefghijklmnop.supabase.co  -> project ref = abcdefghijklmnop
         m = _re.match(r"^([a-z0-9]{20})\.supabase\.co$", host)
         return m.group(1) if m else host
@@ -55,34 +56,34 @@ def _project_ref_from_url(url: str) -> str | None:
         return None
 
 
-
-
 # ============ INTENT RULES ============
-
 def _rule_based_intent(nl: str) -> Intent:
     s = (nl or "").lower().strip()
     if not s:
         raise ValueError("Pertanyaan kosong.")
-    
-    #whoami
+
+    # whoami (supabase)
     if "whoami" in s and "supabase" in s:
         return Intent(intent="SUPABASE_WHOAMI", args={})
-    
-    #print files
+
+    # list buckets
+    if "list" in s and "buckets" in s:
+        return Intent(intent="LIST_BUCKETS", args={})
+
+    # list/print files in storage
     if re.search(r"\b(list|daftar|tampilkan|print|show)\b.*\b(file|files|berkas|objek|object)\b", s) or \
        "list files" in s or "list storage" in s:
         # optional prefix, e.g., "list files in ocr/" or "list files ocr/"
         m = re.search(r"(?:in|di)\s+([a-z0-9_\-/]+)", s)
         prefix = m.group(1).strip() if m else ""
         return Intent(intent="LIST_STORAGE_FILES", args={"prefix": prefix})
-    
+
     # auth user count
     if re.search(r"\b(berapa|jumlah|total|ada\s*berapa)\b.*\b(user|pengguna|akun)\b", s) or \
        "auth user" in s or "auth_user" in s:
-        # Optionally detect 'aktif' for active users later
         is_active_only = bool(re.search(r"\baktif|active\b", s))
         return Intent(intent="COUNT_AUTH_USERS", args={"active_only": is_active_only})
-    
+
     # total pasien (more permissive)
     if re.search(r"\b(berapa|jumlah|total|ada\s*berapa)\b.*\b(pasien|data\s*pasien|database)\b", s):
         return Intent(intent="TOTAL_PATIENTS", args={})
@@ -104,11 +105,6 @@ def _rule_based_intent(nl: str) -> Intent:
         fname = m.group(1)
         return Intent(intent="GET_FILE_BY_NAME", args={"filename": f"{fname}.json" if not fname.endswith(".json") else fname})
 
-   # rule
-    if "list" in s and "buckets" in s:
-        return Intent(intent="LIST_BUCKETS", args={})
-
-
     return Intent(intent="GENERAL_QUESTION", args={"text": s})
 
 
@@ -129,8 +125,7 @@ def _smart_intent(nl: str) -> Intent:
     return Intent(intent="GENERAL_QUESTION", args={"text": nl.lower().strip()})
 
 
-# ============ DB HELPERS (untuk intent pasien) ============
-
+# ============ DB HELPERS ============
 def _fetch_scalar(sql, params=None):
     row = DB().fetch_one(sql, params or [])
     if row is None:
@@ -143,7 +138,6 @@ def _fetch_one(sql, params=None):
 
 
 # ============ Supabase Storage helpers ============
-
 def _ensure_supabase():
     if _supabase is None:
         raise RuntimeError(
@@ -204,7 +198,6 @@ def _list_paths(bucket: str, path: str = "") -> List[dict]:
                 return res
             if isinstance(res, dict) and "data" in res:
                 return res.get("data") or []
-            # Some versions return objects with .get("data")
             if hasattr(res, "get"):
                 data = res.get("data")
                 if isinstance(data, list):
@@ -282,6 +275,10 @@ def _find_file_path(bucket: str, filename: str) -> Optional[str]:
 
 
 def _get_json_from_storage(filename: str) -> str:
+    """
+    Download file JSON dari Supabase Storage bucket _SUPABASE_BUCKET.
+    Return: pretty-printed JSON string atau pesan error yang ramah.
+    """
     if not filename or not filename.endswith(".json"):
         return "Nama file tidak valid."
 
@@ -316,44 +313,13 @@ def _get_json_from_storage(filename: str) -> str:
         return f"Terjadi kesalahan saat mengambil '{filename}': {e}"
 
 
-def _get_json_from_storage(filename: str) -> str:
-    """
-    Download file JSON dari Supabase Storage bucket _SUPABASE_BUCKET.
-    Return: pretty-printed JSON string atau pesan error yang ramah.
-    """
-    if not filename or not filename.endswith(".json"):
-        return "Nama file tidak valid."
-
-    path = _find_file_path(_SUPABASE_BUCKET, filename)
-    print("DEBUG find_file_path miss -> tried filename:", filename)
-    print("DEBUG bucket:", _SUPABASE_BUCKET)
-    print("DEBUG hint: try prompting 'fetch ocr/ocr/%s, json'" % filename.replace(".json",""))
-    if not path:
-        return f"File '{filename}' tidak ditemukan di bucket '{_SUPABASE_BUCKET}'."
-
-    raw = _try_download(_SUPABASE_BUCKET, path)
-    if raw is None:
-        return f"Gagal mengunduh '{path}' dari bucket '{_SUPABASE_BUCKET}'."
-
-    try:
-        text = raw.decode("utf-8")
-    except Exception:
-        return f"File '{path}' bukan UTF-8 atau rusak."
-
-    try:
-        data = json.loads(text)
-        return json.dumps(data, ensure_ascii=False, indent=2)
-    except Exception:
-        # Kalau ternyata bukan JSON valid, kirim apa adanya
-        return text
-
-
 # ============ MAIN ENTRY ============
-
 def answer_question(nl: str) -> str:
     intent = _smart_intent(nl)
     logger.info("SUPABASE_URL=%s ; SUPABASE_BUCKET=%s", _SUPABASE_URL, _SUPABASE_BUCKET)
     logger.debug("Intent resolved: %s %s", intent.intent, intent.args)
+
+    # List buckets
     if intent.intent == "LIST_BUCKETS":
         try:
             sb = _ensure_supabase()
@@ -366,16 +332,7 @@ def answer_question(nl: str) -> str:
             logger.exception("list_buckets failed")
             return f"Gagal membaca daftar buckets: {e}"
 
-    if intent.intent == "GENERAL_QUESTION":
-        use_gemini = getattr(settings, "USE_GEMINI", False) and getattr(settings, "GEMINI_API_KEY", None)
-        if use_gemini:
-            try:
-                return ask_gemini_text(nl)
-            except (GeminiBlocked, GeminiError) as e:
-                logger.info("Gemini fallback to static help: %s", e)
-        return ("Aku bisa: (1) total pasien, (2) jumlah pasien per uji klinis, "
-                "(3) ambil file JSON dari Supabase Storage, mis. 'ambilkan saya data_1.json'.")
-    
+    # whoami
     if intent.intent == "SUPABASE_WHOAMI":
         try:
             url = os.getenv("SUPABASE_URL") or ""
@@ -402,7 +359,7 @@ def answer_question(nl: str) -> str:
         except Exception as e:
             return f"WHOAMI error: {e}"
 
-    
+    # list storage files
     if intent.intent == "LIST_STORAGE_FILES":
         prefix = (intent.args.get("prefix") or "").strip().strip("/")
         try:
@@ -422,11 +379,24 @@ def answer_question(nl: str) -> str:
             logger.exception("Unexpected error listing storage files")
             return f"Gagal membaca daftar file: {e}"
 
+    # general question
+    if intent.intent == "GENERAL_QUESTION":
+        use_gemini = getattr(settings, "USE_GEMINI", False) and getattr(settings, "GEMINI_API_KEY", None)
+        if use_gemini:
+            try:
+                return ask_gemini_text(nl)
+            except (GeminiBlocked, GeminiError) as e:
+                logger.info("Gemini fallback to static help: %s", e)
+        return ("Aku bisa: (1) total pasien, (2) jumlah pasien per uji klinis, "
+                "(3) jumlah user (auth_user), (4) ambil file JSON dari Supabase Storage, mis. 'ambilkan saya data_1.json'.")
+
+    # patients by trial: ensure name
     if intent.intent == "COUNT_PATIENTS_BY_TRIAL":
         trial = intent.args.get("trial_name")
         if not trial:
             return "Mohon sebutkan nama uji klinis yang dimaksud (contoh: 'berapa pasien uji klinis ABC')."
-        
+
+    # auth users count
     if intent.intent == "COUNT_AUTH_USERS":
         active_only = bool(intent.args.get("active_only"))
         try:
@@ -438,16 +408,17 @@ def answer_question(nl: str) -> str:
                 sql = "SELECT COUNT(*) FROM auth_user"
                 n = _fetch_scalar(sql)
                 return f"Total user terdaftar: {int(n or 0)}."
-        except Exception as e:
+        except Exception:
             logger.exception("DB error counting auth_user (active_only=%s)", active_only)
             return ("Tidak bisa mengakses tabel auth_user saat ini. "
                     "Periksa koneksi DB, kredensial, atau migrasi Django (lihat log).")
 
+    # fetch JSON from storage
     if intent.intent == "GET_FILE_BY_NAME":
         filename = intent.args.get("filename")
         return _get_json_from_storage(filename)
 
-    # SQL-backed intents
+    # SQL-backed intents (patients)
     try:
         sql, params = build_sql(intent.intent, intent.args)
     except Exception as e:
@@ -458,7 +429,7 @@ def answer_question(nl: str) -> str:
         try:
             n = _fetch_scalar(sql, params)
             n = int(n or 0)
-        except Exception as e:
+        except Exception:
             logger.exception("DB error for intent=%s sql=%s params=%s", intent.intent, sql, params)
             return ("Tidak bisa mengakses database saat ini. "
                     "Periksa koneksi DB, kredensial, atau migrasi tabel (lihat log).")
@@ -470,6 +441,9 @@ def answer_question(nl: str) -> str:
         return f"Jumlah pasien pada uji klinis {trial}: {n}."
 
     return "Maaf, aku belum bisa menjawab pertanyaan itu."
+
+
+# ======== helpers for listing objects (placed at end for clarity) ========
 def _is_folder_entry(item) -> bool:
     if isinstance(item, dict):
         t = (item.get("type") or item.get("kind") or "").lower()
@@ -504,5 +478,3 @@ def _list_all_objects(bucket: str, prefix: str = "") -> List[str]:
             else:
                 all_keys.append(full)
     return sorted(all_keys)
-
-

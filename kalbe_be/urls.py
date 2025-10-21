@@ -21,12 +21,11 @@ urlpatterns = [
     path('api/protected-endpoint/', protected_endpoint),
     path('ocr/', include('ocr.urls')),
     path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
-    path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
-    path('auth/', include('authentication.urls')),
-    path('api/protected-endpoint/', protected_endpoint),
     path('', include('annotation.urls')),
     path('csv/', include('csv_export.urls')),
     path('save-to-database/', include('save_to_database.urls')),
-    ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path('dataset/', include('dataset.urls')),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

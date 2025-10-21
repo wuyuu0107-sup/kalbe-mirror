@@ -16,6 +16,16 @@ def test_page(request):
     """Render the CSV conversion test page."""
     return render(request, 'test_page.html')
 
+# Helper Function
+def csv_to_response(csv_obj):
+    return {
+        'id': csv_obj.id,
+        'name': csv_obj.name,
+        'file_url': csv_obj.file.url if csv_obj.file else None,
+        'uploaded_url': csv_obj.uploaded_url,
+        'created_at': csv_obj.created_at.isoformat()
+    }
+
 
 def save_converted_csv(name, json_data, file_obj=None):
     """
@@ -61,13 +71,7 @@ def create_csv_record(request):
 
     try:
         csv_record = save_converted_csv(payload['name'], payload['source_json'])
-        return JsonResponse({
-            'id': csv_record.id,
-            'name': csv_record.name,
-            'file_url': csv_record.file.url if csv_record.file else None,
-            'uploaded_url': csv_record.uploaded_url,
-            'created_at': csv_record.created_at.isoformat()
-        }, status=201)
+        return JsonResponse(csv_to_response(csv_record), status=201)
 
     except Exception as e:
         logger.exception("Error creating CSV record")
@@ -111,14 +115,31 @@ def update_csv_record(request, pk):
             instance, payload['name'], payload['source_json']
         )
 
-        return JsonResponse({
-            'id': updated.id,
-            'name': updated.name,
-            'file_url': updated.file.url if updated.file else None,
-            'uploaded_url': updated.uploaded_url,
-            'created_at': updated.created_at.isoformat()
-        }, status=200)
+        return JsonResponse(csv_to_response(updated), status=200)
 
     except Exception as e:
         logger.exception("Error updating CSV record")
         return JsonResponse({'error': 'Failed to update CSV record', 'details': str(e)}, status=500)
+    
+
+@csrf_exempt
+def delete_csv_record(request, pk):
+
+    """Delete an existing CSV record and its associated file."""
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Only DELETE method allowed'}, status=405)
+
+
+    instance = get_object_or_404(CSV, pk=pk)
+
+
+    try:
+        if instance.file:
+            instance.file.delete(save=False)
+        instance.delete()
+        logger.info(f"CSV record {pk} deleted successfully")
+        return JsonResponse({'message': f'CSV record {pk} deleted successfully.'}, status=200)
+    
+    except Exception as e:
+        logger.exception("Error deleting CSV record")
+        return JsonResponse({'error': 'Failed to delete CSV record', 'details': str(e)}, status=500)

@@ -14,7 +14,7 @@ os.environ.setdefault("GRPC_TRACE", "")
 from django.conf import settings
 import google.generativeai as genai
 
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # ===== Exceptions khusus =====
 class GeminiError(RuntimeError): ...

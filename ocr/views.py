@@ -2,7 +2,6 @@ import os
 import re
 import time
 import json
-from dashboard.tracking import track_feature
 
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -267,7 +266,6 @@ def health(request):
 
 
 @csrf_exempt
-@track_feature("ocr")
 def ocr_test_page(request):
     load_dotenv()  # loads SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY, etc.
 

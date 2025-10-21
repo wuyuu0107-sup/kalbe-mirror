@@ -17,7 +17,9 @@ class RecentFeaturesViewTests(TestCase):
             roles=["researcher"],
             is_verified=True
         )
-        self.client.login(username="alice", password="sTrongpassword!1")
+        session = self.client.session
+        session["user_id"] = str(self.user.user_id)
+        session.save()
 
     @mock.patch("dashboard.views.get_recent_features")
     def test_recent_features_json_returns_iso(self, mock_service):

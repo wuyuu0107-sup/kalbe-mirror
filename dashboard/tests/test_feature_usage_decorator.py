@@ -19,17 +19,19 @@ class TrackFeatureDecoratorTests(TestCase):
         )
 
     def test_decorator_records_usage_for_authenticated_user(self):
-
         @track_feature("dashboard.test")
         def sample_view(request):
-            return 200 # Fask response for simple test
-        
+            return 200 
+
         req = self.factory.get("/dummy")
         req.user = self.user
+
+        req.session = {"user_id": str(self.user.user_id)}
 
         response = sample_view(req)
         self.assertEqual(response, 200)
 
+        # Now the feature usage should be recorded
         us = FeatureUsage.objects.filter(
             user=self.user,
             feature_key="dashboard.test"

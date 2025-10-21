@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     "django_filters",
     "rest_framework",
     "save_to_database",
+    "activity_log",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -118,6 +119,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'activity_log.middleware.UserInRequestMiddleware',
 ]
 
 ROOT_URLCONF = "kalbe_be.urls"

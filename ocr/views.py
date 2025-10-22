@@ -523,5 +523,3 @@ Provide ONLY a single JSON object with those sections/keys.
     # GET -> show your uploader/test page
     
     return render(request, "ocr.html")
-
-

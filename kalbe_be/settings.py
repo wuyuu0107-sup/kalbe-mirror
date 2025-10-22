@@ -87,7 +87,6 @@ INSTALLED_APPS = [
     "annotation",
     "django_filters",
     "rest_framework",
-    "chat", 
     "save_to_database",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
@@ -216,8 +215,3 @@ else:
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 EMAIL_TIMEOUT = 10
-
-GEMINI_API_KEY = config("GEMINI_API_KEY", default=None)
-GEMINI_MODEL   = config("GEMINI_MODEL", default="gemini-2.5-flash")
-GEMINI_TEMP    = config("GEMINI_TEMP", cast=float, default=0.4)
-USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)

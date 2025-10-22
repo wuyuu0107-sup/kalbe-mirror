@@ -40,7 +40,7 @@ class SignalTests(TestCase):
             )
             mock_convert.assert_not_called()
 
-    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET': 'test-bucket'})
+    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET_CSV': 'test-bucket'})
     @patch('save_to_database.signals.upload_csv_to_supabase')
     @patch('save_to_database.signals.json_to_csv_bytes')
     def test_successful_upload(self, mock_convert, mock_upload):
@@ -62,22 +62,19 @@ class SignalTests(TestCase):
         updated_record = CSV.objects.get(pk=csv_record.pk)
         self.assertEqual(updated_record.uploaded_url, "https://example.com/test.csv")
 
-    def test_signal_skips_when_no_bucket(self):
-        """Signal should skip when SUPABASE_BUCKET is not set."""
-        with patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true'}, clear=False):
-            # Make sure SUPABASE_BUCKET is not set
-            if 'SUPABASE_BUCKET' in os.environ:
-                del os.environ['SUPABASE_BUCKET']
-            
-            with patch('save_to_database.signals.logger') as mock_logger:
-                CSV.objects.create(
-                    name="test-dataset",
-                    file=self.csv_file,
-                    source_json=self.sample_json
-                )
-                mock_logger.warning.assert_called_with("SUPABASE_BUCKET not set; skipping upload")
 
-    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET': 'test-bucket'})
+    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true'}, clear=True)
+    @patch('save_to_database.signals.logger')
+    def test_signal_skips_when_no_bucket(self, mock_logger):
+        """Signal should skip when SUPABASE_BUCKET_CSV is not set."""
+        CSV.objects.create(
+            name="test-dataset",
+            file=self.csv_file,
+            source_json=self.sample_json
+        )
+        mock_logger.warning.assert_called_with("SUPABASE_BUCKET_CSV not set; skipping upload")
+
+    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET_CSV': 'test-bucket'})
     @patch('save_to_database.signals.upload_csv_to_supabase')
     @patch('save_to_database.signals.json_to_csv_bytes')
     def test_handles_conversion_error(self, mock_convert, mock_upload):
@@ -93,7 +90,7 @@ class SignalTests(TestCase):
             mock_logger.exception.assert_called()
             mock_upload.assert_not_called()
 
-    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET': 'test-bucket'})
+    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET_CSV': 'test-bucket'})
     @patch('save_to_database.signals.upload_csv_to_supabase')
     @patch('save_to_database.signals.json_to_csv_bytes')
     def test_skips_empty_csv(self, mock_convert, mock_upload):
@@ -109,7 +106,7 @@ class SignalTests(TestCase):
             mock_logger.warning.assert_called_with("Converted CSV empty; skipping upload")
             mock_upload.assert_not_called()
 
-    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET': 'test-bucket'})
+    @patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET_CSV': 'test-bucket'})
     @patch('save_to_database.signals.upload_csv_to_supabase')
     @patch('save_to_database.signals.json_to_csv_bytes')
     def test_path_generation(self, mock_convert, mock_upload):
@@ -147,7 +144,7 @@ class SignalTests(TestCase):
 
     def test_signal_skips_when_url_already_exists(self):
         """Signal should skip when uploaded_url already exists."""
-        with patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET': 'test-bucket'}):
+        with patch.dict(os.environ, {'SUPABASE_UPLOAD_ENABLED': 'true', 'SUPABASE_BUCKET_CSV': 'test-bucket'}):
             with patch('save_to_database.signals.json_to_csv_bytes') as mock_convert:
                 with patch('save_to_database.signals.logger') as mock_logger:
                     CSV.objects.create(

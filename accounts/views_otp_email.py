@@ -1,3 +1,4 @@
+# accounts/views_otp_email.py
 import json
 from typing import Any, Dict
 
@@ -5,18 +6,18 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpRequest
 from django.core.mail import send_mail
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.apps import apps
+from django.contrib.auth.hashers import make_password  # ⬅️ simpan password sbg hash
 
 from .utils import generate_otp
 from .services import cache_store as cs
 from .passwords import is_strong_password
 
+# Pakai model milik app authentication → tabel authentication_user
+AuthUser = apps.get_model("authentication", "User")
+
 
 def _read_json(request: HttpRequest) -> Dict[str, Any]:
-    """
-    Safe JSON loader: selalu balikin dict.
-    (Fix E701: jangan pakai one-liner try/except.)
-    """
     if not request.body:
         return {}
     try:
@@ -28,24 +29,21 @@ def _read_json(request: HttpRequest) -> Dict[str, Any]:
 @require_POST
 def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
     """
-    Kirim OTP via email kalau email terdaftar.
-    Anti user-enumeration: tetap balas 200 {"status": "ok"} meski email tidak ada,
-    tetapi TIDAK mengirim email pada kasus tersebut.
+    Kirim OTP via email kalau email terdaftar (anti user-enumeration: tetap 200).
     """
     data = _read_json(request)
     email = (data.get("email") or "").strip().lower()
     if not email:
         return JsonResponse({"error": "email is required"}, status=400)
 
+    # Cek ada user dengan email tsb; kalau tidak ada, tetap balas ok (anti-enum)
     try:
-        # Hanya cek keberadaan user; tidak menyimpan ke variabel agar terhindar F841.
-        User.objects.get(email=email)
-    except User.DoesNotExist:
-        # Tetap balas generik.
+        AuthUser.objects.get(email=email)
+    except AuthUser.DoesNotExist:
         return JsonResponse({"status": "ok"})
 
     otp = generate_otp()
-    cs.store_otp(email, otp, ttl=600)  # 10 menit
+    cs.store_otp(email, otp, ttl=600)  # berlaku 10 menit
 
     send_mail(
         subject="Your OTP Code",
@@ -60,9 +58,8 @@ def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
 @require_POST
 def password_reset_otp_confirm(request: HttpRequest) -> JsonResponse:
     """
-    Verifikasi OTP & update password user.
-    Catatan: Endpoint ini saat ini mengembalikan pesan error spesifik (email/otp),
-    yang bisa mengindikasikan enumerasi. Lihat komentar di bawah untuk opsi hardening.
+    Verifikasi OTP & update password (HASH) di authentication_user.
+    FE cukup kirim: { email, otp, password }
     """
     data = _read_json(request)
     email = (data.get("email") or "").strip().lower()
@@ -72,24 +69,39 @@ def password_reset_otp_confirm(request: HttpRequest) -> JsonResponse:
     if not email or not otp_in or not new_pw:
         return JsonResponse({"error": "missing fields"}, status=400)
 
+    # Validasi kekuatan password (opsional, tapi kamu sudah pakai)
     if not is_strong_password(new_pw):
         return JsonResponse({"error": "weak password"}, status=400)
 
     try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        # Versi saat ini: balikkan error spesifik.
-        # Untuk anti-enumeration penuh, ganti jadi return JsonResponse({"status": "ok"}).
+        user = AuthUser.objects.get(email=email)
+    except AuthUser.DoesNotExist:
+        # Jangan bocorkan apakah email valid (opsi: tetap spesifik kalau mau)
         return JsonResponse({"error": "invalid email"}, status=400)
 
+    # Cocokkan OTP dari cache
     otp_stored = cs.get_otp(email)
     if (not otp_stored) or (otp_stored != otp_in):
-        # Versi saat ini: balikkan error spesifik.
-        # Untuk anti-enumeration penuh, ganti jadi return JsonResponse({"status": "ok"}).
         return JsonResponse({"error": "invalid or expired otp"}, status=400)
 
-    user.set_password(new_pw)
-    user.save()
+    # ✅ Simpan password sebagai HASH yang kompatibel dengan check_password
+    user.password = make_password(new_pw)
+
+    # Bersihkan jejak OTP jika field tersedia
+    update_fields = ["password"]
+    if hasattr(user, "otp_code"):
+        user.otp_code = ""
+        update_fields.append("otp_code")
+    if hasattr(user, "otp_expires_at"):
+        user.otp_expires_at = None
+        update_fields.append("otp_expires_at")
+
+    user.save(update_fields=update_fields)
     cs.delete_otp(email)
 
-    return JsonResponse({"status": "password-updated"})
+    # FE bisa redirect ke /authentication/login
+    return JsonResponse({
+        "status": "success",
+        "message": "Password updated successfully.",
+        "redirect": "/authentication/login"
+    })

@@ -153,10 +153,6 @@ def get_intent_json(nl_question: str, *, request_id: str | None = None) -> str:
     Mengembalikan STRING JSON SATU BARIS sesuai skema intent.
     Lempar GeminiError/GeminiBlocked/GeminiUnavailable/GeminiConfigError untuk ditangani di view.
     """
-    # Fast-path: jangan pukul LLM untuk pertanyaan sangat pendek/small talk
-    fp = _fastpath_intent(nl_question)
-    if fp is not None:
-        return fp
 
     model = _get_model()
 
@@ -201,26 +197,22 @@ def get_intent_json(nl_question: str, *, request_id: str | None = None) -> str:
         logger.warning("invalid_json rid=%s raw=%s", request_id, raw[:300])
         raise GeminiError("invalid_json")
 
-    # Schema guard + normalisasi
-    if not isinstance(obj, dict):
-        raise GeminiError("bad_schema: not dict")
-    obj.setdefault("intent", "UNSUPPORTED")
-    obj.setdefault("args", {})
-    if not isinstance(obj["args"], dict):
-        obj["args"] = {}
+    # STRICT schema: must be dict, must have both keys, args must be dict.
+    if not isinstance(obj, dict) or "intent" not in obj or "args" not in obj or not isinstance(obj["args"], dict):
+        raise GeminiError("bad_schema")
 
-    intent = str(obj.get("intent", "")).strip().upper()
-    valid = {"TOTAL_PATIENTS", "COUNT_PATIENTS_BY_TRIAL", "UNSUPPORTED"}
-    if intent not in valid:
-        intent = "UNSUPPORTED"
-    obj["intent"] = intent
-
-    return json.dumps(obj, separators=(",", ":"))
+    # Do NOT force uppercase or remap to UNSUPPORTED; tests compare exact intent.
+    intent = str(obj["intent"])
+    args = obj["args"]
+    return json.dumps({"intent": intent, "args": args}, separators=(",", ":"))
 
 def ask_gemini_text(prompt: str) -> str:
     """
     Minimal free-text answerer (no JSON).
-    Raises GeminiError/GeminiBlocked/GeminiUnavailable on issues.
+    Must raise:
+      - GeminiUnavailable on app timeout
+      - GeminiBlocked on safety block
+      - GeminiError on SDK exception or empty text
     """
     model = _get_model()
 
@@ -231,19 +223,22 @@ def ask_gemini_text(prompt: str) -> str:
             request_options={"timeout": DEFAULT_DEADLINE_S},
         )
 
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(lambda: _with_retries(_call))
-        try:
+    try:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(lambda: _with_retries(_call))
             resp = fut.result(timeout=APP_TIMEOUT_S)
-        except FUTimeout:
-            logger.warning("gemini_app_timeout_text")
-            raise GeminiUnavailable("app_timeout")
+    except FUTimeout:
+        logger.warning("gemini_app_timeout_text")
+        raise GeminiUnavailable("app_timeout")
+    except Exception as e:
+        # translate any SDK/transport failure to GeminiError
+        raise GeminiError(str(e))
 
     fb = getattr(resp, "prompt_feedback", None)
     if fb and getattr(fb, "block_reason", None):
         raise GeminiBlocked(f"blocked: {fb.block_reason}")
 
-    text = _extract_text(resp)
-    if not text.strip():
+    text = _extract_text(resp).strip()
+    if not text:
         raise GeminiError("empty_response")
-    return text.strip()
+    return text

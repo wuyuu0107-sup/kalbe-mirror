@@ -25,20 +25,20 @@ def send_otp_email(user):
         # Generate OTP
         otp_code = user.generate_otp()
         
-        subject = "Verify Your Email - OTP Code"
+        subject = "Verifikasi Email - Kode OTP"
         message = f"""
-        Hello {user.display_name},
+        Halo {user.display_name},
         
-        Your OTP verification code is: {otp_code}
+        Kode verifikasi OTP Anda adalah: {otp_code}
         
-        This code will expire in 10 minutes.
+        Kode ini akan kadaluwarsa dalam 10 menit.
         
-        Please enter this code on the website to verify your email address.
+        Silakan masukkan kode ini di website untuk memverifikasi alamat email Anda.
         
-        If you didn't create this account, please ignore this email.
+        Jika Anda tidak membuat akun ini, abaikan email ini.
         
-        Best regards,
-        Kalbe Platform Team
+        Salam,
+        Tim Platform Kalbe
         """
         
         send_mail(
@@ -58,19 +58,19 @@ def send_otp_email(user):
 def send_welcome_email(user):
     """Send welcome email to newly verified user"""
     try:
-        subject = "Welcome to Kalbe Platform!"
+        subject = "Selamat Datang di Platform Kalbe!"
         message = f"""
-        Hello {user.display_name},
+        Halo {user.display_name},
         
-        Welcome to Kalbe Platform! Your email has been successfully verified.
+        Selamat datang di Platform Kalbe! Email Anda telah berhasil diverifikasi.
         
         Username: {user.username}
         Email: {user.email}
         
-        You can now log in to your account and start using our services.
+        Anda sekarang dapat masuk ke akun Anda dan mulai menggunakan layanan kami.
         
-        Best regards,
-        Kalbe Platform Team
+        Salam,
+        Tim Platform Kalbe
         """
         
         send_mail(

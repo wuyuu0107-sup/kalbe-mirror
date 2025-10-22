@@ -15,6 +15,8 @@ urlpatterns = [
     # CSRF endpoint used by the frontend: GET http://localhost:8000/api/csrf/
     path("api/csrf/", csrf_view),
 
+    path("api/chat/", include("chat.urls")),
+
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
     path('auth/', include('authentication.urls')),
@@ -22,8 +24,6 @@ urlpatterns = [
     path('ocr/', include('ocr.urls')),
     path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
     path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
-    path('auth/', include('authentication.urls')),
-    path('api/protected-endpoint/', protected_endpoint),
     path('', include('annotation.urls')),
     path('csv/', include('csv_export.urls')),
     path('save-to-database/', include('save_to_database.urls')),

@@ -2,6 +2,7 @@ import os
 import re
 import time
 import json
+import logging
 
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -20,6 +21,8 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from dotenv import load_dotenv
 
+# LOGGING
+logger = logging.getLogger(__name__)
 
 # --- PDF support flag for tests / optional dependency ---
 try:
@@ -392,6 +395,29 @@ Provide ONLY a single JSON object with those sections/keys.
 
                     # Upload PDF
                     _ = storage.upload(path=storage_path, file=pdf_bytes, file_options=file_opts)
+
+                    # Create signed URL (valid for 1 hour)
+                    try:
+                        signed_res = storage.create_signed_url(storage_path, 60 * 60)
+                        def _to_url(val):
+                            if isinstance(val, str):
+                                return val
+                            if isinstance(val, dict):
+                                return (
+                                    val.get("signedURL")
+                                    or val.get("signed_url")
+                                    or val.get("publicURL")
+                                    or val.get("public_url")
+                                    or val.get("url")
+                                )
+                            return None
+
+                        supabase_pdf_url = _to_url(signed_res)
+                    except Exception as e:
+                        logger.warning("Failed to create signed URL for %s: %s", storage_path, e)
+                        supabase_pdf_url = None
+
+
 
                     # Helper to normalize SDK return types (str / dict)
                     def _to_url(val):

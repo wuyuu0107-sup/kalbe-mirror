@@ -9,7 +9,7 @@ from django.conf import settings
 
 from .repo import DB
 from .sqlgen import build_sql
-from .llm import get_intent_json, GeminiError, GeminiBlocked, ask_gemini_text
+from .llm import get_intent_json, GeminiError, GeminiBlocked, ask_gemini_text, GeminiUnavailable
 from .intent import parse_intent, Intent
 
 logger = logging.getLogger(__name__)
@@ -275,10 +275,6 @@ def _find_file_path(bucket: str, filename: str) -> Optional[str]:
 
 
 def _get_json_from_storage(filename: str) -> str:
-    """
-    Download file JSON dari Supabase Storage bucket _SUPABASE_BUCKET.
-    Return: pretty-printed JSON string atau pesan error yang ramah.
-    """
     if not filename or not filename.endswith(".json"):
         return "Nama file tidak valid."
 
@@ -332,7 +328,6 @@ def answer_question(nl: str) -> str:
             logger.exception("list_buckets failed")
             return f"Gagal membaca daftar buckets: {e}"
 
-    # whoami
     if intent.intent == "SUPABASE_WHOAMI":
         try:
             url = os.getenv("SUPABASE_URL") or ""
@@ -385,10 +380,14 @@ def answer_question(nl: str) -> str:
         if use_gemini:
             try:
                 return ask_gemini_text(nl)
-            except (GeminiBlocked, GeminiError) as e:
+            except (GeminiBlocked, GeminiUnavailable, GeminiError) as e:
                 logger.info("Gemini fallback to static help: %s", e)
-        return ("Aku bisa: (1) total pasien, (2) jumlah pasien per uji klinis, "
+                return "[demo] Model sementara tidak tersedia."
+        base = ("Aku bisa: (1) total pasien, (2) jumlah pasien per uji klinis, "
                 "(3) jumlah user (auth_user), (4) ambil file JSON dari Supabase Storage, mis. 'ambilkan saya data_1.json'.")
+        base += " Enable USE_GEMINI untuk jawaban bahasa alami yang lebih pintar."
+        return base
+
 
     # patients by trial: ensure name
     if intent.intent == "COUNT_PATIENTS_BY_TRIAL":
@@ -413,7 +412,6 @@ def answer_question(nl: str) -> str:
             return ("Tidak bisa mengakses tabel auth_user saat ini. "
                     "Periksa koneksi DB, kredensial, atau migrasi Django (lihat log).")
 
-    # fetch JSON from storage
     if intent.intent == "GET_FILE_BY_NAME":
         filename = intent.args.get("filename")
         return _get_json_from_storage(filename)

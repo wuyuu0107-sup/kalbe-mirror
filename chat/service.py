@@ -4,6 +4,10 @@ import re
 import json
 from typing import Optional, List
 import logging
+import base64
+import json as _json
+import re as _re
+from urllib.parse import urlparse
 
 from django.conf import settings
 
@@ -30,8 +34,7 @@ if create_client and _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
     _supabase = create_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
 
 # ========== DEBUG BUCKET ========
-import base64, json as _json, re as _re
-from urllib.parse import urlparse
+
 
 def _jwt_role(api_key: str) -> str | None:
     # Supabase keys = JWT. Ambil payload (bagian tengah) dan baca claim 'role'

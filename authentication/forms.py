@@ -4,10 +4,6 @@ from django.contrib.auth.hashers import check_password
 from authentication.models import User
 from authentication.validators import (validate_username, validate_password, validate_display_name, validate_email)
 
-# Constants for error messages to avoid duplication
-PASSWORD_REQUIRED_MSG = 'Password is required.'
-PASSWORD_MAX_LENGTH_MSG = 'Password must be 255 characters or less.'
-
 class LoginForm(forms.Form):
     username = forms.CharField(
         max_length=150,
@@ -23,8 +19,8 @@ class LoginForm(forms.Form):
         strip=True,
         required=True,
         error_messages={
-            'required': PASSWORD_REQUIRED_MSG,
-            'max_length': PASSWORD_MAX_LENGTH_MSG
+            'required': 'Password is required.',
+            'max_length': 'Password must be 255 characters or less.'
         }
     )
 
@@ -33,12 +29,7 @@ class LoginForm(forms.Form):
         return validate_username(username)
 
     def clean_password(self):
-        # For login, just return the password without validation
-        # We only need to check if it matches, not if it meets requirements
-        password = self.cleaned_data.get('password')
-        if not password:
-            raise forms.ValidationError(PASSWORD_REQUIRED_MSG)
-        return password
+        return validate_password(self.cleaned_data.get('password'))
 
     def authenticate(self):
         if not self.is_valid():
@@ -69,8 +60,8 @@ class RegistrationForm(forms.Form):
         strip=True,
         required=True,
         error_messages={
-            'required': PASSWORD_REQUIRED_MSG,
-            'max_length': PASSWORD_MAX_LENGTH_MSG
+            'required': 'Password is required.',
+            'max_length': 'Password must be 255 characters or less.'
         }
     )
     confirm_password = forms.CharField(
@@ -79,7 +70,7 @@ class RegistrationForm(forms.Form):
         required=True,
         error_messages={
             'required': 'Password confirmation is required.',
-            'max_length': PASSWORD_MAX_LENGTH_MSG
+            'max_length': 'Password must be 255 characters or less.'
         }
     )
     display_name = forms.CharField(

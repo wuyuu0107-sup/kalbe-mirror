@@ -444,3 +444,37 @@ class ResponseFormatTests(ViewsTestCase):
         self.assertIn('details', response_data)
         self.assertIsInstance(response_data['error'], str)
         self.assertIsInstance(response_data['details'], str)
+
+
+class UpdateCsvRecordViewExceptionTests(ViewsTestCase):
+    """Tests update_csv_record view exception handling."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.csv_record = CSV.objects.create(
+            name="dummy",
+            source_json=[{"key": "value"}]
+        )
+        self.url = reverse(
+            'save_to_database:update_csv_record',
+            kwargs={'pk': self.csv_record.pk}
+        )
+
+    @patch('save_to_database.views.update_converted_csv')
+    def test_update_csv_record_raises_exception_returns_500(self, mock_update):
+        """Test that an exception in update_converted_csv returns a 500 error."""
+        mock_update.side_effect = Exception("Something went wrong")
+
+        response = self.client.put(
+            self.url,
+            data=json.dumps(self.valid_data),
+            content_type='application/json'
+        )
+
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], 'Failed to update CSV record')
+        self.assertIn('details', data)
+        self.assertEqual(data['details'], 'Something went wrong')

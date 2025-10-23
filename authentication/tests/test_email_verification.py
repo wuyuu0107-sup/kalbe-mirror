@@ -6,10 +6,6 @@ from authentication.models import User
 from django.utils import timezone
 from datetime import timedelta
 import uuid
-import os
-
-# Test constants to avoid hardcoded sensitive data
-TEST_PASSWORD = os.environ.get('TEST_PASSWORD', 'TestSec@123#Pass')
 
 
 class EmailVerificationTest(TestCase):
@@ -21,7 +17,7 @@ class EmailVerificationTest(TestCase):
         # Create test user that is already verified
         self.verified_user = User.objects.create(
             username="verified_user",
-            password=make_password(TEST_PASSWORD),
+            password=make_password("testpass123"),
             display_name="Verified User",
             email="verified@example.com",
             is_verified=True,
@@ -36,7 +32,7 @@ class EmailVerificationTest(TestCase):
         # Create an unverified user
         unverified_user = User.objects.create(
             username="unverified",
-            password=make_password(TEST_PASSWORD),
+            password=make_password("testpass123"),
             display_name="Unverified User",
             email="unverified@example.com",
             is_verified=False,
@@ -99,7 +95,7 @@ class EmailVerificationTest(TestCase):
         # Create an unverified user
         unverified_user = User.objects.create(
             username="unverified2",
-            password=make_password(TEST_PASSWORD),
+            password=make_password("testpass123"),
             display_name="Unverified User 2",
             email="unverified2@example.com",
             is_verified=False,
@@ -176,6 +172,31 @@ class EmailVerificationTest(TestCase):
         self.assertIsInstance(user1.verification_token, uuid.UUID)
         self.assertIsInstance(user2.verification_token, uuid.UUID)
 
+    def test_email_verification_fields(self):
+        """Test that email verification fields exist and work properly on User model"""
+        # Create unverified user
+        user = User.objects.create(
+            username="testverification",
+            password="password123",
+            display_name="Test Verification",
+            email="testverification@example.com",
+            is_verified=False
+        )
+        
+        # By default, user should not be verified
+        self.assertFalse(user.is_verified)
+        self.assertIsNotNone(user.verification_token)
+        self.assertFalse(user.is_authenticated)  # Should not be authenticated if unverified
+
+        # Simulate verifying the user
+        user.is_verified = True
+        user.save()
+
+        # Reload from DB to confirm
+        refreshed = User.objects.get(pk=user.user_id)
+        self.assertTrue(refreshed.is_verified)
+        self.assertTrue(refreshed.is_authenticated)  # Should be authenticated after verification
+
     def test_generate_otp(self):
         """Test OTP generation"""
         user = User.objects.create(
@@ -217,7 +238,7 @@ class EmailVerificationTest(TestCase):
         self.assertTrue(result)
         user.refresh_from_db()
         self.assertTrue(user.is_verified)
-        self.assertEqual(user.otp_code, '')  # Changed from assertIsNone to empty string
+        self.assertIsNone(user.otp_code)
         self.assertIsNone(user.otp_expires_at)
 
     def test_verify_otp_invalid_code(self):
@@ -265,7 +286,7 @@ class EmailVerificationTest(TestCase):
         user.refresh_from_db()
         self.assertFalse(user.is_verified)
         # OTP should be cleared when expired
-        self.assertEqual(user.otp_code, '')  # Changed from assertIsNone to empty string
+        self.assertIsNone(user.otp_code)
         self.assertIsNone(user.otp_expires_at)
 
     def test_is_otp_expired(self):

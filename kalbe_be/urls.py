@@ -27,6 +27,9 @@ urlpatterns = [
     path('', include('annotation.urls')),
     path('csv/', include('csv_export.urls')),
     path('save-to-database/', include('save_to_database.urls')),
-    ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path('dataset/', include('dataset.urls')),
+    path('dashboard/', include('dashboard.urls')),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

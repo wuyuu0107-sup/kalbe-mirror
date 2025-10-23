@@ -16,6 +16,13 @@ from dashboard.services.feature_usage import get_recent_features
 
 # Create your views here.
 
+def whoami(request):
+    return JsonResponse({
+        "cookie_sessionid": request.COOKIES.get("sessionid"),
+        "user_id": request.session.get("user_id"),
+        "username": request.session.get("username"),
+    })
+
 def recent_files_json(request):
     items = get_recent_files()
     for i in items:

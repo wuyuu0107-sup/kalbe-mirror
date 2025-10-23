@@ -50,7 +50,7 @@ def get_storage():
     if url and key:
         try:
             return SupabaseCSVStorage(url, key)
-        except Exception as e:
+        except Exception:
             # If supabase client missing/misconfigured, fail safe
             return NullStorage()
     return NullStorage()

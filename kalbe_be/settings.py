@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "save_to_database",
     "dashboard",
+    "chat", 
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -214,3 +215,7 @@ else:
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 EMAIL_TIMEOUT = 10
+
+# Gemini
+GEMINI_API_KEY = config("GEMINI_API_KEY")
+GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")

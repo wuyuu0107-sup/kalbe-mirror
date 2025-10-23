@@ -1,7 +1,7 @@
 django
 gunicorn
 whitenoise
-psycopg2-binary
+psycopg[binary]==3.2.3
 requests
 urllib3
 dj_database_url

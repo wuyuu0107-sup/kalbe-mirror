@@ -25,9 +25,9 @@ def whoami(request):
     })
 
 @csrf_exempt
-def recent_files_json(request):
+def recent_files_json(request, limit):
     try:
-        items = get_recent_files()
+        items = get_recent_files(limit)
         print("DEBUG: get_recent_files() returned:", items)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)

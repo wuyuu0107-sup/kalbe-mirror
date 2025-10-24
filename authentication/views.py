@@ -5,11 +5,15 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
 import json
 import logging
+
+# Constants for error messages
+INVALID_PAYLOAD_MSG = "invalid payload"
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -21,20 +25,20 @@ def send_otp_email(user):
         # Generate OTP
         otp_code = user.generate_otp()
         
-        subject = "Verify Your Email - OTP Code"
+        subject = "Verifikasi Email - Kode OTP"
         message = f"""
-        Hello {user.display_name},
+        Halo {user.display_name},
         
-        Your OTP verification code is: {otp_code}
+        Kode verifikasi OTP Anda adalah: {otp_code}
         
-        This code will expire in 10 minutes.
+        Kode ini akan kadaluwarsa dalam 10 menit.
         
-        Please enter this code on the website to verify your email address.
+        Silakan masukkan kode ini di website untuk memverifikasi alamat email Anda.
         
-        If you didn't create this account, please ignore this email.
+        Jika Anda tidak membuat akun ini, abaikan email ini.
         
-        Best regards,
-        Kalbe Platform Team
+        Salam,
+        Tim Platform Kalbe
         """
         
         send_mail(
@@ -54,19 +58,19 @@ def send_otp_email(user):
 def send_welcome_email(user):
     """Send welcome email to newly verified user"""
     try:
-        subject = "Welcome to Kalbe Platform!"
+        subject = "Selamat Datang di Platform Kalbe!"
         message = f"""
-        Hello {user.display_name},
+        Halo {user.display_name},
         
-        Welcome to Kalbe Platform! Your email has been successfully verified.
+        Selamat datang di Platform Kalbe! Email Anda telah berhasil diverifikasi.
         
         Username: {user.username}
         Email: {user.email}
         
-        You can now log in to your account and start using our services.
+        Anda sekarang dapat masuk ke akun Anda dan mulai menggunakan layanan kami.
         
-        Best regards,
-        Kalbe Platform Team
+        Salam,
+        Tim Platform Kalbe
         """
         
         send_mail(
@@ -93,11 +97,11 @@ def login(request):
         try:
             text = raw.decode('utf-8')
         except UnicodeDecodeError:
-            return JsonResponse({"error": "invalid payload"}, status=400)
+            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            return JsonResponse({"error": "invalid payload"}, status=400)
+            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
 
     # Create form instance with data
     form = LoginForm(data)
@@ -109,12 +113,17 @@ def login(request):
             errors[field] = error_list[0]  # Get first error for each field
         return JsonResponse({"errors": errors, "error": errors}, status=400)
     
-    # Get username and password from form
+    # Get username from form
     username = form.cleaned_data['username']
-    password = form.cleaned_data['password']
     
     try:
         user = User.objects.get(username=username)
+        
+        # 🚨 NEW: Check if account is locked BEFORE password check
+        if user.is_account_locked():
+            return JsonResponse({
+                "error": "Account is temporarily locked due to too many failed attempts. Please try again later."
+            }, status=423)  # 423 Locked
         
         # Check password using the form's authenticate method
         if form.authenticate():
@@ -125,6 +134,9 @@ def login(request):
                     "message": "Please verify your email before logging in"
                 }, status=403)
             
+            # 🚨 NEW: Reset failed attempts on successful login
+            user.reset_failed_login_attempts()
+            
             # Set session and login
             request.session['user_id'] = str(user.user_id)
             request.session['username'] = user.username
@@ -133,17 +145,25 @@ def login(request):
                 "user_id": f"user {user.user_id}",
                 "username": user.username,
                 "display_name": user.display_name,
-                "email": user.email,
+                "email" : user.email,
                 "message": "Login successful"
             }, status=200)
         else:
-            # Simple invalid credentials response
-            return JsonResponse({
-                "error": "Invalid username or password"
-            }, status=401)
+            # 🚨 NEW: Increment failed attempts on wrong password
+            account_locked = user.increment_failed_login()
+            
+            if account_locked:
+                return JsonResponse({
+                    "error": "Account is temporarily locked for 30 minutes due to too many failed attempts. Please try again later."
+                }, status=423)
+            else:
+                # Don't show remaining attempts for security reasons
+                return JsonResponse({
+                    "error": "Invalid credentials"
+                }, status=401)
                 
     except User.DoesNotExist:
-        return JsonResponse({"error": "Invalid username or password"}, status=401)
+        return JsonResponse({"error": "invalid credentials"}, status=401)
 
 
 @csrf_exempt  
@@ -159,7 +179,7 @@ def register_profile(request):
     try: 
         data = json.loads(request.body.decode() or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid payload"}, status=400)
+        return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
     
     # Create form instance with data
     form = RegistrationForm(data)

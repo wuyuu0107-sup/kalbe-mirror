@@ -85,9 +85,12 @@ INSTALLED_APPS = [
     'ocr',
     'csv_export',
     "annotation",
+    "dataset",
     "django_filters",
     "rest_framework",
     "save_to_database",
+    "dashboard",
+    "chat", 
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -99,9 +102,6 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    'corsheaders',
-    "ocr",
-    "csv_export"
 ]
 
 # Security basics (dev values; prod => True + HTTPS)
@@ -215,3 +215,8 @@ else:
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 EMAIL_TIMEOUT = 10
+
+GEMINI_API_KEY = config("GEMINI_API_KEY", default=None)
+GEMINI_MODEL   = config("GEMINI_MODEL", default="gemini-2.5-flash")
+GEMINI_TEMP    = config("GEMINI_TEMP", cast=float, default=0.4)
+USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)

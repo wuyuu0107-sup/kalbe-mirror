@@ -22,8 +22,6 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from dotenv import load_dotenv
 
-# LOGGING
-logger = logging.getLogger(__name__)
 
 # --- PDF support flag for tests / optional dependency ---
 try:

@@ -3,6 +3,7 @@ from urllib.parse import unquote
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
 from authentication.models import User
+from django.views.decorators.csrf import csrf_exempt
 
 # Uncomment when being used
 # from django.contrib.auth.decorators import login_required
@@ -23,8 +24,14 @@ def whoami(request):
         "username": request.session.get("username"),
     })
 
+@csrf_exempt
 def recent_files_json(request):
-    items = get_recent_files()
+    try:
+        items = get_recent_files()
+        print("DEBUG: get_recent_files() returned:", items)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
     for i in items:
         if hasattr(i.get("updated_at"), "isoformat"):
             i["updated_at"] = i["updated_at"].isoformat()

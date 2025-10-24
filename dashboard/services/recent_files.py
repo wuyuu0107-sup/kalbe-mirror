@@ -1,6 +1,7 @@
 from datetime import datetime, MINYEAR
 from ..storage import get_storage
 
+
 def get_recent_files():
     storage = get_storage()
     items = list(storage.list_csv())

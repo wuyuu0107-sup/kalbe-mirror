@@ -1,6 +1,6 @@
 # chat/repo.py
 import os
-import psycopg2
+import psycopg
 
 class DB:
     def __init__(self):
@@ -11,7 +11,7 @@ class DB:
             dsn = os.getenv("DATABASE_URL")
             if not dsn:
                 raise RuntimeError("DATABASE_URL is not set")
-            self.conn = psycopg2.connect(dsn, autocommit=True)
+            self.conn = psycopg.connect(dsn, autocommit=True)
 
     def fetch_one(self, sql, params=None):
         self._ensure_conn()

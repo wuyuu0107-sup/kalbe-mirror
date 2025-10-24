@@ -2,9 +2,10 @@ from datetime import datetime, MINYEAR
 from ..storage import get_storage
 
 
-def get_recent_files():
+def get_recent_files(limit=10):
     storage = get_storage()
     items = list(storage.list_csv())
+    items = items[:limit]
 
     norm = []
     for i in items:

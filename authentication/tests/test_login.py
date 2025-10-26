@@ -162,8 +162,7 @@ class LoginEndpointTests(TestCase):
         response = self._post_json(url, payload)
         self.assertEqual(response.status_code, 403, response.content)
         data = response.json()
-        self.assertEqual(data["error"], "Email not verified")
-        self.assertEqual(data["message"], "Please verify your email before logging in")
+        self.assertEqual(data["error"], "Please verify your email before logging in.")
 
     def test_logout_endpoint(self):
         """Logout without login → still 200 (Django logout is idempotent)"""

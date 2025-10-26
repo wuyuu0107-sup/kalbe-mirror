@@ -24,7 +24,7 @@ def handle_failed_login(user):
     account_locked = user.increment_failed_login()
     if account_locked:
         return JsonResponse({
-            "error": "Account temporarily locked. Please try again later."
+            "error": "Account is temporarily locked"
         }, status=423)
     return JsonResponse({"error": "Invalid credentials"}, status=401)
 

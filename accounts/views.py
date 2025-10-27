@@ -40,7 +40,7 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
     if AuthUser.objects.filter(email=email).exists():
         otp = generate_otp(6)
         cache.set(f"pwdreset:{email}", otp, timeout=10 * 60)  # 10 menit
-        # TODO: kirim OTP via email/SMS/WhatsApp
+        # TODO: kirim OTP via email
     return JsonResponse({"status": "ok"})
 
 
@@ -63,16 +63,15 @@ def reset_password_confirm(request: HttpRequest) -> JsonResponse:
 
     cached = cache.get(f"pwdreset:{email}")
     if not cached or cached != otp:
-        return JsonResponse({"status": "ok"})  # generik
+        return JsonResponse({"status": "ok"})  
 
     try:
         user = AuthUser.objects.get(email=email)
     except AuthUser.DoesNotExist:
-        return JsonResponse({"status": "ok"})  # generik
+        return JsonResponse({"status": "ok"})  
 
-    # MODEL kamu pakai CharField password biasa → assign langsung
+    
     user.password = new_password
-    # Optional: update last_accessed kalau ada
     if hasattr(user, "last_accessed"):
         user.last_accessed = timezone.now()
         user.save(update_fields=["password", "last_accessed"])

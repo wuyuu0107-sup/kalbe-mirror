@@ -1,7 +1,6 @@
 # accounts/views.py
 import json
 from typing import Any, Dict
-from datetime import timedelta
 
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpRequest

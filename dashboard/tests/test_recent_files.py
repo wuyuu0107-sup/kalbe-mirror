@@ -16,9 +16,10 @@ class RecentFilesViewsTests(TestCase):
              "path":"x.csv"}
         ]
 
-        url = reverse("dashboard:recent-files-json")
+        url = reverse("dashboard:recent-files-json", args=[10])
         res = self.client.get(url)
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data[0]["name"], "x.csv")
         self.assertIn("T", data[0]["updated_at"])
+        mock_service.assert_called_once_with(10)

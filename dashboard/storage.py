@@ -22,7 +22,6 @@ class SupabaseCSVStorage:
     def list_csv(self):
         objs = self._storage.list(self.folder) or []
         objs.sort(key=lambda o: o["name"], reverse=True)
-        objs = objs[:10]
 
         out: List[Dict[str, Any]] = []
 

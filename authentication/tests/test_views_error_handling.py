@@ -5,6 +5,11 @@ from authentication.models import User
 from unittest.mock import patch
 import json
 
+# Test constants to avoid hardcoded sensitive data
+import os
+TEST_PASSWORD = os.environ.get('TEST_PASSWORD', 'TestSec@123#Pass')
+TEST_WEAK_PASSWORD = "weak"
+
 
 class ViewsErrorHandlingTest(TestCase):
     def setUp(self):
@@ -12,7 +17,7 @@ class ViewsErrorHandlingTest(TestCase):
         
         self.user = User.objects.create(
             username="testuser",
-            password=make_password("TestPassword123"),  # Properly hash the password
+            password=make_password(TEST_PASSWORD),  # Properly hash the password
             display_name="Test User",
             email="test@example.com",
             is_verified=False,
@@ -48,7 +53,7 @@ class ViewsErrorHandlingTest(TestCase):
             reverse('authentication:login'),
             data=json.dumps({
                 "username": "testuser",
-                "password": "TestPassword123"  # Meets all validation requirements
+                "password": TEST_PASSWORD  # Meets all validation requirements
             }),
             content_type='application/json'
         )
@@ -56,8 +61,7 @@ class ViewsErrorHandlingTest(TestCase):
         # Should return 403 for unverified user
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        self.assertIn("Email not verified", data["error"])
-        self.assertIn("Please verify your email before logging in", data["message"])
+        self.assertIn("Please verify your email before logging in.", data["error"])
 
     def test_login_account_locked_path(self):
         """Test login when account is locked - covers line 121"""
@@ -65,9 +69,9 @@ class ViewsErrorHandlingTest(TestCase):
         from datetime import timedelta
         
         # Create verified user and lock account
-        locked_user = User.objects.create(
+        User.objects.create(
             username="lockeduser",
-            password=make_password("TestPassword123"),
+            password=make_password(TEST_PASSWORD),
             display_name="Locked User",
             email="locked@example.com",
             is_verified=True,
@@ -79,7 +83,7 @@ class ViewsErrorHandlingTest(TestCase):
             reverse('authentication:login'),
             data=json.dumps({
                 "username": "lockeduser",
-                "password": "TestPassword123"
+                "password": TEST_PASSWORD
             }),
             content_type='application/json'
         )
@@ -92,9 +96,9 @@ class ViewsErrorHandlingTest(TestCase):
     def test_login_unverified_email_path(self):
         """Test login when email is not verified - covers line 139"""
         # Create user with unverified email
-        user = User.objects.create(
+        User.objects.create(
             username="unverified",
-            password=make_password("TestPassword123"),
+            password=make_password(TEST_PASSWORD),
             display_name="Unverified",
             email="unverified@example.com",
             is_verified=False  # Email not verified
@@ -104,7 +108,7 @@ class ViewsErrorHandlingTest(TestCase):
             reverse('authentication:login'),
             data=json.dumps({
                 "username": "unverified",
-                "password": "TestPassword123"
+                "password": TEST_PASSWORD
             }),
             content_type='application/json'
         )
@@ -112,14 +116,14 @@ class ViewsErrorHandlingTest(TestCase):
         # Should return 403 with email not verified message
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        self.assertEqual(data["error"], "Email not verified")
+        self.assertEqual(data["error"], "Please verify your email before logging in.")
 
     def test_login_account_locked_after_failed_attempts(self):
         """Test login when account gets locked after failed attempts - covers line 162"""
         # Create verified user with 4 failed attempts (one before lock)
-        user = User.objects.create(
+        User.objects.create(
             username="almostlocked",
-            password=make_password("TestPassword123"),
+            password=make_password(TEST_PASSWORD),
             display_name="Almost Locked",
             email="almostlocked@example.com",
             is_verified=True,

@@ -3,6 +3,10 @@ from django.contrib.auth.hashers import make_password
 from authentication.forms import LoginForm, RegistrationForm
 from authentication.models import User
 from django import forms
+import os
+
+# Test constants to avoid hardcoded sensitive data
+TEST_PASSWORD = os.environ.get('TEST_PASSWORD', 'TestSec@123#Pass')
 
 
 class LoginFormTest(TestCase):
@@ -11,7 +15,7 @@ class LoginFormTest(TestCase):
         #Set up test data
         self.test_user = User.objects.create(
             username="testuser",
-            password=make_password("TestPass123"),
+            password=make_password(TEST_PASSWORD),
             email="test@example.com",
             display_name="Test User",
             is_verified=True
@@ -105,7 +109,7 @@ class LoginFormTest(TestCase):
         #Test authentication with valid credentials
         form_data = {
             'username': 'testuser',
-            'password': 'TestPass123'
+            'password': TEST_PASSWORD  # Use the same password as in setUp
         }
         form = LoginForm(data=form_data)
         self.assertTrue(form.is_valid())
@@ -188,7 +192,7 @@ class RegistrationFormTest(TestCase):
         """Set up test data"""
         self.existing_user = User.objects.create(
             username="existinguser",
-            password=make_password("ExistingPass123"),
+            password=make_password(TEST_PASSWORD),
             email="existing@example.com",
             display_name="Existing User"
         )

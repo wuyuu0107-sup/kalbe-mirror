@@ -2,23 +2,30 @@
 from unittest.mock import patch, Mock, MagicMock
 from types import SimpleNamespace as NS
 
-from django.contrib.auth import get_user_model
+from authentication.models import User
 from django.urls import reverse
 from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APITestCase, APIClient
+from django.contrib.auth.hashers import make_password
 
 from chat.models import ChatSession
-
-User = get_user_model()
-
 
 # =========================
 # Integration-style API tests (views)
 # =========================
 class ChatFlowTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="geordie", password="pw")
-        self.client.force_authenticate(user=self.user)
+        self.user=User.objects.create(
+            username="geordie",
+            password=make_password("pw"),
+            display_name="geordie",
+            email="geordie@example.com",
+            roles=["researcher"],
+            is_verified=True
+        )
+        session = self.client.session
+        session["user_id"] = str(self.user.user_id)
+        session.save()
 
     def test_create_session_returns_201_and_session_id(self):
         # POST to "sessions" creates a session
@@ -73,8 +80,17 @@ class ChatFlowTests(APITestCase):
 # Extra view coverage (edge cases & branches)
 class ViewsExtraTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="u", password="p")
-        self.client.force_authenticate(user=self.user)
+        self.user=User.objects.create(
+            username="u",
+            password=make_password("p"),
+            display_name="u",
+            email="u@example.com",
+            roles=["researcher"],
+            is_verified=True
+        )
+        session = self.client.session
+        session["user_id"] = str(self.user.user_id)
+        session.save()
 
     def test_sessions_get_empty_then_post(self):
         ChatSession.objects.all().delete()
@@ -119,9 +135,7 @@ class ViewsExtraTests(APITestCase):
     def test_ask_success_with_form_payload(self, _m):
         sid = self.client.post(reverse("chat:sessions"), {}, format="json").json()["id"]
         # Use JSON here to avoid QueryDict list-values → .strip() issue
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        r = client.post(reverse("chat:ask", args=[sid]), {"content": "Halo via form"}, format="json")
+        r = self.client.post(reverse("chat:ask", args=[sid]), {"content": "Halo via form"}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["answer"], "jawaban mock")
 

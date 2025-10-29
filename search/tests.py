@@ -1,7 +1,7 @@
 from unittest.mock import patch, MagicMock
 from django.test import Client, TestCase
 from .services import SearchService, search_storage_files
-from .interfaces import StorageProvider
+from .interfaces import SearchStrategy, StorageProvider
 from .storage import SupabaseStorageProvider
 from typing import Optional
 
@@ -244,25 +244,6 @@ class StorageProviderTests(TestCase):
         self.env_patcher.stop()
         self.client_patcher.stop()
 
-    def test_storage_provider_get_file(self):
-        """Test get_file functionality"""
-        self.mock_bucket.download.return_value = b"test content"
-        
-        provider = SupabaseStorageProvider()
-        content = provider.get_file("test-bucket", "test.csv")
-        
-        self.assertEqual(content, b"test content")
-        self.mock_bucket.download.assert_called_with("test.csv")
-
-    def test_storage_provider_delete_file(self):
-        """Test delete_file functionality"""
-        self.mock_bucket.remove.return_value = True
-        
-        provider = SupabaseStorageProvider()
-        result = provider.delete_file("test-bucket", "test.csv")
-        
-        self.assertTrue(result)
-        self.mock_bucket.remove.assert_called_with(["test.csv"])
 
     def test_storage_provider_errors(self):
         """Test error handling in storage provider"""

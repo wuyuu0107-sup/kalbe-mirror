@@ -56,4 +56,45 @@ class StorageSearchTests(TestCase):
         self.assertTrue(any(f['name'].lower() == 'test.csv' for f in results))
         self.assertTrue(any(f['name'] == 'TEST.csv' for f in results))
 
-    
+    def test_search_files_no_matches(self):
+        """Test behavior when no files match search term"""
+        self.mock_bucket.list.return_value = [
+            {'name': 'sample1.csv', 'id': '1'},
+            {'name': 'sample2.csv', 'id': '2'}
+        ]
+
+        results = search_storage_files(bucket_name="test-bucket", search_term="test")
+
+        self.assertEqual(len(results), 0)
+
+    def test_search_files_empty_bucket(self):
+        """Test searching in an empty bucket"""
+        self.mock_bucket.list.return_value = []
+
+        results = search_storage_files(bucket_name="test-bucket", search_term="test")
+
+        self.assertEqual(len(results), 0)
+
+    def test_search_files_connection_error(self):
+        """Test handling of connection errors"""
+        self.mock_bucket.list.side_effect = Exception("Connection error")
+
+        with self.assertRaises(Exception):
+            search_storage_files(bucket_name="test-bucket", search_term="test")
+
+    def test_search_files_with_extension_filter(self):
+        """Test searching files with specific extension filter"""
+        self.mock_bucket.list.return_value = [
+            {'name': 'test.csv', 'id': '1'},
+            {'name': 'test.pdf', 'id': '2'},
+            {'name': 'sample.csv', 'id': '3'}
+        ]
+
+        results = search_storage_files(
+            bucket_name="test-bucket", 
+            search_term="test",
+            extension=".csv"
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'test.csv')

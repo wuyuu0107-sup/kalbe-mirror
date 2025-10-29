@@ -1,22 +1,40 @@
-from typing import List, Dict, Any, Optional
-from .interfaces import StorageProvider
-from supabase import create_client
 import os
+from typing import List, Dict, Any, Optional
+from supabase import create_client, Client
+from .interfaces import StorageProvider
 
 class SupabaseStorageProvider(StorageProvider):
-    """Concrete implementation of StorageProvider for Supabase"""
-
+    """Supabase implementation of storage provider"""
+    
     def __init__(self):
-        self.supabase = create_client(
-            os.getenv('SUPABASE_URL', ''),
-            os.getenv('SUPABASE_KEY', '')
-        )
+        """Initialize Supabase client"""
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            raise ValueError("Supabase configuration missing")
+        self.client = create_client(url, key)
 
     def list_files(self, bucket_name: str) -> List[Dict[str, Any]]:
-        """List all files from Supabase storage bucket"""
+        """List all files in a Supabase storage bucket"""
         try:
-            storage = self.supabase.storage
-            bucket = storage.from_(bucket_name)
+            bucket = self.client.storage.from_(bucket_name)
             return bucket.list()
         except Exception as e:
-            raise Exception(f"Storage error: {str(e)}")
+            raise Exception(f"Error listing files: {str(e)}")
+
+    def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
+        """Get file content from Supabase storage"""
+        try:
+            bucket = self.client.storage.from_(bucket_name)
+            return bucket.download(file_path)
+        except Exception as e:
+            raise Exception(f"Error downloading file: {str(e)}")
+
+    def delete_file(self, bucket_name: str, file_path: str) -> bool:
+        """Delete file from Supabase storage"""
+        try:
+            bucket = self.client.storage.from_(bucket_name)
+            bucket.remove([file_path])
+            return True  # If no exception was raised, deletion was successful
+        except Exception as e:
+            raise Exception(f"Error deleting file: {str(e)}")

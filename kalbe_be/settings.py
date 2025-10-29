@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "save_to_database",
     "dashboard",
     "chat", 
+    "predictions",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -220,3 +221,5 @@ GEMINI_API_KEY = config("GEMINI_API_KEY", default=None)
 GEMINI_MODEL   = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_TEMP    = config("GEMINI_TEMP", cast=float, default=0.4)
 USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)
+
+ML_RUNNER_PY = os.getenv('ML_RUNNER_PY', os.path.join(BASE_DIR, 'machine_learning_model', 'run_model.py'))

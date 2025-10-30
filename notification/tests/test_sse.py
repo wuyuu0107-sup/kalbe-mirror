@@ -3,7 +3,6 @@ import threading
 import time
 from django.test import TestCase, override_settings
 from django.urls import reverse
-
 from notification import sse
 
 class SSETtests(TestCase):
@@ -47,7 +46,7 @@ class SSETtests(TestCase):
         r1 = self.client.get(url)
         r2 = self.client.get(url)
 
-        g1 = iter(r1.streaming_content); _ = next(g1)  # retry
+        g1 = iter(r1.streaming_content); _ = next(g1) 
         g2 = iter(r2.streaming_content); _ = next(g2)
 
         sse.sse_send("multi", "chat.reply", data={"message_id": "m1"})

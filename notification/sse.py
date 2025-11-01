@@ -21,7 +21,7 @@ def _remove_client(session_id, q):
             _clients.pop(session_id, None)
 
 def sse_subscribe(request):
-    session_id = request.GET.get("session_id")
+    session_id = request.COOKIES.get("sessionid") or request.GET.get("session_id")
     if not session_id:
         return HttpResponseBadRequest("session_id required")
 

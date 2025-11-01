@@ -25,12 +25,11 @@ class TriggerTests(TestCase):
         self.assertEqual(kwargs["job_id"], "job1")
     
     def test_notify_chat_reply_calls_sse(self, m):
-        triggers.notify_chat_reply("sess1", message_id="msg123", job_id="job1")
+        triggers.notify_chat_reply("sess1", job_id="job1")
         m.assert_called_once()
         args, kwargs = m.call_args
         self.assertEqual(args[0], "sess1")
         self.assertEqual(args[1], "chat.reply")
-        self.assertEqual(kwargs["data"]["message_id"], "msg123")
         self.assertEqual(kwargs["job_id"], "job1")
 
 

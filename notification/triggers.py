@@ -13,7 +13,7 @@ def notify_ocr_failed(session_id, *, path, reason, job_id=None):
     data = {"path": path, "reason": reason, "message": message}
     notify(session_id, "ocr.failed", data=data, job_id=job_id)
 
-def notify_chat_reply(session_id, *, message_id, job_id=None):
+def notify_chat_reply(session_id, *, job_id=None):
     message = "Chatbot telah mengirim respons baru."
-    data = {"message_id": message_id, "message": message}
+    data = {"message": message}
     notify(session_id, "chat.reply", data=data, job_id=job_id)

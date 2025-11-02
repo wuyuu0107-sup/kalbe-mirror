@@ -17,6 +17,8 @@ urlpatterns = [
 
     path("api/chat/", include("chat.urls")),
 
+    path('api/', include('predictions.urls', namespace='predictions')),
+
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
     path('auth/', include('authentication.urls')),

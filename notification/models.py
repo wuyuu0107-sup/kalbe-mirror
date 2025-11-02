@@ -1,5 +1,4 @@
 from django.db import models
-from django.conf import settings
 from authentication.models import User
 
 class Notification(models.Model):

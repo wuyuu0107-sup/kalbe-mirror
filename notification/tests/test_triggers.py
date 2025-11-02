@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.test import TestCase
 from authentication.models import User
 from notification import triggers
@@ -92,3 +92,13 @@ class NotificationTriggersTestCase(TestCase):
         # System
         msg = triggers.get_notification_message('system', {'message': 'test'})
         self.assertEqual(msg, 'test')
+
+    @patch('notification.triggers.sse_send')
+    def test_notify_with_invalid_user_id(self, mock_sse_send):
+        """Test notify function with invalid user_id - should skip creating notification"""
+        # Use a valid UUID format but non-existent user
+        non_existent_uuid = '12345678-1234-5678-9012-123456789012'
+        triggers.notify('session123', 'test.type', data={'key': 'value'}, job_id='job123', user_id=non_existent_uuid)
+        mock_sse_send.assert_called_once_with('session123', 'test.type', data={'key': 'value'}, job_id='job123', user_id=non_existent_uuid)
+        # Should not create notification in DB due to non-existent user
+        self.assertEqual(Notification.objects.count(), 0)

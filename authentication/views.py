@@ -99,7 +99,6 @@ def login(request):
         return JsonResponse({"error": "Username and password are required"}, status=400)
 
     username = form.cleaned_data['username']
-    password = form.cleaned_data['password']
 
     user = get_user_or_none(username)
     if not user:

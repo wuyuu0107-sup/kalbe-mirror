@@ -32,6 +32,7 @@ urlpatterns = [
     path('dataset/', include('dataset.urls')),
     path('dashboard/', include('dashboard.urls')),
     path('', include('django_prometheus.urls')), 
+    path('api/user-settings/', include('user_settings.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

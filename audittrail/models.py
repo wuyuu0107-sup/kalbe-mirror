@@ -1,35 +1,32 @@
+# audittrail/models.py
 from django.db import models
 from django.conf import settings
 
 
 class ActivityLog(models.Model):
-    """
-    Central audit trail model for user and system actions.
-    """
-
     class EventType(models.TextChoices):
-        # Authentication
+        # auth / session
         USER_LOGIN = "USER_LOGIN", "User login"
         USER_LOGOUT = "USER_LOGOUT", "User logout"
 
-        # OCR / Processing
+        # dashboard / feature
+        DASHBOARD_VIEWED = "DASHBOARD_VIEWED", "Dashboard viewed"
+        FEATURE_USED = "FEATURE_USED", "Feature used"
+
+        # ocr
         OCR_UPLOADED = "OCR_UPLOADED", "OCR file uploaded"
         OCR_PROCESSED = "OCR_PROCESSED", "OCR processed"
 
-        # Annotation
+        # annotation
         ANNOTATION_CREATED = "ANNOTATION_CREATED", "Annotation created"
         ANNOTATION_UPDATED = "ANNOTATION_UPDATED", "Annotation updated"
 
-        # Dataset / CSV
+        # dataset / csv
         DATASET_SAVED = "DATASET_SAVED", "Dataset saved"
         DATASET_VIEWED = "DATASET_VIEWED", "Dataset viewed"
         DATASET_DOWNLOADED = "DATASET_DOWNLOADED", "Dataset downloaded"
 
-        # Dashboard / Feature
-        DASHBOARD_VIEWED = "DASHBOARD_VIEWED", "Dashboard viewed"
-        FEATURE_USED = "FEATURE_USED", "Feature used"
-
-    # who did it
+    # who did it (FK)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -38,13 +35,16 @@ class ActivityLog(models.Model):
         related_name="activity_logs",
     )
 
+    # snapshot of username at the time of the event
+    username = models.CharField(max_length=150, blank=True, default="")
+
     # what happened
     event_type = models.CharField(max_length=64, choices=EventType.choices)
 
-    # when it happened
+    # when
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
-    # on what object
+    # target info (denormalized)
     target_app = models.CharField(max_length=64, blank=True, default="")
     target_model = models.CharField(max_length=64, blank=True, default="")
     target_id = models.CharField(max_length=64, blank=True, default="")
@@ -55,7 +55,7 @@ class ActivityLog(models.Model):
     user_agent = models.TextField(blank=True, default="")
     request_id = models.CharField(max_length=128, blank=True, default="")
 
-    # anything extra
+    # extra
     metadata = models.JSONField(blank=True, default=dict)
 
     class Meta:
@@ -66,5 +66,5 @@ class ActivityLog(models.Model):
         ]
 
     def __str__(self):
-        who = self.user_id or "system"
+        who = self.username or (self.user.username if self.user_id else "system")
         return f"[{self.event_type}] by {who} at {self.created_at}"

@@ -124,6 +124,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'audittrail.middleware.AuditTrailMiddleware',
 ]
 
 ROOT_URLCONF = "kalbe_be.urls"

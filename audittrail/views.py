@@ -1,3 +1,6 @@
-from django.shortcuts import render
+# audittrail/views.py
+from django.http import JsonResponse
 
-# Create your views here.
+
+def ping(request):
+    return JsonResponse({"status": "ok"})

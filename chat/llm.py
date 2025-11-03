@@ -73,20 +73,31 @@ def _get_model():
     return _model
 
 # ===== Regex & utils =====
-_CODEFENCE = re.compile(r"^\s*(?:json)?\s*|\s*\s*$", re.I | re.M)
-_JSON_SLOP = re.compile(r"^[\s\S]?(\{.\})[\s\S]*$", re.S)  # ambil JSON blok pertama
-_TRAILING_COMMAS = re.compile(r",\s*([}\]])")                # hapus koma menggantung
-_SINGLE_QUOTES = re.compile(r'(?<!\\)\'')                    # ubah ' -> " (simple)
+# Remove leading ```json / trailing ``` fences line-by-line
+_CODEFENCE = re.compile(r"^\s*```(?:json)?\s*$|^\s*```\s*$", re.I | re.M)
+
+# Find the outermost-looking JSON object: from the first '{' to the last '}'
+_JSON_SLOP = re.compile(r"\{[\s\S]*\}", re.S)
+
+# Remove dangling commas before } or ]
+_TRAILING_COMMAS = re.compile(r",\s*([}\]])")
+
+# Convert single quotes to double quotes (simple heuristic)
+_SINGLE_QUOTES = re.compile(r"(?<!\\)'")
 
 def _strip_to_json_line(text: str) -> str:
     """Buang codefence & sampah kiri/kanan, ambil blok {...} pertama, jadi 1 baris."""
     if not text:
         return ""
+    # Remove code fences and surrounding whitespace
     t = _CODEFENCE.sub("", text).strip()
-    m = _JSON_SLOP.match(t)
+    # Extract the JSON object from anywhere in the text
+    m = _JSON_SLOP.search(t)
     if m:
-        t = m.group(1).strip()
+        t = m.group(0).strip()
+    # Normalize spacing to one line
     return " ".join(t.split())
+
 
 def _extract_text(resp) -> str:
     """Ambil teks dari response Gemini dengan aman."""

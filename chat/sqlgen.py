@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Iterable
 import re
+from .llm import ask_gemini_text
 
 # =========================
 # Allowed schema (Supabase)
@@ -105,7 +106,7 @@ def generate_semantic_sql(user_message: str, schema_hint: str | None = None, add
     - SELECT-only; optional automatic LIMIT
     """
     # Lazy import to avoid cycles
-    from .llm import ask_gemini_text
+    
 
     schema = schema_hint or _schema_hint_from_allowed(ALLOWED)
 

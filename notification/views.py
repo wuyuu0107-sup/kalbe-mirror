@@ -35,6 +35,7 @@ def notification_list(request):
                 'title': n.title,
                 'message': n.message,
                 'type': n.type,
+                'type_display': n.get_type_display(),
                 'created_at': n.created_at.isoformat(),
                 'is_read': n.is_read,
                 'job_id': n.job_id,

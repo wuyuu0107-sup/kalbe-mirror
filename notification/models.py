@@ -3,10 +3,10 @@ from authentication.models import User
 
 class Notification(models.Model):
     NOTIFICATION_TYPES = [
-        ('ocr.completed', 'OCR Completed'),
-        ('ocr.failed', 'OCR Failed'),
-        ('chat.reply', 'Chat Reply'),
-        ('system', 'System Notification'),
+        ('ocr.completed', 'Pemrosesan OCR Selesai'),
+        ('ocr.failed', 'Pemrosesan OCR Gagal'),
+        ('chat.reply', 'Respons Chat Baru'),
+        ('system', 'Notifikasi Sistem'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')

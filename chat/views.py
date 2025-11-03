@@ -7,11 +7,14 @@ from django.shortcuts import get_object_or_404
 import uuid
 import re
 import json
+import logging
 
 from .models import ChatSession, ChatMessage
 from .service import answer_question
 
 DEMO_COOKIE_NAME = "demo_user_id"
+log = logging.getLogger(__name__)
+
 
 
 def _get_or_create_demo_user_id(request) -> uuid.UUID:
@@ -57,13 +60,21 @@ def _first_words(s: str, n: int = 6) -> str:
 def _payload(request) -> dict:
     """
     Be liberal in what we accept: JSON body, DRF-parsed data, form, or query.
-    This prevents 'empty question' when Content-Type varies in tests.
+    Also flatten list values (e.g. QueryDict or DRF parsers) to first element.
     """
+    def _flatten(d: dict) -> dict:
+        out = {}
+        for k, v in (d or {}).items():
+            if isinstance(v, list) and v:
+                out[k] = v[0]
+            else:
+                out[k] = v
+        return out
+
     # DRF's request.data first
     if getattr(request, "data", None):
         try:
-            # Convert QueryDict to plain dict if needed
-            return dict(request.data)
+            return _flatten(dict(request.data))
         except Exception:
             pass
 
@@ -73,17 +84,18 @@ def _payload(request) -> dict:
         if raw:
             data = json.loads(raw)
             if isinstance(data, dict):
-                return data
+                return _flatten(data)
     except Exception:
         pass
 
     # Form / query fallbacks
     if hasattr(request, "POST") and request.POST:
-        return request.POST.dict()
+        return _flatten(request.POST.dict())
     if hasattr(request, "GET") and request.GET:
-        return request.GET.dict()
+        return _flatten(request.GET.dict())
 
     return {}
+
 
 
 @api_view(["GET", "POST"])
@@ -193,7 +205,8 @@ def ask(request, sid):
 
     data = _payload(request)
     # accept q / question / content for flexibility in tests & frontend
-    q = (data.get("q") or data.get("question") or data.get("content") or "").strip()
+    q_raw = data.get("q") or data.get("question") or data.get("content") or ""
+    q = str(q_raw).strip()
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)
@@ -204,6 +217,9 @@ def ask(request, sid):
 
     try:
         answer = answer_question(q)  # your existing service
+        if isinstance(answer, dict):
+            # optionally pretty-print JSON or pick a key
+            answer = json.dumps(answer, ensure_ascii=False, indent=2)
         ChatMessage.objects.create(session=sess, role="assistant", content=answer)
 
         # keep sidebar metadata fresh
@@ -218,6 +234,7 @@ def ask(request, sid):
         return resp
 
     except Exception:
+        log.exception("ask() failed: %s", Exception)
         demo = "Mohon Tanyakan Pertanyaan Lebih Relevan. Ini Bukanlah Sebuah Pertanyaan Yang Bisa Saya Jawab: " + q[:200] if settings.DEBUG else None
         if demo:
             ChatMessage.objects.create(session=sess, role="assistant", content=demo)

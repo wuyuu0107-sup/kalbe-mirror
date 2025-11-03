@@ -1,16 +1,28 @@
 # audittrail/services.py
+from django.contrib.auth import get_user_model
+
 from .models import ActivityLog
 
 
 def log_activity(*, user=None, event_type="", target=None, request=None, metadata=None):
     metadata = metadata or {}
 
+    UserModel = get_user_model()
+
+    # figure out username first
     username = ""
     if user is not None and hasattr(user, "username"):
         username = user.username
 
-    if not username and "username" in metadata and metadata["username"]:
+    if not username and metadata.get("username"):
         username = metadata["username"]
+
+    # make sure user is the right model; if not, fall back to username-only
+    if user is not None and not isinstance(user, UserModel):
+        # keep the name, drop the FK
+        if username and "username" not in metadata:
+            metadata["username"] = username
+        user = None
 
     target_app = target_model = target_id = target_repr = ""
     if target is not None:

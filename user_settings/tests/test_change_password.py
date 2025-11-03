@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.contrib.auth.hashers import make_password, check_password
 from authentication.models import User
 from ..serializers import ChangePasswordSerializer
+from ..services.passwords import PasswordChangeResult
 from ..views import get_authenticated_user
 
 
@@ -226,6 +227,29 @@ class ChangePasswordTestCase(TestCase):
         response_data = json.loads(response.content)
         self.assertEqual(response_data['error'], "Invalid payload")
         self.assertIn("must be a JSON object", response_data['message'])
+
+    def test_change_password_service_failure(self):
+        """Service failure should return 400 with message"""
+        payload = {
+            "current_password": self.test_password,
+            "new_password": self.new_password,
+            "confirm_password": self.new_password,
+        }
+
+        failure_result = PasswordChangeResult(success=False, message="Service failure")
+
+        with patch('user_settings.views._password_service.change_password', return_value=failure_result) as mock_change:
+            response = self.client.post(
+                self.change_password_url,
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+
+        mock_change.assert_called_once()
+        self.assertEqual(response.status_code, 400)
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data['error'], "Password change failed")
+        self.assertEqual(response_data['message'], failure_result.message)
 
     def test_change_password_get_method_not_allowed(self):
         """Test that GET method is not allowed for change password endpoint"""

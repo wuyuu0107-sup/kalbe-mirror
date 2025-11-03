@@ -1,15 +1,22 @@
-import json
 import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.hashers import make_password
-from django.db import transaction
-from authentication.models import User
 from authentication.helpers import parse_json_body
 from .serializers import ChangePasswordSerializer
+from .services.passwords import (
+    DjangoPasswordEncoder,
+    DjangoUserRepository,
+    PasswordChangeService,
+)
 
 logger = logging.getLogger(__name__)
+
+_user_repository = DjangoUserRepository()
+_password_service = PasswordChangeService(
+    user_repository=_user_repository,
+    password_encoder=DjangoPasswordEncoder(),
+)
 
 
 def get_authenticated_user(request):
@@ -23,11 +30,7 @@ def get_authenticated_user(request):
     if not user_id or not username:
         return None
     
-    try:
-        user = User.objects.get(user_id=user_id, username=username)
-        return user
-    except User.DoesNotExist:
-        return None
+    return _user_repository.get_by_credentials(user_id=str(user_id), username=username)
 
 
 @csrf_exempt
@@ -97,20 +100,22 @@ def change_password(request):
                 "message": "Please fix the validation errors and try again"
             }, status=400)
 
-        # Change password in database transaction
-        with transaction.atomic():
-            # Hash the new password
-            new_password_hash = make_password(data['new_password'])
-            
-            # Update user password
-            user.password = new_password_hash
-            user.save(update_fields=['password'])
-            
-            logger.info(f"Password changed successfully for user: {user.username}")
+        result = _password_service.change_password(
+            user=user,
+            new_password=serializer.cleaned_data["new_password"],
+        )
+
+        if not result.success:
+            return JsonResponse({
+                "error": "Password change failed",
+                "message": result.message,
+            }, status=400)
+
+        logger.info("Password changed successfully for user: %s", user.username)
 
         return JsonResponse({
             "success": True,
-            "message": "Password changed successfully"
+            "message": result.message,
         }, status=200)
 
     except Exception as e:

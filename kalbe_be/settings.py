@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "dashboard",
     "chat", 
     "predictions",
+    "user_settings",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

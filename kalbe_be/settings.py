@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "save_to_database",
     "dashboard",
     "chat", 
+    'search',
     "predictions",
     "user_settings",
 ]

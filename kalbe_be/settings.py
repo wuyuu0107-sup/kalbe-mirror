@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "save_to_database",
     "dashboard",
     "chat", 
+    "predictions",
     "user_settings",
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
@@ -221,3 +222,8 @@ GEMINI_API_KEY = config("GEMINI_API_KEY", default=None)
 GEMINI_MODEL   = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_TEMP    = config("GEMINI_TEMP", cast=float, default=0.4)
 USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)
+
+ML_RUNNER_PY = os.getenv(
+    "ML_RUNNER_PY",
+    str(BASE_DIR / "predictions" / "run_model.py")
+)

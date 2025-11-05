@@ -4,6 +4,7 @@ from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
 from authentication.models import User
 from django.views.decorators.csrf import csrf_exempt
+from django.core.exceptions import ValidationError
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from .models import ChatSuggestion
@@ -55,7 +56,7 @@ def recent_features_json(request):
 
     try:
         user = User.objects.get(user_id=user_id)
-    except User.DoesNotExist:
+    except (User.DoesNotExist, ValueError, ValidationError):
         return JsonResponse({"error": "User not found"}, status=404)
 
     items = get_recent_features(user)

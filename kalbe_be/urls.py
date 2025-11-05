@@ -17,6 +17,8 @@ urlpatterns = [
 
     path("api/chat/", include("chat.urls")),
 
+    path('api/', include('predictions.urls', namespace='predictions')),
+
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
     path('auth/', include('authentication.urls')),
@@ -32,6 +34,9 @@ urlpatterns = [
     path('dataset/', include('dataset.urls')),
     path('dashboard/', include('dashboard.urls')),
     path('search/', include('search.urls')),
+    path('', include('django_prometheus.urls')), 
+    path("", include("dashboard.urls")),
+    path('api/user-settings/', include('user_settings.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

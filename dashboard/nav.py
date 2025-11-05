@@ -1,5 +1,12 @@
 # dashboard/nav.py
 
+from django.apps import apps
+
+try:
+    from annotation.models import Annotation
+except ImportError:
+    Annotation = None
+
 # Human labels for known path segments
 SEGMENT_LABELS = {
     "dashboard": "Dashboard",
@@ -21,12 +28,15 @@ def looks_like_id(seg: str) -> bool:
 
 # dashboard/nav.py (optional)
 def try_label_annotation(pk: str) -> str | None:
+    """Return a human-readable label for an Annotation if available."""
     try:
-        from annotation.models import Annotation  # lazy import
+        if Annotation is None:
+            return None
+
         obj = Annotation.objects.filter(pk=pk).only("id").first()
-        if obj:
-            # prefer title/name if your model has it
-            return getattr(obj, "title", None) or getattr(obj, "name", None) or f"#{obj.pk}"
+        if not obj:
+            return None
+
+        return getattr(obj, "title", None) or getattr(obj, "name", None) or f"#{obj.pk}"
     except Exception:
-        pass
-    return None
+        return None

@@ -23,9 +23,9 @@ def convert_and_upload_csv(sender, instance: CSV, created, **kwargs):
         logger.debug("Skipping upload: SUPABASE_UPLOAD_ENABLED not set")
         return
 
-    bucket = os.getenv("SUPABASE_BUCKET")
+    bucket = os.getenv("SUPABASE_BUCKET_CSV")
     if not bucket:
-        logger.warning("SUPABASE_BUCKET not set; skipping upload")
+        logger.warning("SUPABASE_BUCKET_CSV not set; skipping upload")
         return
 
     if instance.uploaded_url:

@@ -1,14 +1,20 @@
 # accounts/views.py
 import json
 from typing import Any, Dict
+from datetime import timedelta
 
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpRequest
-from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.utils import timezone
+from django.apps import apps  # ⬅️ kunci: ambil model eksplisit dari app 'authentication'
 
 from .passwords import is_strong_password  # asumsi sudah ada
 from .utils import generate_otp
+
+# Paksa pakai model dari app 'authentication' (→ tabel authentication_user)
+AuthUser = apps.get_model("authentication", "User")
+assert AuthUser._meta.db_table == "authentication_user", f"Wrong table: {AuthUser._meta.db_table}"
 
 
 def _read_json(request: HttpRequest) -> Dict[str, Any]:
@@ -31,14 +37,10 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
     if not email:
         return JsonResponse({"error": "email is required"}, status=400)
 
-    # Hindari F841: jangan assign ke variabel kalau ga dipakai.
-    if User.objects.filter(email=email).exists():
+    if AuthUser.objects.filter(email=email).exists():
         otp = generate_otp(6)
         cache.set(f"pwdreset:{email}", otp, timeout=10 * 60)  # 10 menit
-        # TODO: kirim OTP via email/SMS/WhatsApp di sini (asinkron lebih baik)
-        # Contoh placeholder (non-aktif):
-        # send_password_reset_otp(email=email, otp=otp)
-
+        # TODO: kirim OTP via email/SMS/WhatsApp
     return JsonResponse({"status": "ok"})
 
 
@@ -61,17 +63,21 @@ def reset_password_confirm(request: HttpRequest) -> JsonResponse:
 
     cached = cache.get(f"pwdreset:{email}")
     if not cached or cached != otp:
-        # Jawaban generik—jangan bocorin apakah email/OTP valid
-        return JsonResponse({"status": "ok"})
+        return JsonResponse({"status": "ok"})  # generik
 
     try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        # Tetap generik
-        return JsonResponse({"status": "ok"})
+        user = AuthUser.objects.get(email=email)
+    except AuthUser.DoesNotExist:
+        return JsonResponse({"status": "ok"})  # generik
 
-    user.set_password(new_password)
-    user.save()
+    # MODEL kamu pakai CharField password biasa → assign langsung
+    user.password = new_password
+    # Optional: update last_accessed kalau ada
+    if hasattr(user, "last_accessed"):
+        user.last_accessed = timezone.now()
+        user.save(update_fields=["password", "last_accessed"])
+    else:
+        user.save(update_fields=["password"])
+
     cache.delete(f"pwdreset:{email}")
-
     return JsonResponse({"status": "ok"})

@@ -9,6 +9,7 @@ from django.utils import timezone
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
+from authentication.helpers import parse_json_body, get_user_or_none, handle_failed_login, set_user_session, build_success_response
 import json
 import logging
 
@@ -89,82 +90,38 @@ def send_welcome_email(user):
 @csrf_exempt
 @require_POST
 def login(request):
-    # More robust JSON parsing: treat empty or whitespace-only bodies as empty JSON
-    raw = request.body or b''
-    if not raw or raw.strip() == b'':
-        data = {}
-    else:
-        try:
-            text = raw.decode('utf-8')
-        except UnicodeDecodeError:
-            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": INVALID_PAYLOAD_MSG}, status=400)
+    data, error_response = parse_json_body(request)
+    if error_response:
+        return error_response
 
-    # Create form instance with data
     form = LoginForm(data)
-    
     if not form.is_valid():
-        # Return validation errors
-        errors = {}
-        for field, error_list in form.errors.items():
-            errors[field] = error_list[0]  # Get first error for each field
-        return JsonResponse({"errors": errors, "error": errors}, status=400)
-    
-    # Get username from form
-    username = form.cleaned_data['username']
-    
-    try:
-        user = User.objects.get(username=username)
-        
-        # 🚨 NEW: Check if account is locked BEFORE password check
-        if user.is_account_locked():
-            return JsonResponse({
-                "error": "Account is temporarily locked due to too many failed attempts. Please try again later."
-            }, status=423)  # 423 Locked
-        
-        # Check password using the form's authenticate method
-        if form.authenticate():
-            # Check if email is verified
-            if not user.is_verified:
-                return JsonResponse({
-                    "error": "Email not verified", 
-                    "message": "Please verify your email before logging in"
-                }, status=403)
-            
-            # 🚨 NEW: Reset failed attempts on successful login
-            user.reset_failed_login_attempts()
-            
-            # Set session and login
-            request.session['user_id'] = str(user.user_id)
-            request.session['username'] = user.username
-            
-            return JsonResponse({
-                "user_id": f"user {user.user_id}",
-                "username": user.username,
-                "display_name": user.display_name,
-                "email" : user.email,
-                "message": "Login successful"
-            }, status=200)
-        else:
-            # 🚨 NEW: Increment failed attempts on wrong password
-            account_locked = user.increment_failed_login()
-            
-            if account_locked:
-                return JsonResponse({
-                    "error": "Account is temporarily locked for 30 minutes due to too many failed attempts. Please try again later."
-                }, status=423)
-            else:
-                # Don't show remaining attempts for security reasons
-                return JsonResponse({
-                    "error": "Invalid credentials"
-                }, status=401)
-                
-    except User.DoesNotExist:
-        return JsonResponse({"error": "invalid credentials"}, status=401)
+        return JsonResponse({"error": "Username and password are required"}, status=400)
 
+    username = form.cleaned_data['username']
+
+    user = get_user_or_none(username)
+    if not user:
+        return JsonResponse({"error": "Invalid credentials"}, status=401)
+
+    # Check lock status
+    if user.is_account_locked():
+        return JsonResponse({
+            "error": "Account is temporarily locked due to too many failed attempts"
+        }, status=423)
+
+    # Authenticate
+    if not form.authenticate():
+        return handle_failed_login(user)
+
+    # Check verification
+    if not user.is_verified:
+        return JsonResponse({"error": "Please verify your email before logging in."}, status=403)
+
+    # Success
+    user.reset_failed_login_attempts()
+    set_user_session(request, user)
+    return JsonResponse(build_success_response(user), status=200)
 
 @csrf_exempt  
 @require_POST

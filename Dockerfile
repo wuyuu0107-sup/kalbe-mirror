@@ -1,44 +1,40 @@
-# =========================================================
-# 1️⃣ Use official Node image for building
-# =========================================================
-FROM node:20-alpine AS builder
+FROM python:3.12-slim AS builder
+
+# Prevent Python from buffering stdout/stderr
+ENV PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files first (for better caching)
-COPY package*.json ./
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm ci
+# Copy dependency files first (for caching)
+COPY requirements.txt ./
 
-# Copy the rest of your source code
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the project
 COPY . .
 
-# Build the Next.js app
-RUN npm run build
+FROM python:3.12-slim AS runner
 
-# =========================================================
-# 2️⃣ Create lightweight runtime image
-# =========================================================
-FROM node:20-alpine AS runner
-
-# Set NODE_ENV to production for safety
-ENV NODE_ENV=production
-
-# Set working directory
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Copy built app from builder stage
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
+# Copy dependencies and app code from builder
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /app /app
 
-# Install only production dependencies
-RUN npm ci --omit=dev
+# Expose Django’s default port
+EXPOSE 8000
 
-# Expose Next.js default port
-EXPOSE 3000
+# Collect static files (optional, if you use static)
+RUN python manage.py collectstatic --noinput || true
 
-# Run the Next.js app
-CMD ["npm", "start"]
+# Run Django app (Gunicorn recommended for production)
+CMD ["gunicorn", "kalbe_be.wsgi:application", "--bind", "0.0.0.0:8000"]

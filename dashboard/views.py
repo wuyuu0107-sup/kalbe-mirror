@@ -105,7 +105,6 @@ def breadcrumbs_json(request):
 
     return JsonResponse(crumbs, safe=False)
 
-
 def breadcrumbs_demo(request):
     return render(request, "dashboard/breadcrumbs_demo.html")
 

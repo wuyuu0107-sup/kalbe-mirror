@@ -2,6 +2,7 @@ from django.test import TestCase, Client, RequestFactory
 from authentication.models import User
 from unittest.mock import patch, MagicMock
 from dashboard import views
+from dashboard.views import CsrfExemptSessionAuthentication
 from django.http import JsonResponse
 
 class ViewsMissingCoverageTests(TestCase):
@@ -71,3 +72,16 @@ class ViewsMissingCoverageTests(TestCase):
         viewset.request = req
         viewset.perform_create(serializer)
         serializer.save.assert_called_once_with(user=self.user)
+
+class CsrfExemptSessionAuthenticationTests(TestCase):
+    def setUp(self):
+        self.auth = CsrfExemptSessionAuthentication()
+        self.factory = RequestFactory()
+
+    def test_enforce_csrf_does_nothing(self):
+        """Ensure enforce_csrf() does not raise any exception (CSRF disabled)."""
+        request = self.factory.get("/")
+        try:
+            self.auth.enforce_csrf(request)
+        except Exception as e:
+            self.fail(f"enforce_csrf() raised {e} unexpectedly")

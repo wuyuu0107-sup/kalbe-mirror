@@ -11,6 +11,7 @@ import logging
 
 from .models import ChatSession, ChatMessage
 from .service import answer_question
+from notification.triggers import notify_chat_reply
 
 DEMO_COOKIE_NAME = "demo_user_id"
 log = logging.getLogger(__name__)
@@ -221,6 +222,10 @@ def ask(request, sid):
             # optionally pretty-print JSON or pick a key
             answer = json.dumps(answer, ensure_ascii=False, indent=2)
         ChatMessage.objects.create(session=sess, role="assistant", content=answer)
+
+        session_id = request.COOKIES.get("sessionid")
+        if session_id:
+            notify_chat_reply(session_id)
 
         # keep sidebar metadata fresh
         preview = _first_words(answer, 12)

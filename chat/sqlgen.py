@@ -1,7 +1,7 @@
 # chat/sqlgen.py
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Iterable, Protocol, Optional
+from typing import Dict, Iterable, Protocol
 import re
 
 from .llm import ask_gemini_text

@@ -195,10 +195,22 @@ def answer_question(user_message: str, session_id: str | None = None) -> str:
     Fully semantic flow:
       NL -> SQL -> DB -> Natural language sentence/table.
     Always returns a STRING for views.py.
+    session_id is accepted for compatibility (history inclusion can be added later).
     """
+    text = (user_message or "").strip()
+    if not text:
+        return "Silakan ajukan pertanyaan terkait data klinis."
+
+    msg = text.lower()
+    if msg in {"hi", "hii", "hello", "hey", "halo", "hai"}:
+        return (
+            "Halo! 👋 Aku asisten yang fokus pada data klinis. "
+            "Silakan tanyakan hal yang berkaitan dengan uji klinis atau dataset pasien."
+        )
+
     service = SemanticQAService(
         sqlgen=DefaultSQLGenerator(),
         runner=DBQueryRunner(),
         formatter=DefaultAnswerFormatter(),
     )
-    return service.answer(user_message, session_id=session_id)
+    return service.answer(text, session_id=session_id)

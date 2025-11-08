@@ -5,6 +5,7 @@ from annotation.views_page import AnnotationTesterPage
 from ocr.views import ocr_test_page
 from django.conf import settings
 from django.conf.urls.static import static
+from dashboard import views
 
 # CSRF token endpoint (for SPA/Next.js to fetch a token)
 from accounts.csrf import csrf as csrf_view
@@ -37,6 +38,8 @@ urlpatterns = [
     path('notification/', include('notification.urls')),
     path('', include('django_prometheus.urls')), 
     path("", include("dashboard.urls")),
+    path('search/', include('search.urls')),
+    path('', include('django_prometheus.urls')),
     path('api/user-settings/', include('user_settings.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

@@ -33,7 +33,10 @@ urlpatterns = [
     path('save-to-database/', include('save_to_database.urls')),
     path('dataset/', include('dataset.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('search/', include('search.urls')),
     path('notification/', include('notification.urls')),
+    path('', include('django_prometheus.urls')), 
+    path("", include("dashboard.urls")),
     path('api/user-settings/', include('user_settings.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

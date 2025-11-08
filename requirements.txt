@@ -14,6 +14,7 @@ pymupdf
 google-generativeai
 dotenv
 supabase
+django-prometheus
 numpy>=1.23
 pandas>=2.0
 scikit-learn==1.6.0

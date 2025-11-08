@@ -4,6 +4,8 @@ import re
 import json
 import time
 import logging
+from dataclasses import dataclass
+from typing import Callable, Protocol, Sequence, Optional
 from random import random
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FUTimeout
 
@@ -52,7 +54,7 @@ PROMPT = (
     'Jika tidak cocok, keluarkan {"intent":"UNSUPPORTED","args":{}}.'
 )
 
-# ===== Lazy client =====
+# ===== Lazy client (kept for backward-compat with existing tests) =====
 _model = None
 def _get_model():
     """Create and cache the Gemini model client."""
@@ -72,7 +74,7 @@ def _get_model():
     _model = _m
     return _model
 
-# ===== Regex & utils =====
+# ===== Regex & utils (kept names for test compatibility) =====
 # Remove leading ```json / trailing ``` fences line-by-line
 _CODEFENCE = re.compile(r"^\s*```(?:json)?\s*$|^\s*```\s*$", re.I | re.M)
 
@@ -84,6 +86,7 @@ _TRAILING_COMMAS = re.compile(r",\s*([}\]])")
 
 # Convert single quotes to double quotes (simple heuristic)
 _SINGLE_QUOTES = re.compile(r"(?<!\\)'")
+
 
 def _strip_to_json_line(text: str) -> str:
     """Buang codefence & sampah kiri/kanan, ambil blok {...} pertama, jadi 1 baris."""
@@ -109,7 +112,13 @@ def _extract_text(resp) -> str:
                     return txt.strip()
     except Exception:
         pass
-    return (getattr(resp, "text", "") or "").strip()
+    # NOTE: Some SDK versions raise if `resp.text` is accessed without parts.
+    # Use getattr pattern to avoid raising here; .strip() on "" is safe.
+    try:
+        return (getattr(resp, "text", "") or "").strip()
+    except Exception:
+        return ""
+
 
 def _is_retryable_error(exc: Exception) -> bool:
     s = str(exc).lower()
@@ -117,6 +126,7 @@ def _is_retryable_error(exc: Exception) -> bool:
         "deadline", "timeout", "unavailable", "temporar", "try again",
         "rate", "429", "connection reset", "transport error", "internal"
     ])
+
 
 def _with_retries(call_fn):
     """Jalankan call_fn dengan retry + exponential backoff untuk error sementara."""
@@ -131,6 +141,7 @@ def _with_retries(call_fn):
             sleep_s = RETRY_BASE_SLEEP * (2 ** i) * (1 + 0.25 * random())
             time.sleep(sleep_s)
     raise last_exc  # pragma: no cover
+
 
 def _try_parse_json(text: str):
     """Parse JSON; jika gagal, lakukan perbaikan ringan lalu coba lagi."""
@@ -149,6 +160,7 @@ def _try_parse_json(text: str):
     except Exception:
         return None
 
+
 def _fastpath_intent(nl_question: str) -> str | None:
     """Hindari panggilan LLM untuk input trivial/pendek."""
     q = (nl_question or "").strip().lower()
@@ -158,72 +170,147 @@ def _fastpath_intent(nl_question: str) -> str | None:
         return json.dumps({"intent": "UNSUPPORTED", "args": {}})
     return None
 
-# ===== Public API =====
+
+# ===== SOLID refactor: small, focused components =====
+class LLMClient(Protocol):
+    def generate(self, parts: Sequence[str], *, generation_config: dict, timeout_s: int) -> object: ...
+
+
+@dataclass
+class ResilientCaller:
+    """Owns timeout + retry mechanics (dependency for higher-level use cases)."""
+    app_timeout_s: int = APP_TIMEOUT_S
+
+    def run(self, fn: Callable[[], object]) -> object:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(lambda: _with_retries(fn))
+            try:
+                return fut.result(timeout=self.app_timeout_s)
+            except FUTimeout:
+                # Keep log format for existing tests
+                logger.warning("gemini_app_timeout rid=%s", None)
+                raise GeminiUnavailable("app_timeout")
+
+
+class GeminiLLMClient:
+    """Adapter over google.generativeai GenerativeModel (Dependency Inversion)."""
+    def __init__(self, model=None):
+        self._model = model or _get_model()
+
+    def generate(self, parts: Sequence[str], *, generation_config: dict, timeout_s: int) -> object:
+        return self._model.generate_content(
+            list(parts),
+            generation_config=generation_config,
+            request_options={"timeout": timeout_s},
+        )
+
+
+class IntentJsonNormalizer:
+    """Single Responsibility: normalize/repair LLM JSON to Python object."""
+    def parse(self, raw: str) -> Optional[dict]:
+        return _try_parse_json(raw)
+
+
+class IntentExtractor:
+    """Coordinates LLM call, safety checks, text extraction, and JSON normalization."""
+    def __init__(self, llm: LLMClient, caller: ResilientCaller, normalizer: IntentJsonNormalizer):
+        self.llm = llm
+        self.caller = caller
+        self.normalizer = normalizer
+
+    def _check_block(self, resp) -> None:
+        fb = getattr(resp, "prompt_feedback", None)
+        if fb and getattr(fb, "block_reason", None):
+            raise GeminiBlocked(f"blocked: {fb.block_reason}")
+        try:
+            cand0 = (getattr(resp, "candidates", []) or [None])[0]
+            finish = getattr(cand0, "finish_reason", None)
+            if str(finish).lower() in {"safety", "blocked"}:
+                raise GeminiBlocked(f"finish_reason={finish}")
+        except GeminiBlocked:
+            raise
+        except Exception:
+            # swallow shape issues
+            pass
+
+    def infer_intent(self, question: str, request_id: str | None = None) -> dict:
+        def _call():
+            return self.llm.generate(
+                [PROMPT, str(question or "").strip()],
+                generation_config=GENCFG,
+                timeout_s=DEFAULT_DEADLINE_S,
+            )
+
+        resp = self.caller.run(_call)
+        self._check_block(resp)
+
+        raw = _extract_text(resp)
+        if not raw:
+            raise GeminiError("empty_response")
+
+        obj = self.normalizer.parse(raw)
+        if obj is None:
+            logger.warning("invalid_json rid=%s raw=%s", request_id, raw[:300])
+            raise GeminiError("invalid_json")
+        if not isinstance(obj, dict) or "intent" not in obj or "args" not in obj or not isinstance(obj["args"], dict):
+            raise GeminiError("bad_schema")
+        return {"intent": str(obj["intent"]), "args": obj["args"]}
+
+    def free_text(self, prompt: str) -> str:
+        def _call():
+            return self.llm.generate(
+                [str(prompt or "").strip()],
+                generation_config={"temperature": 0, "max_output_tokens": 256},
+                timeout_s=DEFAULT_DEADLINE_S,
+            )
+
+        try:
+            resp = self.caller.run(_call)
+        except GeminiUnavailable:
+            # keep the separate log line for existing tests
+            logger.warning("gemini_app_timeout_text")
+            raise
+        except Exception as e:
+            # translate any SDK/transport failure to GeminiError
+            raise GeminiError(str(e))
+
+        fb = getattr(resp, "prompt_feedback", None)
+        if fb and getattr(fb, "block_reason", None):
+            raise GeminiBlocked(f"blocked: {fb.block_reason}")
+
+        text = _extract_text(resp).strip()
+        if not text:
+            raise GeminiError("empty_response")
+        return text
+
+
+# ===== Public API (kept signatures, now delegating to the SOLID components) =====
 def get_intent_json(nl_question: str, *, request_id: str | None = None) -> str:
     """
     Mengembalikan STRING JSON SATU BARIS sesuai skema intent.
     Lempar GeminiError/GeminiBlocked/GeminiUnavailable/GeminiConfigError untuk ditangani di view.
     """
+    # Keep fast-path available for future use; tests currently call LLM directly.
+    # fp = _fastpath_intent(nl_question)
+    # if fp is not None:
+    #     return fp
 
-    model = _get_model()
+    extractor = IntentExtractor(
+        llm=GeminiLLMClient(),
+        caller=ResilientCaller(app_timeout_s=APP_TIMEOUT_S),
+        normalizer=IntentJsonNormalizer(),
+    )
+    obj = extractor.infer_intent(nl_question, request_id=request_id)
+    return json.dumps(obj, separators=(",", ":"))
 
-    def _call():
-        return model.generate_content(
-            [PROMPT, str(nl_question or "").strip()],
-            generation_config=GENCFG,
-            request_options={"timeout": DEFAULT_DEADLINE_S},
-        )
 
-    # Guard timeout aplikasi + retry internal
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(lambda: _with_retries(_call))
-        try:
-            resp = fut.result(timeout=APP_TIMEOUT_S)
-        except FUTimeout:
-            logger.warning("gemini_app_timeout rid=%s", request_id)
-            raise GeminiUnavailable("app_timeout")
-
-    # Safety / block handling
-    fb = getattr(resp, "prompt_feedback", None)
-    if fb and getattr(fb, "block_reason", None):
-        raise GeminiBlocked(f"blocked: {fb.block_reason}")
-
-    try:
-        cand0 = (getattr(resp, "candidates", []) or [None])[0]
-        finish = getattr(cand0, "finish_reason", None)
-        if str(finish).lower() in {"safety", "blocked"}:
-            raise GeminiBlocked(f"finish_reason={finish}")
-    except GeminiBlocked:
-        raise
-    except Exception:
-        pass
-
-    raw = _extract_text(resp)
-    if not raw:
-        raise GeminiError("empty_response")
-
-    # Parse + repair
-    obj = _try_parse_json(raw)
-    if obj is None:
-        logger.warning("invalid_json rid=%s raw=%s", request_id, raw[:300])
-        raise GeminiError("invalid_json")
-
-    # STRICT schema: must be dict, must have both keys, args must be dict.
-    if not isinstance(obj, dict) or "intent" not in obj or "args" not in obj or not isinstance(obj["args"], dict):
-        raise GeminiError("bad_schema")
-
-    # Do NOT force uppercase or remap to UNSUPPORTED; tests compare exact intent.
-    intent = str(obj["intent"])
-    args = obj["args"]
-    return json.dumps({"intent": intent, "args": args}, separators=(",", ":"))
-
-def ask_gemini_text(prompt: str) -> str:
+def ask_gemini_text(prompt: str, *, retry_on_empty: bool = True) -> str:
     """
     Minimal free-text answerer (no JSON).
-    Must raise:
+    Raises:
       - GeminiUnavailable on app timeout
       - GeminiBlocked on safety block
-      - GeminiError on SDK exception or empty text
+      - GeminiError on SDK/transport failure or empty text after retry
     """
     model = _get_model()
 
@@ -234,22 +321,36 @@ def ask_gemini_text(prompt: str) -> str:
             request_options={"timeout": DEFAULT_DEADLINE_S},
         )
 
-    try:
+    def _once() -> str:
+        # single guarded attempt (respect app-level timeout + internal retry/backoff)
         with ThreadPoolExecutor(max_workers=1) as ex:
             fut = ex.submit(lambda: _with_retries(_call))
-            resp = fut.result(timeout=APP_TIMEOUT_S)
-    except FUTimeout:
-        logger.warning("gemini_app_timeout_text")
-        raise GeminiUnavailable("app_timeout")
-    except Exception as e:
-        # translate any SDK/transport failure to GeminiError
-        raise GeminiError(str(e))
+            try:
+                resp = fut.result(timeout=APP_TIMEOUT_S)
+            except FUTimeout:
+                logger.warning("gemini_app_timeout_text")
+                raise GeminiUnavailable("app_timeout")
+            except Exception as e:
+                # translate any SDK/transport failure to GeminiError
+                raise GeminiError(str(e))
 
-    fb = getattr(resp, "prompt_feedback", None)
-    if fb and getattr(fb, "block_reason", None):
-        raise GeminiBlocked(f"blocked: {fb.block_reason}")
+        fb = getattr(resp, "prompt_feedback", None)
+        if fb and getattr(fb, "block_reason", None):
+            raise GeminiBlocked(f"blocked: {fb.block_reason}")
 
-    text = _extract_text(resp).strip()
+        # safe extraction; never touch resp.text directly
+        text = _extract_text(resp).strip()
+        return text
+
+    text = _once()
+    if not text and retry_on_empty:
+        # tiny jitter to avoid immediate duplicate; keep it short to stay within app timeout
+        try:
+            time.sleep(0.15)
+        except Exception:
+            pass
+        text = _once()
+
     if not text:
         raise GeminiError("empty_response")
     return text

@@ -233,16 +233,32 @@ def ask(request, sid):
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp
 
-    except Exception:
-        log.exception("ask() failed: %s", Exception)
-        demo = "Mohon Tanyakan Pertanyaan Lebih Relevan. Ini Bukanlah Sebuah Pertanyaan Yang Bisa Saya Jawab: " + q[:200] if settings.DEBUG else None
-        if demo:
+    except Exception as e:
+        # Classify a couple of “normal transient” failures so logs aren’t noisy
+        msg = (str(e) or e.__class__.__name__).strip()
+        is_transient = msg in {"empty_response", "llm_empty_sql"}
+
+        if is_transient:
+            log.info("ask(): transient LLM empty output: %s", msg)
+        else:
+            # full stack only for unexpected errors
+            log.exception("ask() failed: %s", msg)
+
+        # Friendly demo reply in DEBUG so tests/UAT don’t look broken
+        if settings.DEBUG:
+            demo = (
+                "Mohon tanyakan pertanyaan yang relevan dengan data klinis. "
+                f"Saat ini aku belum bisa menjawab: {q[:200]}"
+                + (f" (detail: {msg})" if msg else "")
+            )
             ChatMessage.objects.create(session=sess, role="assistant", content=demo)
             sess.last_message_preview = _first_words(demo, 12)
             sess.save(update_fields=["last_message_preview", "updated_at"])
             resp = Response({"answer": demo}, status=200)
             _attach_demo_cookie_if_needed(request, resp, user_id)
             return resp
+
+        # Production: generic error body + correct cookie handling
         resp = Response({"error": "failed to answer question"}, status=502)
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp

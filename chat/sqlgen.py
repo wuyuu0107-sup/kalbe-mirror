@@ -1,6 +1,9 @@
+# chat/sqlgen.py
 from __future__ import annotations
-from typing import Dict, Iterable
+from dataclasses import dataclass
+from typing import Dict, Iterable, Protocol
 import re
+
 from .llm import ask_gemini_text
 
 # =========================
@@ -74,6 +77,9 @@ SAFE_SELECT = re.compile(r"^\s*select\b", re.I)
 HAS_LIMIT = re.compile(r"\blimit\s+\d+\b", re.I)
 DML_DDL_BAD = re.compile(r"\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke)\b", re.I)
 
+# =========
+# Helpers
+# =========
 def _schema_hint_from_allowed(allowed: Dict[str, Iterable[str]]) -> str:
     parts = []
     for table, cols in allowed.items():
@@ -98,19 +104,27 @@ def _ensure_limit(sql: str, default_limit: int = 200) -> str:
     # Heuristic: if has GROUP BY or window or no WHERE, still okay to cap
     return f"{sql.rstrip().rstrip(';')} LIMIT {default_limit};"
 
-def generate_semantic_sql(user_message: str, schema_hint: str | None = None, add_default_limit: bool = True) -> str:
-    """
-    Generate a single safe SELECT for PostgreSQL from natural language.
-    - Uses only whitelisted tables/columns
-    - Joins across tables on patients.sin by default
-    - SELECT-only; optional automatic LIMIT
-    """
-    # Lazy import to avoid cycles
-    
+# =========================
+# SOLID components
+# =========================
 
-    schema = schema_hint or _schema_hint_from_allowed(ALLOWED)
+# ISP & DIP: a tiny interface/port so we can inject any LLM implementation in tests.
+class SQLLLM(Protocol):
+    def complete(self, prompt: str) -> str: ...
 
-    prompt = f"""You are a senior data analyst writing SQL for PostgreSQL.
+# Default adapter using your existing function (keeps tests/backward-compat).
+class GeminiSQLLLM:
+    def complete(self, prompt: str) -> str:
+        return ask_gemini_text(prompt) or ""
+
+# SRP: builds the prompt string only.
+@dataclass(frozen=True)
+class SQLPromptBuilder:
+    relationships: str = RELATIONSHIPS
+    synonyms: str = SYNONYMS
+
+    def build(self, user_message: str, schema_hint: str) -> str:
+        return f"""You are a senior data analyst writing SQL for PostgreSQL.
 
 TASK:
 Translate the user's analytics request into ONE safe **SELECT-only** SQL query.
@@ -119,9 +133,9 @@ ABSOLUTE RULES:
 - Output **only** the SQL (no backticks, no prose).
 - The first token MUST be SELECT.
 - Use ONLY these tables/columns and nothing else:
-  {schema}
+  {schema_hint}
 - Default joins:
-{RELATIONSHIPS}
+{self.relationships}
   If multiple tables are needed, join them via the shared key "sin".
 - Prefer clear aliases: p (patients), v (vitals), s (serology), u (urinalysis), h (hematology), c (clinical_chemistry).
 - If user asks for "per patient" attributes + labs, join patients (p) and the relevant module(s).
@@ -131,7 +145,7 @@ ABSOLUTE RULES:
 - NEVER use INSERT/UPDATE/DELETE/DDL.
 
 Domain mapping to help you choose the right columns:
-{SYNONYMS}
+{self.synonyms}
 
 Examples of JOIN patterns you can use:
 - SELECT p.sin, p.gender, c.sgot FROM patients p
@@ -147,11 +161,67 @@ USER REQUEST:
 
 Write the final SQL below (no comments, no CTEs unless truly needed):
 """
-    sql = (ask_gemini_text(prompt) or "").strip()
 
-    sql = _ensure_select_only(sql)
+# SRP: validates and optionally post-processes SQL.
+@dataclass(frozen=True)
+class SQLPostProcessor:
+    default_limit: int = 200
 
-    if add_default_limit:
-        sql = _ensure_limit(sql)
+    def validate_select_only(self, sql: str) -> str:
+        return _ensure_select_only(sql)
 
-    return sql
+    def maybe_add_limit(self, sql: str, add_default_limit: bool) -> str:
+        return _ensure_limit(sql, self.default_limit) if add_default_limit else sql
+
+# OCP & DIP: Orchestrator that depends on abstractions; open for extension.
+@dataclass
+class SemanticSQLGenerator:
+    llm: SQLLLM
+    prompt_builder: SQLPromptBuilder
+    post_processor: SQLPostProcessor
+
+    def generate(
+        self,
+        user_message: str,
+        schema_hint: str | None = None,
+        add_default_limit: bool = True,
+    ) -> str:
+        schema = schema_hint or _schema_hint_from_allowed(ALLOWED)
+
+        # use the injected builder (SRP + DIP)
+        prompt = self.prompt_builder.build(user_message, schema)
+
+        raw_sql = (self.llm.complete(prompt) or "").strip()
+        if not raw_sql:
+            raise ValueError("llm_empty_sql")
+
+        # use the injected post-processor (SRP)
+        sql = self.post_processor.validate_select_only(raw_sql)
+        sql = self.post_processor.maybe_add_limit(sql, add_default_limit)
+        return sql
+
+
+# =========================
+# Public API (backward-compatible)
+# =========================
+def generate_semantic_sql(
+    user_message: str,
+    schema_hint: str | None = None,
+    add_default_limit: bool = True
+) -> str:
+    """
+    Generate a single safe SELECT for PostgreSQL from natural language.
+    - Uses only whitelisted tables/columns
+    - Joins across tables on patients.sin by default
+    - SELECT-only; optional automatic LIMIT
+    """
+    generator = SemanticSQLGenerator(
+        llm=GeminiSQLLLM(),
+        prompt_builder=SQLPromptBuilder(),
+        post_processor=SQLPostProcessor(default_limit=200),
+    )
+    return generator.generate(
+        user_message,
+        schema_hint=schema_hint,
+        add_default_limit=add_default_limit,
+    )

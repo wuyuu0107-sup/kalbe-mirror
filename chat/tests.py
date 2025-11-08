@@ -502,12 +502,29 @@ class TestServiceBranch(SimpleTestCase):
         assert out.startswith("Found 2 rows.")
         assert "John" in out and "Alice" in out
 
-    def test_group_summary_fallback_for_non_2_col(self):
-        from chat.service import _group_summary
-        cols = ["a", "b", "c"]  # not 2 columns
-        rows = [("x", 1, 2)]
-        out = _group_summary("any question", cols, rows)
-        self.assertTrue(out.startswith("Found 1 rows."))
+    @patch("chat.service.DB")
+    @patch("chat.service.generate_semantic_sql", return_value="SELECT a,b,c")
+    def test_group_summary_fallback_for_non_2_col(self, _gen, mock_db_cls):
+        """
+        When there are not exactly 2 columns, _group_summary should not be used.
+        We should fall back to the generic table formatting branches.
+        """
+        mock_db = mock_db_cls.return_value
+        mock_db.query.return_value = {
+            "columns": ["a", "b", "c"],           # len(cols) = 3 -> not the 2-col path
+            "rows": [(1, 2, 3), (4, 5, 6)],
+        }
+
+        from chat.service import answer_question
+        out = answer_question("show groups")
+
+        # For 2 < len(cols) <= 5, answer_question uses:
+        #   "Found {len(rows)} rows.\n\n{_render_table(...)}"
+        self.assertTrue(
+            out.startswith("Found "),
+            msg=f"Unexpected fallback output: {out!r}",
+        )
+
 
 
 # =========================

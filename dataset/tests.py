@@ -36,15 +36,6 @@ class DatasetFileManagementTests(TestCase):
             password="ResearcherPass123",
             display_name="Researcher User",
             email="researcher@example.com",
-            roles=["researcher"],
-            is_verified=True,
-        )
-        self.normal_user = User.objects.create(
-            username="normal_user",
-            password="UserPass123",
-            display_name="Normal User",
-            email="user@example.com",
-            roles=["user"],
             is_verified=True,
         )
         self.unverified_researcher = User.objects.create(
@@ -52,16 +43,7 @@ class DatasetFileManagementTests(TestCase):
             password="ResearcherPass123",
             display_name="Unverified Researcher",
             email="uresearcher@example.com",
-            roles=["researcher"],
             is_verified=False,
-        )
-        self.admin = User.objects.create(
-            username="admin_user",
-            password="AdminPass123",
-            display_name="Admin User",
-            email="admin@example.com",
-            roles=["admin"],
-            is_verified=True,
         )
 
     def tearDown(self):
@@ -91,45 +73,10 @@ class DatasetFileManagementTests(TestCase):
         r = self.client.post(self.list_create_url, {"file": file})
         self.assertEqual(r.status_code, 403)
 
-    def test_non_admin_authenticated_access_is_forbidden(self):
-        self._login(self.normal_user)
-        # List
-        r = self.client.get(self.list_create_url)
-        self.assertEqual(r.status_code, 403)
-        # Create
-        file = SimpleUploadedFile("x.csv", b"x,y\n", content_type="text/csv")
-        r = self.client.post(self.list_create_url, {"file": file})
-        self.assertEqual(r.status_code, 403)
-
     def test_unverified_researcher_is_forbidden(self):
         self._login(self.unverified_researcher)
         r = self.client.get(self.list_create_url)
         self.assertEqual(r.status_code, 403)
-
-    def test_admin_access_is_forbidden(self):
-        self._login(self.admin)
-        # List
-        r = self.client.get(self.list_create_url)
-        self.assertEqual(r.status_code, 403)
-        # Create
-        file = SimpleUploadedFile("x.csv", b"x,y\n", content_type="text/csv")
-        r = self.client.post(self.list_create_url, {"file": file})
-        self.assertEqual(r.status_code, 403)
-
-    def test_admin_move_file_forbidden(self):
-        self._login(self.researcher)
-        upload_resp = self._upload_csv()
-        self.assertEqual(upload_resp.status_code, 201)
-        obj_id = upload_resp.json()["id"]
-        self._login(self.admin)
-        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
-        resp = self.client.post(move_url, {"target_dir": "new"})
-        self.assertEqual(resp.status_code, 403)
-
-    def test_admin_move_folder_forbidden(self):
-        self._login(self.admin)
-        resp = self.client.post(self.folder_move_url, {"source_dir": "src", "target_dir": "tgt"})
-        self.assertEqual(resp.status_code, 403)
 
     # CRUD + download tests
     def test_researcher_can_upload_list_retrieve_download_and_delete(self):
@@ -233,16 +180,6 @@ class DatasetFileManagementTests(TestCase):
         client2 = Client()
         move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
         resp = client2.post(move_url, {"target_dir": "new"})
-        self.assertEqual(resp.status_code, 403)
-
-    def test_move_file_non_researcher_forbidden(self):
-        self._login(self.researcher)
-        upload_resp = self._upload_csv()
-        self.assertEqual(upload_resp.status_code, 201)
-        obj_id = upload_resp.json()["id"]
-        self._login(self.normal_user)
-        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
-        resp = self.client.post(move_url, {"target_dir": "new"})
         self.assertEqual(resp.status_code, 403)
 
     def test_move_file_missing_target_dir_400(self):
@@ -381,18 +318,18 @@ class DatasetFileManagementTests(TestCase):
 
     # Permission edge-case tests
     def test_permission_user_not_found_returns_false(self):
-        from .permissions import IsResearcherOnly
+        from .permissions import IsAuthenticatedAndVerified
 
-        perm = IsResearcherOnly()
+        perm = IsAuthenticatedAndVerified()
         fake_request = SimpleNamespace()
         fake_request.session = {"user_id": "00000000-0000-0000-0000-000000000000", "username": "no_such_user"}
         self.assertFalse(perm.has_permission(fake_request, None))
 
     def test_permission_user_id_mismatch_returns_false(self):
-        from .permissions import IsResearcherOnly
+        from .permissions import IsAuthenticatedAndVerified
 
         # Use existing researcher username but wrong session user_id
-        perm = IsResearcherOnly()
+        perm = IsAuthenticatedAndVerified()
         fake_request = SimpleNamespace()
         fake_request.session = {"user_id": "11111111-1111-1111-1111-111111111111", "username": self.researcher.username}
         self.assertFalse(perm.has_permission(fake_request, None))

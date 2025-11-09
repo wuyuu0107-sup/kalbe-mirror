@@ -7,6 +7,9 @@ from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.core.files.storage import default_storage
+import unittest.mock as mock
+from types import SimpleNamespace
 
 from authentication.models import User
 from save_to_database.models import CSV
@@ -375,3 +378,146 @@ class DatasetFileManagementTests(TestCase):
             self.assertIn(source_dir, obj2.file.name)
             self.assertTrue(os.path.exists(obj1.file.path))
             self.assertTrue(os.path.exists(obj2.file.path))
+
+    # Permission edge-case tests
+    def test_permission_user_not_found_returns_false(self):
+        from .permissions import IsResearcherOnly
+
+        perm = IsResearcherOnly()
+        fake_request = SimpleNamespace()
+        fake_request.session = {"user_id": "00000000-0000-0000-0000-000000000000", "username": "no_such_user"}
+        self.assertFalse(perm.has_permission(fake_request, None))
+
+    def test_permission_user_id_mismatch_returns_false(self):
+        from .permissions import IsResearcherOnly
+
+        # Use existing researcher username but wrong session user_id
+        perm = IsResearcherOnly()
+        fake_request = SimpleNamespace()
+        fake_request.session = {"user_id": "11111111-1111-1111-1111-111111111111", "username": self.researcher.username}
+        self.assertFalse(perm.has_permission(fake_request, None))
+
+    # Serializer edge-case tests
+    def test_serializer_get_file_url_value_error_returns_none(self):
+        from .serializers import CSVFileSerializer
+
+        class BadFile:
+            @property
+            def url(self):
+                raise ValueError("no url")
+
+        class Obj:
+            file = BadFile()
+
+        ser = CSVFileSerializer(context={})
+        self.assertIsNone(ser.get_file_url(Obj()))
+
+    def test_serializer_get_file_url_without_request_returns_url(self):
+        from .serializers import CSVFileSerializer
+
+        class GoodFile:
+            def __init__(self):
+                self.url = "/media/path/file.csv"
+
+        class Obj:
+            file = GoodFile()
+
+        ser = CSVFileSerializer(context={})
+        self.assertEqual(ser.get_file_url(Obj()), "/media/path/file.csv")
+
+    def test_serializer_get_size_exception_returns_none(self):
+        from .serializers import CSVFileSerializer
+
+        class BadFile:
+            @property
+            def size(self):
+                raise Exception("boom")
+
+        class Obj:
+            file = BadFile()
+
+        ser = CSVFileSerializer(context={})
+        self.assertIsNone(ser.get_size(Obj()))
+
+    def test_serializer_get_directory_various_branches(self):
+        from .serializers import CSVFileSerializer
+
+        ser = CSVFileSerializer(context={})
+
+        class ObjNone:
+            file = None
+
+        # file missing -> empty string
+        self.assertEqual(ser.get_directory(ObjNone()), "")
+
+        class ObjEmptyName:
+            class F:
+                name = ""
+            file = F()
+
+        self.assertEqual(ser.get_directory(ObjEmptyName()), "")
+
+        class ObjOtherPath:
+            class F:
+                name = "other_prefix/file.csv"
+            file = F()
+
+        # path not starting with datasets/csvs/ -> empty
+        self.assertEqual(ser.get_directory(ObjOtherPath()), "")
+
+        class ObjWithSubdir:
+            class F:
+                name = "datasets/csvs/subdir1/subdir2/file.csv"
+            file = F()
+
+        # should return the directory part relative to datasets/csvs/
+        actual = ser.get_directory(ObjWithSubdir())
+        # normalize: remove any leading slashes and normalize separators for cross-platform comparison
+        normalized = actual.lstrip('/\\').replace('/', os.path.sep).replace('\\', os.path.sep)
+        self.assertEqual(normalized, os.path.join("subdir1", "subdir2"))
+
+        class ObjRootFile:
+            class F:
+                name = "datasets/csvs/file.csv"
+            file = F()
+
+        # file directly under datasets/csvs -> empty string (normalize to handle leading slash)
+        actual_root = ser.get_directory(ObjRootFile())
+        normalized_root = actual_root.lstrip('/\\').replace('/', os.path.sep).replace('\\', os.path.sep)
+        self.assertEqual(normalized_root, "")
+
+    # Views edge-case tests
+    def test_list_view_returns_raw_list_when_not_paginated(self):
+        # Ensure paginate_queryset returns None so the final branch in list() is exercised
+        from dataset import views as dataset_views
+
+        self._login(self.researcher)
+        # Upload one file so serializer.data is a list with one item
+        upload_resp = self._upload_csv("listraw.csv")
+        self.assertEqual(upload_resp.status_code, 201)
+
+        with mock.patch.object(dataset_views.CSVFileListCreateView, 'paginate_queryset', return_value=None):
+            resp = self.client.get(self.list_create_url)
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            # When not paginated, response should be a list
+            self.assertIsInstance(data, list)
+            self.assertTrue(any(isinstance(it, dict) and it.get('id') for it in data))
+
+    def test_perform_destroy_ignores_storage_delete_exceptions(self):
+        # Upload a file
+        self._login(self.researcher)
+        upload_resp = self._upload_csv("todelete.csv")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        file_path = obj.file.path
+        # Patch default_storage.delete to raise
+        with mock.patch('django.core.files.storage.default_storage.delete', side_effect=Exception("storage fail")):
+            detail_url = reverse("csvfile_detail_destroy", kwargs={"pk": obj_id})
+            del_resp = self.client.delete(detail_url)
+            self.assertIn(del_resp.status_code, (200, 204))
+            # DB record should be removed despite storage.delete failing
+            self.assertFalse(CSV.objects.filter(pk=obj_id).exists())
+            # File should still exist on disk because delete failed
+            self.assertTrue(os.path.exists(file_path))

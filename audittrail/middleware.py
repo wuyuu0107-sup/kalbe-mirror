@@ -1,4 +1,4 @@
-# audittrail/middleware.py
+# audittrail/middleware.py halo
 import json
 from django.utils.deprecation import MiddlewareMixin
 from django.db.models import Q
@@ -190,3 +190,4 @@ class AuditTrailMiddleware(MiddlewareMixin):
             metadata={**base_meta, "username": final_username},
         )
         return response
+

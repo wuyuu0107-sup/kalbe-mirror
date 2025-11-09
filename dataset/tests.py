@@ -311,3 +311,67 @@ class DatasetFileManagementTests(TestCase):
         resp = self.client.post(self.folder_move_url, {"source_dir": "src"})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("source_dir and target_dir are required", resp.json()["detail"])
+
+    # Test cases for error handling in file moves
+    def test_move_file_fails_does_not_update_db(self):
+        self._login(self.researcher)
+        # Upload file
+        upload_resp = self._upload_csv("test.csv", b"col\nval\n")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        old_path = obj.file.path
+        old_name = obj.file.name
+        self.assertTrue(os.path.exists(old_path))
+        # Simulate move failure by making target dir unwritable or file locked
+        # For simplicity, we'll mock shutil.move to raise an exception
+        import unittest.mock as mock
+        with mock.patch('dataset.views.shutil.move', side_effect=OSError("Permission denied")):
+            move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+            move_resp = self.client.post(move_url, {"target_dir": "new_dir"})
+            self.assertEqual(move_resp.status_code, 500)
+            self.assertIn("Failed to move file", move_resp.json()["detail"])
+            # Refresh obj and check DB not updated
+            obj.refresh_from_db()
+            self.assertEqual(obj.file.name, old_name)
+            self.assertTrue(os.path.exists(old_path))  # File still in old location
+
+    def test_move_folder_fails_does_not_update_db(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Manually move to source dir
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
+        source_dir = "source_dir"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        # Move files
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
+        obj2.save()
+        # Now simulate move failure
+        import unittest.mock as mock
+        with mock.patch('dataset.views.shutil.move', side_effect=OSError("Disk full")):
+            move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "target_dir"})
+            self.assertEqual(move_resp.status_code, 500)
+            self.assertIn("Failed to move file", move_resp.json()["detail"])
+            # Check DB not updated
+            obj1.refresh_from_db()
+            obj2.refresh_from_db()
+            self.assertIn(source_dir, obj1.file.name)
+            self.assertIn(source_dir, obj2.file.name)
+            self.assertTrue(os.path.exists(obj1.file.path))
+            self.assertTrue(os.path.exists(obj2.file.path))

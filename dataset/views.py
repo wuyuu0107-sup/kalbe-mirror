@@ -95,8 +95,11 @@ class CSVFileMoveView(generics.GenericAPIView):
         # Move file
         old_path = obj.file.path
         new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
-        shutil.move(old_path, new_full_path)
-        # Update DB
+        try:
+            shutil.move(old_path, new_full_path)
+        except Exception as e:
+            return Response({"detail": f"Failed to move file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Update DB only if move succeeded
         obj.file.name = new_path
         obj.save()
         serializer = CSVFileSerializer(obj, context={'request': request})
@@ -128,8 +131,13 @@ class FolderMoveView(generics.GenericAPIView):
             new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
             # Ensure subdirs
             os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
-            shutil.move(old_full_path, new_full_path)
-            # Update DB
+            try:
+                shutil.move(old_full_path, new_full_path)
+            except Exception as e:
+                # If move fails, skip this file and continue with others? Or fail the whole operation?
+                # For now, fail the whole operation to maintain consistency
+                return Response({"detail": f"Failed to move file {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Update DB only if move succeeded
             obj.file.name = new_path
             obj.save()
             moved_ids.append(obj.id)

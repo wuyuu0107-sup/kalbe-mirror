@@ -1,86 +1,423 @@
-import os
+import csv
 import io
 import json
+import os
+import sys
 import tempfile
-import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, TestCase, override_settings
+import pandas as pd
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase
 from django.urls import reverse
 
-# === Toggle STUB MODE ===
-# Default: STUB_TESTS=1 (semua test berat di-skip biar CI hijau)
-STUB_TESTS = os.environ.get("STUB_TESTS", "1") == "1"
+from .serializers import PredictRequestSerializer
+from .services import SubprocessModelRunner
+from . import run_model as rm
 
-# --- Service tests (unit) ---
 
-@unittest.skipIf(STUB_TESTS, "Stub mode: skipping SubprocessModelRunner unit tests")
-class SubprocessModelRunnerTests(unittest.TestCase):
+# =====================================================================
+#  Dummy pipeline untuk test run_model.py
+# =====================================================================
+
+class DummyPipe:
     """
-    Unit test untuk service layer tanpa nyentuh Django ORM.
+    Fake sklearn Pipeline-like object:
+    - punya .predict()
+    - punya .feature_names_in_
+    - punya .named_steps["model"].classes_
     """
-    @patch('predictions.services.subprocess.run')
-    def test_runs_cli_and_reads_output(self, mock_run):
-        mock_run.return_value.returncode = 0
-        from predictions.services import SubprocessModelRunner
-        with patch.object(SubprocessModelRunner, '_read_output_csv',
-                          return_value=[{"a": "b"}]) as mock_read:
-            runner = SubprocessModelRunner(ml_runner_py='/abs/fake/run_model.py')
-            with tempfile.NamedTemporaryFile(suffix='.csv', delete=True) as f:
-                result = runner.run(input_csv_path=f.name)
-        assert result == [{"a": "b"}]
-        assert mock_run.called
-        assert mock_read.called
+    def __init__(self):
+        self.feature_names_in_ = list(rm.COLMAP.values())
+        self._classes = [0, 1, 2]
+        self.named_steps = {"model": self}
+
+    def predict(self, X):
+        # Selalu balikin kelas 0 agar mapping -> "low"
+        return [0] * len(X)
+
+    @property
+    def classes_(self):
+        return self._classes
 
 
-# --- API tests (integration-lite) ---
+# =====================================================================
+#  Serializer tests
+# =====================================================================
 
-BaseCase = SimpleTestCase if STUB_TESTS else TestCase
+class PredictRequestSerializerTests(SimpleTestCase):
+    def test_accepts_valid_csv_under_size_limit(self):
+        content = b"SIN,Subject Initials\n14515,YSSA\n"
+        uploaded = SimpleUploadedFile("patients.csv", content)
 
-@unittest.skipIf(STUB_TESTS, "Stub mode: skipping /api/predict-csv integration tests")
-class PredictCsvApiTests(BaseCase):
+        serializer = PredictRequestSerializer(data={"file": uploaded})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertIn("file", serializer.validated_data)
+
+    def test_rejects_non_csv_extension(self):
+        content = b"not,really,csv\n"
+        uploaded = SimpleUploadedFile("not_csv.txt", content)
+
+        serializer = PredictRequestSerializer(data={"file": uploaded})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("file", serializer.errors)
+        self.assertIn(".csv", str(serializer.errors["file"]))
+
+    def test_rejects_too_large_csv(self):
+        # 21MB > 20MB
+        big_content = b"0" * (21 * 1024 * 1024)
+        uploaded = SimpleUploadedFile("big.csv", big_content)
+
+        serializer = PredictRequestSerializer(data={"file": uploaded})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("file", serializer.errors)
+        self.assertIn("20MB", str(serializer.errors["file"]))
+
+
+# =====================================================================
+#  Service layer tests (SubprocessModelRunner)
+# =====================================================================
+
+class SubprocessModelRunnerTests(SimpleTestCase):
+    def _make_dummy_runner_dir(self) -> Path:
+        """
+        Bikin folder sementara berisi:
+        - run_model.py dummy
+        - model_logreg.joblib dummy
+        """
+        tmpdir = Path(tempfile.mkdtemp(prefix="runner_src_"))
+        runner_path = tmpdir / "run_model.py"
+        runner_path.write_text("print('dummy runner')")
+
+        model_path = tmpdir / "model_logreg.joblib"
+        model_path.write_bytes(b"dummy-model")
+
+        return runner_path
+
+    @patch("predictions.services.subprocess.run")
+    @patch.object(SubprocessModelRunner, "_read_output_csv")
+    def test_run_happy_path_calls_subprocess_and_reads_output(
+        self, mock_read_output, mock_subprocess_run
+    ):
+        mock_subprocess_run.return_value.returncode = 0
+        mock_subprocess_run.return_value.stdout = "ok"
+        mock_subprocess_run.return_value.stderr = ""
+        mock_read_output.return_value = [{"a": "b"}]
+
+        runner_path = self._make_dummy_runner_dir()
+        runner = SubprocessModelRunner(ml_runner_py=str(runner_path))
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(b"SIN,Subject Initials\n14515,YSSA\n")
+            input_path = f.name
+
+        try:
+            result = runner.run(input_csv_path=input_path)
+        finally:
+            if os.path.exists(input_path):
+                os.remove(input_path)
+
+        self.assertEqual(result, [{"a": "b"}])
+        self.assertTrue(mock_subprocess_run.called)
+        mock_read_output.assert_called_once()
+
+    def test_run_raises_if_runner_not_found(self):
+        runner = SubprocessModelRunner(ml_runner_py="/does/not/exist/run_model.py")
+
+        with self.assertRaises(FileNotFoundError):
+            runner.run(input_csv_path="/tmp/fake_input.csv")
+
+    @patch("predictions.services.subprocess.run")
+    def test_run_raises_runtimeerror_on_nonzero_exit_code(self, mock_subprocess_run):
+        mock_subprocess_run.return_value.returncode = 1
+        mock_subprocess_run.return_value.stdout = ""
+        mock_subprocess_run.return_value.stderr = "boom"
+
+        runner_path = self._make_dummy_runner_dir()
+        runner = SubprocessModelRunner(ml_runner_py=str(runner_path))
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            f.write(b"SIN,Subject Initials\n14515,YSSA\n")
+            input_path = f.name
+
+        try:
+            with self.assertRaises(RuntimeError) as cm:
+                runner.run(input_csv_path=input_path)
+        finally:
+            if os.path.exists(input_path):
+                os.remove(input_path)
+
+        self.assertIn("ML runner failed", str(cm.exception))
+        self.assertIn("boom", str(cm.exception))
+
+    def test_read_output_csv_parses_rows(self):
+        runner = SubprocessModelRunner(ml_runner_py="/tmp/dummy.py")
+
+        with tempfile.NamedTemporaryFile("w+", suffix=".csv", delete=False) as f:
+            writer = csv.writer(f)
+            writer.writerow(["SIN", "Subject Initials", "prediction"])
+            writer.writerow(["14515", "YSSA", "low"])
+            writer.writerow(["9723", "RDHO", "high"])
+            csv_path = Path(f.name)
+
+        try:
+            rows = runner._read_output_csv(csv_path)
+        finally:
+            if os.path.exists(csv_path):
+                os.remove(csv_path)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            rows[0],
+            {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
+        )
+        self.assertEqual(
+            rows[1],
+            {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
+        )
+
+
+# =====================================================================
+#  API / view tests
+# =====================================================================
+
+class PredictCsvApiTests(SimpleTestCase):
     """
-    Tes endpoint /api/predict-csv/.
+    Tes endpoint /api/predict-csv/ (name: predictions:predict_csv)
     """
+
     def setUp(self):
-        self.url = reverse('predictions:predict_csv')
+        self.url = reverse("predictions:predict_csv")
 
     def _dummy_csv_bytes(self):
         return b"SIN,Subject Initials\n14515,YSSA\n9723,RDHO\n"
 
-    @override_settings(ML_RUNNER_PY='/abs/fake/path/run_model.py')
-    @patch('predictions.services.subprocess.run')
-    def test_upload_and_get_json(self, mock_run):
-        mock_run.return_value.returncode = 0
-        from predictions.services import SubprocessModelRunner
-        with patch.object(SubprocessModelRunner, '_read_output_csv', return_value=[
+    @patch("predictions.views.SubprocessModelRunner")
+    def test_upload_csv_and_get_json_rows(self, MockRunner):
+        mock_runner = MockRunner.return_value
+        mock_runner.run.return_value = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
-        ]):
-            file = io.BytesIO(self._dummy_csv_bytes())
-            file.name = "anything.csv"
-            resp = self.client.post(self.url, data={'file': file}, format='multipart')
+        ]
+
+        file_obj = io.BytesIO(self._dummy_csv_bytes())
+        file_obj.name = "patients.csv"
+
+        resp = self.client.post(
+            self.url,
+            data={"file": file_obj},
+            format="multipart",
+        )
+
         self.assertEqual(resp.status_code, 200)
         data = json.loads(resp.content)
-        self.assertIn('rows', data)
-        self.assertEqual(len(data['rows']), 2)
-        self.assertEqual(data['rows'][0]['prediction'], 'low')
+        self.assertIn("rows", data)
+        self.assertEqual(len(data["rows"]), 2)
+        self.assertEqual(data["rows"][0]["prediction"], "low")
+        mock_runner.run.assert_called_once()
 
-    def test_reject_non_csv(self):
-        bad_file = io.BytesIO(b'not a csv')
+    def test_reject_non_csv_in_view(self):
+        bad_file = io.BytesIO(b"not a csv at all")
         bad_file.name = "not_csv.txt"
-        resp = self.client.post(self.url, data={'file': bad_file}, format='multipart')
+
+        resp = self.client.post(
+            self.url,
+            data={"file": bad_file},
+            format="multipart",
+        )
         self.assertEqual(resp.status_code, 400)
+        body = json.loads(resp.content)
+        self.assertIn("file", body)
 
-    def test_missing_file(self):
-        resp = self.client.post(self.url, data={}, format='multipart')
+    def test_missing_file_returns_400(self):
+        resp = self.client.post(
+            self.url,
+            data={},
+            format="multipart",
+        )
         self.assertEqual(resp.status_code, 400)
+        body = json.loads(resp.content)
+        self.assertIn("file", body)
+
+    @patch("predictions.views.SubprocessModelRunner")
+    def test_runner_failure_returns_500(self, MockRunner):
+        mock_runner = MockRunner.return_value
+        mock_runner.run.side_effect = Exception("crash in model")
+
+        file_obj = io.BytesIO(self._dummy_csv_bytes())
+        file_obj.name = "patients.csv"
+
+        resp = self.client.post(
+            self.url,
+            data={"file": file_obj},
+            format="multipart",
+        )
+
+        self.assertEqual(resp.status_code, 500)
+        body = json.loads(resp.content)
+        self.assertIn("detail", body)
+        self.assertIn("crash in model", body["detail"])
 
 
-# --- Smoke test ringan supaya CI tetap "pass" saat stub aktif ---
+# =====================================================================
+#  run_model.py helper tests
+# =====================================================================
 
-@unittest.skipUnless(STUB_TESTS, "Real mode: run full tests above")
-class PredictCsvSmokeTests(SimpleTestCase):
-    def test_smoke(self):
-        """Smoke test ringan biar CI hijau di stub mode."""
-        self.assertTrue(True)
+class RunModelHelperTests(SimpleTestCase):
+    def test_coalesce_duplicate_targets_prefers_first_non_null(self):
+        df = pd.DataFrame(
+            [[1, None], [None, 2]],
+            columns=["age_recruitment", "age_recruitment"],
+        )
+        out = rm.coalesce_duplicate_targets(df)
+
+        self.assertEqual(list(out.columns), ["age_recruitment"])
+        self.assertEqual(out["age_recruitment"].tolist(), [1, 2])
+
+    def test_build_filtered_frame_renames_and_orders(self):
+        df_raw = pd.DataFrame(
+            {
+                "Gender": ["M", "F"],
+                "Age": [30, 40],
+                "Height": [170, 160],
+            }
+        )
+
+        out = rm.build_filtered_frame(df_raw)
+        target_cols = list(dict.fromkeys(rm.COLMAP.values()))
+
+        self.assertEqual(list(out.columns), target_cols)
+        self.assertEqual(out.loc[0, "gender"], "M")
+        self.assertEqual(out.loc[1, "age_recruitment"], 40)
+
+    @patch("predictions.run_model.joblib.load")
+    def test_load_pipeline_from_dict_bundle(self, mock_load):
+        mock_load.return_value = {"pipeline": "PIPE"}
+        result = rm.load_pipeline(Path("dummy.joblib"))
+        self.assertEqual(result, "PIPE")
+
+    @patch("predictions.run_model.joblib.load")
+    def test_load_pipeline_plain_object(self, mock_load):
+        mock_load.return_value = "PLAIN"
+        result = rm.load_pipeline(Path("dummy.joblib"))
+        self.assertEqual(result, "PLAIN")
+
+
+# =====================================================================
+#  run_model.py main() tests (CLI behaviour)
+# =====================================================================
+
+class RunModelMainTests(SimpleTestCase):
+    @patch("predictions.run_model.joblib.load")
+    def test_main_success_writes_predictions_with_aux_cols(self, mock_load):
+        mock_load.return_value = DummyPipe()
+
+        with tempfile.TemporaryDirectory() as tmpdir_str:
+            tmpdir = Path(tmpdir_str)
+
+            input_path = tmpdir / "input.csv"
+            output_path = tmpdir / "output.csv"
+            model_path = tmpdir / "model_logreg.joblib"
+
+            # bikin input CSV lengkap dengan AUX_COLS
+            df_raw = pd.DataFrame(
+                {
+                    "Gender": ["M", "F"],
+                    "Age": [30, 40],
+                    "Height": [170, 160],
+                    "Weight": [70, 60],
+                    "BMI": [24.2, 23.4],
+                    "Systolic": [120, 110],
+                    "Diastolic": [80, 70],
+                    "Smoker": [0, 1],
+                    "Hemoglobin": [13.5, 14.0],
+                    "Random Blood Glucose": [100, 110],
+                    "SGOT": [20, 22],
+                    "SGPT": [21, 25],
+                    "Alkaline Phosphatase": [60, 62],
+                    "SIN": ["14515", "9723"],
+                    "Subject Initials": ["YSSA", "RDHO"],
+                }
+            )
+            df_raw.to_csv(input_path, index=False)
+
+            # file model kosong, isinya diabaikan karena joblib.load di-patch
+            model_path.write_bytes(b"dummy")
+
+            argv = [
+                "run_model.py",
+                "--input",
+                str(input_path),
+                "--output",
+                str(output_path),
+                "--model",
+                str(model_path),
+            ]
+
+            with patch.object(sys, "argv", argv):
+                rm.main()
+
+            self.assertTrue(output_path.exists())
+
+            out_df = pd.read_csv(output_path)
+            self.assertEqual(list(out_df.columns), ["SIN", "Subject Initials", "prediction"])
+            self.assertEqual(out_df["SIN"].tolist(), ["14515", "9723"])
+            # DummyPipe -> semua pred 0 -> label "low"
+            self.assertEqual(out_df["prediction"].tolist(), ["low", "low"])
+
+    def test_main_errors_when_input_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir_str:
+            tmpdir = Path(tmpdir_str)
+
+            input_path = tmpdir / "missing.csv"     # tidak dibuat
+            output_path = tmpdir / "output.csv"
+            model_path = tmpdir / "model_logreg.joblib"
+            model_path.write_bytes(b"dummy")
+
+            argv = [
+                "run_model.py",
+                "--input",
+                str(input_path),
+                "--output",
+                str(output_path),
+                "--model",
+                str(model_path),
+            ]
+
+            stderr = io.StringIO()
+            with patch.object(sys, "argv", argv), patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as cm:
+                    rm.main()
+
+            self.assertEqual(cm.exception.code, 1)
+            self.assertIn("Input file not found", stderr.getvalue())
+
+    def test_main_errors_when_model_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir_str:
+            tmpdir = Path(tmpdir_str)
+
+            input_path = tmpdir / "input.csv"
+            output_path = tmpdir / "output.csv"
+            model_path = tmpdir / "model_logreg.joblib"   # tidak dibuat
+
+            # input CSV minimal
+            pd.DataFrame({"Gender": ["M"], "Age": [30]}).to_csv(input_path, index=False)
+
+            argv = [
+                "run_model.py",
+                "--input",
+                str(input_path),
+                "--output",
+                str(output_path),
+                "--model",
+                str(model_path),
+            ]
+
+            stderr = io.StringIO()
+            with patch.object(sys, "argv", argv), patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as cm:
+                    rm.main()
+
+            self.assertEqual(cm.exception.code, 1)
+            self.assertIn("Model file not found", stderr.getvalue())

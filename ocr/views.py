@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 import google.generativeai as genai
 from dotenv import load_dotenv
+from typing import Dict, Any
 
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
@@ -152,112 +153,116 @@ def _default_payload():
     }
 
 def normalize_payload(extracted: dict) -> dict:
-    """
-    Enforce your exact schema + types:
-    - Measurement objects: 4 keys, values as **strings**
-    - Dates: DD/MMM/YYYY (MMM uppercase)
-    - DEMOGRAPHY: age=int if possible; weight/height/bmi as strings
-    - VITAL_SIGNS: strings
-    - SEROLOGY: strings
-    - Final section order: DEMOGRAPHY, MEDICAL_HISTORY, VITAL_SIGNS, SEROLOGY, URINALYSIS, HEMATOLOGY, CLINICAL_CHEMISTRY, then extras
-    """
-    def _serology_str(x):
-        if x is None:
-            return None
-        if isinstance(x, dict):
-            for key in ("Hasil", "hasil", "value", "Value", "result", "Result"):
-                if key in x and x[key] is not None:
-                    return str(x[key])
-            return str(x)
-        return str(x)
-
     base = _default_payload()
+    
     if not isinstance(extracted, dict):
-        # return ordered empty schema
-        return {
-            "DEMOGRAPHY":          base["DEMOGRAPHY"],
-            "MEDICAL_HISTORY":     base["MEDICAL_HISTORY"],
-            "VITAL_SIGNS":         base["VITAL_SIGNS"],
-            "SEROLOGY":            base["SEROLOGY"],
-            "URINALYSIS":          base["URINALYSIS"],
-            "HEMATOLOGY":          base["HEMATOLOGY"],
-            "CLINICAL_CHEMISTRY":  base["CLINICAL_CHEMISTRY"],
-        }
+        return _build_ordered_output(base, {})
+    
+    norm = _normalize_section_keys(extracted)
+    _merge_simple_sections(norm, base)
+    _process_serology(norm.get("SEROLOGY", {}), base["SEROLOGY"])
+    _process_measurement_sections(norm, base)
+    _process_demography(base["DEMOGRAPHY"])
+    _process_vital_signs(base["VITAL_SIGNS"])
+    
+    extras = _collect_extra_sections(norm)
+    return _build_ordered_output(base, extras)
 
-    # normalize top-level key names
+
+def _normalize_section_keys(extracted: Dict[str, Any]) -> Dict[str, Any]:
     norm = {}
+    mapping = {
+        "DEMOGRAPHY": "DEMOGRAPHY",
+        "MEDICAL_HISTORY": "MEDICAL_HISTORY",
+        "VITAL_SIGNS": "VITAL_SIGNS",
+        "SEROLOGY": "SEROLOGY",
+        "URINALYSIS": "URINALYSIS",
+        "HEMATOLOGY": "HEMATOLOGY",
+        "CLINICAL_CHEMISTRY": "CLINICAL_CHEMISTRY",
+    }
+    
     for k, v in extracted.items():
         ku = k.upper().replace(" ", "_")
-        mapping = {
-            "DEMOGRAPHY":"DEMOGRAPHY",
-            "MEDICAL_HISTORY":"MEDICAL_HISTORY",
-            "VITAL_SIGNS":"VITAL_SIGNS",
-            "SEROLOGY":"SEROLOGY",
-            "URINALYSIS":"URINALYSIS",
-            "HEMATOLOGY":"HEMATOLOGY",
-            "CLINICAL_CHEMISTRY":"CLINICAL_CHEMISTRY",
-        }
         norm[mapping.get(ku, k)] = v
+    
+    return norm
 
-    # merge simple dict sections
+
+def _merge_simple_sections(norm: Dict[str, Any], base: Dict[str, Any]) -> None:
     for sec in ("DEMOGRAPHY", "MEDICAL_HISTORY", "VITAL_SIGNS"):
         if isinstance(norm.get(sec), dict):
             base[sec].update(norm[sec])
 
-    # SEROLOGY should be strings
-    if isinstance(norm.get("SEROLOGY"), dict):
-        for k in base["SEROLOGY"].keys():
-            base["SEROLOGY"][k] = _serology_str(norm["SEROLOGY"].get(k))
 
-    # Measurement sections: merge then coerce to 4-key strings
-    for sec, fields in (
-        ("URINALYSIS", URINALYSIS_FIELDS),
-        ("HEMATOLOGY", HEMATOLOGY_FIELDS),
-        ("CLINICAL_CHEMISTRY", CHEMISTRY_FIELDS),
-    ):
+def _process_demography(demo: Dict[str, Any]) -> None:
+    demo["screening_date"] = _norm_date(demo.get("screening_date"))
+    demo["date_of_birth"] = _norm_date(demo.get("date_of_birth"))
+    
+    try:
+        demo["age"] = int(demo["age"]) if demo.get("age") not in (None, "") else None
+    except Exception:
+        demo["age"] = None
+    
+    for k in ("weight_kg", "height_cm", "bmi"):
+        if demo.get(k) is not None:
+            demo[k] = _to_str(demo[k])
+
+
+def _process_vital_signs(vitals: Dict[str, Any]) -> None:
+    for k in ("systolic_bp", "diastolic_bp", "heart_rate"):
+        if vitals.get(k) is not None:
+            vitals[k] = _to_str(vitals[k])
+
+
+def _process_serology(serology: Dict[str, Any], base: Dict[str, Any]) -> None:
+    if not isinstance(serology, dict):
+        return
+    
+    for k in base.keys():
+        base[k] = _serology_str(serology.get(k))
+
+
+def _serology_str(x):
+    if x is None:
+        return None
+    if isinstance(x, dict):
+        for key in ("Hasil", "hasil", "value", "Value", "result", "Result"):
+            if key in x and x[key] is not None:
+                return str(x[key])
+        return str(x)
+    return str(x)
+
+
+def _process_measurement_sections(norm: Dict[str, Any], base: Dict[str, Any]) -> None:
+    sections = [
+        ("URINALYSIS", URINALYSIS_FIELDS, "Carik Celup"),
+        ("HEMATOLOGY", HEMATOLOGY_FIELDS, None),
+        ("CLINICAL_CHEMISTRY", CHEMISTRY_FIELDS, None),
+    ]
+    
+    for sec, fields, default_method in sections:
         if isinstance(norm.get(sec), dict):
             base[sec].update(norm[sec])
-    _ensure_section(base["URINALYSIS"], URINALYSIS_FIELDS, default_method="Carik Celup")
-    _ensure_section(base["HEMATOLOGY"], HEMATOLOGY_FIELDS)
-    _ensure_section(base["CLINICAL_CHEMISTRY"], CHEMISTRY_FIELDS)
+        _ensure_section(base[sec], fields, default_method=default_method)
 
-    # DEMOGRAPHY formatting
-    d = base["DEMOGRAPHY"]
-    d["screening_date"] = _norm_date(d.get("screening_date"))
-    d["date_of_birth"]  = _norm_date(d.get("date_of_birth"))
 
-    # age int if possible
-    try:
-        d["age"] = int(d["age"]) if d.get("age") not in (None, "") else None
-    except Exception:
-        d["age"] = None
-
-    # weight/height/bmi as strings
-    for k in ("weight_kg", "height_cm", "bmi"):
-        if d.get(k) is not None:
-            d[k] = _to_str(d[k])
-
-    # vitals as strings
-    v = base["VITAL_SIGNS"]
-    for k in ("systolic_bp","diastolic_bp","heart_rate"):
-        if v.get(k) is not None:
-            v[k] = _to_str(v[k])
-
-    # collect extras (unknown sections) to append at the end
-    extras = {
-        k: v for k, v in norm.items()
-        if k not in ("DEMOGRAPHY","MEDICAL_HISTORY","VITAL_SIGNS","SEROLOGY","URINALYSIS","HEMATOLOGY","CLINICAL_CHEMISTRY")
+def _collect_extra_sections(norm: Dict[str, Any]) -> Dict[str, Any]:
+    known_sections = {
+        "DEMOGRAPHY", "MEDICAL_HISTORY", "VITAL_SIGNS",
+        "SEROLOGY", "URINALYSIS", "HEMATOLOGY", "CLINICAL_CHEMISTRY"
     }
+    return {k: v for k, v in norm.items() if k not in known_sections}
 
-    # return in the exact order you want
+
+def _build_ordered_output(base: Dict[str, Any], extras: Dict[str, Any]) -> Dict[str, Any]:
     ordered = {
-        "DEMOGRAPHY":          base["DEMOGRAPHY"],
-        "MEDICAL_HISTORY":     base["MEDICAL_HISTORY"],
-        "VITAL_SIGNS":         base["VITAL_SIGNS"],
-        "SEROLOGY":            base["SEROLOGY"],
-        "URINALYSIS":          base["URINALYSIS"],
-        "HEMATOLOGY":          base["HEMATOLOGY"],
-        "CLINICAL_CHEMISTRY":  base["CLINICAL_CHEMISTRY"],
+        "DEMOGRAPHY": base["DEMOGRAPHY"],
+        "MEDICAL_HISTORY": base["MEDICAL_HISTORY"],
+        "VITAL_SIGNS": base["VITAL_SIGNS"],
+        "SEROLOGY": base["SEROLOGY"],
+        "URINALYSIS": base["URINALYSIS"],
+        "HEMATOLOGY": base["HEMATOLOGY"],
+        "CLINICAL_CHEMISTRY": base["CLINICAL_CHEMISTRY"],
     }
     ordered.update(extras)
     return ordered

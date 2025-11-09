@@ -362,7 +362,10 @@ class RunModelMainTests(SimpleTestCase):
 
             out_df = pd.read_csv(output_path)
             self.assertEqual(list(out_df.columns), ["SIN", "Subject Initials", "prediction"])
-            self.assertEqual(out_df["SIN"].tolist(), ["14515", "9723"])
+            self.assertEqual(
+                out_df["SIN"].astype(str).tolist(),
+                ["14515", "9723"],
+            )
             # DummyPipe -> semua pred 0 -> label "low"
             self.assertEqual(out_df["prediction"].tolist(), ["low", "low"])
 

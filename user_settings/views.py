@@ -18,6 +18,9 @@ _password_service = PasswordChangeService(
     password_encoder=DjangoPasswordEncoder(),
 )
 
+AUTHENTICATION_REQUIRED = "Authentication required"
+INVALID_PAYLOAD = "Invalid payload"
+
 
 def get_authenticated_user(request):
     """
@@ -58,7 +61,7 @@ def change_password(request):
         user = get_authenticated_user(request)
         if not user:
             return JsonResponse({
-                "error": "Authentication required",
+                "error": AUTHENTICATION_REQUIRED,
                 "message": "You must be logged in to change your password"
             }, status=401)
 
@@ -69,13 +72,13 @@ def change_password(request):
 
         if data is None:
             return JsonResponse({
-                "error": "Invalid payload",
+                "error": INVALID_PAYLOAD,
                 "message": "Request body must contain valid JSON"
             }, status=400)
         
         if not isinstance(data, dict):
             return JsonResponse({
-                "error": "Invalid payload",
+                "error": INVALID_PAYLOAD,
                 "message": "Request body must be a JSON object"
             }, status=400)
 
@@ -137,7 +140,7 @@ def user_profile(request):
     user = get_authenticated_user(request)
     if not user:
         return JsonResponse({
-            "error": "Authentication required",
+            "error": AUTHENTICATION_REQUIRED,
             "message": "You must be logged in to view profile"
         }, status=401)
     
@@ -174,7 +177,7 @@ def delete_account(request):
         user = get_authenticated_user(request)
         if not user:
             return JsonResponse({
-                "error": "Authentication required",
+                "error": AUTHENTICATION_REQUIRED,
                 "message": "You must be logged in to delete your account"
             }, status=401)
 
@@ -185,13 +188,13 @@ def delete_account(request):
 
         if data is None:
             return JsonResponse({
-                "error": "Invalid payload",
+                "error": INVALID_PAYLOAD,
                 "message": "Request body must contain valid JSON"
             }, status=400)
         
         if not isinstance(data, dict):
             return JsonResponse({
-                "error": "Invalid payload",
+                "error": INVALID_PAYLOAD,
                 "message": "Request body must be a JSON object"
             }, status=400)
 

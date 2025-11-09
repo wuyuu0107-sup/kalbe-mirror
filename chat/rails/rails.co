@@ -1,0 +1,35 @@
+define user out_of_scope_question
+  "what is the meaning of life"
+  "meaning of life"
+  "tell me about the meaning of life"
+  "tell me about love"
+  "talk about religion"
+  "agama"
+
+define user clinical_query
+  "patients"
+  "patient"
+  "trial"
+  "trials"
+  "subject"
+  "database"
+  "data"
+  "cohort"
+  "how many patients"
+  "berapa pasien"
+  "uji klinis"
+
+define bot out_of_scope_reply
+  "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+
+define flow block_out_of_scope
+  when user out_of_scope_question
+    bot out_of_scope_reply
+
+define flow passthrough_clinical_query
+  when user clinical_query
+    bot message "__DEFER_TO_BACKEND__"
+
+define flow passthrough_default
+  otherwise
+    bot message "__DEFER_TO_BACKEND__"

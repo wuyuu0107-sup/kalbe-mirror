@@ -169,10 +169,6 @@ class SemanticQAService:
     formatter: AnswerFormatter
 
     def answer(self, user_message: str, session_id: str | None = None) -> str:
-        # Guardrail (kept from legacy code)
-        if "meaning of life" in user_message.lower():
-            return ("I’m sorry, I can only assist with information about your clinical "
-                    "dataset and related analytics.")
 
         # 1) NL -> SQL
         sql = self.sqlgen.generate(user_message)

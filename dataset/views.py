@@ -9,14 +9,14 @@ from rest_framework.response import Response
 
 from save_to_database.models import CSV
 from .serializers import CSVFileSerializer
-from .permissions import IsResearcherOnly
+from .permissions import IsAuthenticatedAndVerified
 
 
 class CSVFileListCreateView(generics.ListCreateAPIView):
     queryset = CSV.objects.all().order_by("-created_at")
     serializer_class = CSVFileSerializer
     parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [IsResearcherOnly]
+    permission_classes = [IsAuthenticatedAndVerified]
 
     def create(self, request, *args, **kwargs):
         # require a file under key 'file'
@@ -42,7 +42,7 @@ class CSVFileListCreateView(generics.ListCreateAPIView):
 class CSVFileRetrieveDestroyView(generics.RetrieveDestroyAPIView):
     queryset = CSV.objects.all()
     serializer_class = CSVFileSerializer
-    permission_classes = [IsResearcherOnly]
+    permission_classes = [IsAuthenticatedAndVerified]
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -64,7 +64,7 @@ class CSVFileRetrieveDestroyView(generics.RetrieveDestroyAPIView):
 
 
 class CSVFileDownloadView(generics.GenericAPIView):
-    permission_classes = [IsResearcherOnly]
+    permission_classes = [IsAuthenticatedAndVerified]
 
     def get(self, request, pk):
         obj = get_object_or_404(CSV, pk=pk)
@@ -79,7 +79,7 @@ class CSVFileDownloadView(generics.GenericAPIView):
 
 
 class CSVFileMoveView(generics.GenericAPIView):
-    permission_classes = [IsResearcherOnly]
+    permission_classes = [IsAuthenticatedAndVerified]
 
     def post(self, request, pk):
         obj = get_object_or_404(CSV, pk=pk)
@@ -107,7 +107,7 @@ class CSVFileMoveView(generics.GenericAPIView):
 
 
 class FolderMoveView(generics.GenericAPIView):
-    permission_classes = [IsResearcherOnly]
+    permission_classes = [IsAuthenticatedAndVerified]
 
     def post(self, request):
         source_dir = request.data.get('source_dir')

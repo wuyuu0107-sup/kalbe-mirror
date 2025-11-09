@@ -5,6 +5,7 @@ from annotation.views_page import AnnotationTesterPage
 from ocr.views import ocr_test_page
 from django.conf import settings
 from django.conf.urls.static import static
+from dashboard import views
 
 # CSRF token endpoint (for SPA/Next.js to fetch a token)
 from accounts.csrf import csrf as csrf_view
@@ -16,6 +17,8 @@ urlpatterns = [
     path("api/csrf/", csrf_view),
 
     path("api/chat/", include("chat.urls")),
+
+    path('api/', include('predictions.urls', namespace='predictions')),
 
     # Accounts app routes (OTP request/confirm/test live under /accounts/…)
     path("accounts/", include("accounts.urls")),
@@ -31,6 +34,13 @@ urlpatterns = [
     path('save-to-database/', include('save_to_database.urls')),
     path('dataset/', include('dataset.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('search/', include('search.urls')),
+    path('notification/', include('notification.urls')),
+    path('', include('django_prometheus.urls')), 
+    path("", include("dashboard.urls")),
+    path('search/', include('search.urls')),
+    path('', include('django_prometheus.urls')),
+    path('api/user-settings/', include('user_settings.urls')),
     path("audit/", include("audittrail.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

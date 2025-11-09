@@ -73,6 +73,7 @@ CORS_ALLOW_HEADERS = [
 # Application definition
 
 INSTALLED_APPS = [
+    'django_prometheus',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -90,7 +91,11 @@ INSTALLED_APPS = [
     "rest_framework",
     "save_to_database",
     "dashboard",
-    "chat", 
+    "chat",
+    "notification",
+    'search',
+    "predictions",
+    "user_settings",
     'audittrail',
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
@@ -115,6 +120,7 @@ TIME_ZONE = "Asia/Jakarta"
 USE_TZ = True
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -124,6 +130,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
     'audittrail.middleware.AuditTrailMiddleware',
 ]
 
@@ -159,18 +166,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "kalbe_be.wsgi.application"
 
-DATABASES = {
-    'default': dj_database_url.parse(
-        config("DATABASE_URL")
-    )
-}
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = config("DATABASE_URL", default=None)
 
 if DATABASE_URL:
-    DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)}
+    DATABASES = {
+        "default": {
+            **dj_database_url.parse(DATABASE_URL, conn_max_age=600),
+            'ENGINE': 'django_prometheus.db.backends.postgresql',  
+        }
+    }
 else:
-    # local dev or tests
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -222,3 +227,8 @@ GEMINI_API_KEY = config("GEMINI_API_KEY", default=None)
 GEMINI_MODEL   = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_TEMP    = config("GEMINI_TEMP", cast=float, default=0.4)
 USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)
+
+ML_RUNNER_PY = os.getenv(
+    "ML_RUNNER_PY",
+    str(BASE_DIR / "predictions" / "run_model.py")
+)

@@ -7,11 +7,15 @@ from django.shortcuts import get_object_or_404
 import uuid
 import re
 import json
+import logging
 
 from .models import ChatSession, ChatMessage
 from .service import answer_question
+from notification.triggers import notify_chat_reply
 
 DEMO_COOKIE_NAME = "demo_user_id"
+log = logging.getLogger(__name__)
+
 
 
 def _get_or_create_demo_user_id(request) -> uuid.UUID:
@@ -57,13 +61,21 @@ def _first_words(s: str, n: int = 6) -> str:
 def _payload(request) -> dict:
     """
     Be liberal in what we accept: JSON body, DRF-parsed data, form, or query.
-    This prevents 'empty question' when Content-Type varies in tests.
+    Also flatten list values (e.g. QueryDict or DRF parsers) to first element.
     """
+    def _flatten(d: dict) -> dict:
+        out = {}
+        for k, v in (d or {}).items():
+            if isinstance(v, list) and v:
+                out[k] = v[0]
+            else:
+                out[k] = v
+        return out
+
     # DRF's request.data first
     if getattr(request, "data", None):
         try:
-            # Convert QueryDict to plain dict if needed
-            return dict(request.data)
+            return _flatten(dict(request.data))
         except Exception:
             pass
 
@@ -73,17 +85,18 @@ def _payload(request) -> dict:
         if raw:
             data = json.loads(raw)
             if isinstance(data, dict):
-                return data
+                return _flatten(data)
     except Exception:
         pass
 
     # Form / query fallbacks
     if hasattr(request, "POST") and request.POST:
-        return request.POST.dict()
+        return _flatten(request.POST.dict())
     if hasattr(request, "GET") and request.GET:
-        return request.GET.dict()
+        return _flatten(request.GET.dict())
 
     return {}
+
 
 
 @api_view(["GET", "POST"])
@@ -193,7 +206,8 @@ def ask(request, sid):
 
     data = _payload(request)
     # accept q / question / content for flexibility in tests & frontend
-    q = (data.get("q") or data.get("question") or data.get("content") or "").strip()
+    q_raw = data.get("q") or data.get("question") or data.get("content") or ""
+    q = str(q_raw).strip()
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)
@@ -204,7 +218,14 @@ def ask(request, sid):
 
     try:
         answer = answer_question(q)  # your existing service
+        if isinstance(answer, dict):
+            # optionally pretty-print JSON or pick a key
+            answer = json.dumps(answer, ensure_ascii=False, indent=2)
         ChatMessage.objects.create(session=sess, role="assistant", content=answer)
+
+        session_id = request.COOKIES.get("sessionid")
+        if session_id:
+            notify_chat_reply(session_id)
 
         # keep sidebar metadata fresh
         preview = _first_words(answer, 12)
@@ -217,15 +238,32 @@ def ask(request, sid):
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp
 
-    except Exception:
-        demo = "Mohon Tanyakan Pertanyaan Lebih Relevan. Ini Bukanlah Sebuah Pertanyaan Yang Bisa Saya Jawab: " + q[:200] if settings.DEBUG else None
-        if demo:
+    except Exception as e:
+        # Classify a couple of “normal transient” failures so logs aren’t noisy
+        msg = (str(e) or e.__class__.__name__).strip()
+        is_transient = msg in {"empty_response", "llm_empty_sql"}
+
+        if is_transient:
+            log.info("ask(): transient LLM empty output: %s", msg)
+        else:
+            # full stack only for unexpected errors
+            log.exception("ask() failed: %s", msg)
+
+        # Friendly demo reply in DEBUG so tests/UAT don’t look broken
+        if settings.DEBUG:
+            demo = (
+                "Mohon tanyakan pertanyaan yang relevan dengan data klinis. "
+                f"Saat ini aku belum bisa menjawab: {q[:200]}"
+                + (f" (detail: {msg})" if msg else "")
+            )
             ChatMessage.objects.create(session=sess, role="assistant", content=demo)
             sess.last_message_preview = _first_words(demo, 12)
             sess.save(update_fields=["last_message_preview", "updated_at"])
             resp = Response({"answer": demo}, status=200)
             _attach_demo_cookie_if_needed(request, resp, user_id)
             return resp
+
+        # Production: generic error body + correct cookie handling
         resp = Response({"error": "failed to answer question"}, status=502)
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp

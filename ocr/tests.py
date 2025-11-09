@@ -1,6 +1,8 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
-from ocr.views import (
+from typing import Dict, Any
+
+from ocr.utils.normalization import (
     normalize_payload,
     _normalize_section_keys,
     _process_demography,
@@ -10,8 +12,6 @@ from ocr.views import (
     _collect_extra_sections,
     _build_ordered_output
 )
-
-from typing import Dict, Any
 
 
 class OCRTests(TestCase):

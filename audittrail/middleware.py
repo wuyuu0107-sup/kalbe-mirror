@@ -1,23 +1,62 @@
 # audittrail/middleware.py
 import json
 from django.utils.deprecation import MiddlewareMixin
+from django.db.models import Q
 
 from audittrail.models import ActivityLog
 from audittrail.services import log_activity
 
-
 AUDIT_SESSION_KEY = "audit_username"
+
+
+def _get_last_known_username():
+    """
+    Fallback: if we have no user and no session, grab the most recent
+    login/OCR event that actually had a username.
+    """
+    last = (
+        ActivityLog.objects
+        .filter(
+            Q(event_type=ActivityLog.EventType.USER_LOGIN)
+            | Q(event_type=ActivityLog.EventType.OCR_UPLOADED),
+            metadata__username__isnull=False,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if last:
+        return last.metadata.get("username") or ""
+    return ""
 
 
 class AuditTrailMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         request._audittrail_event_type = None
-        request._audittrail_raw_body = request.body  # for login parsing
+        try:
+            request._audittrail_raw_body = request.body
+        except Exception:
+            request._audittrail_raw_body = b""
+
+        # 1. try authenticated user
+        user = getattr(request, "user", None)
+        if user is not None and getattr(user, "is_authenticated", False):
+            effective_username = user.username
+        else:
+            # 2. try session
+            if hasattr(request, "session"):
+                effective_username = request.session.get(AUDIT_SESSION_KEY, "") or ""
+            else:
+                effective_username = ""
+
+        # 3. final fallback: last known username from DB
+        if not effective_username:
+            effective_username = _get_last_known_username() or "anonymous"
+
+        # expose to views
+        request.audit_username = effective_username
 
         path = request.path
         method = request.method.upper()
-
-        # print(f"[AUDIT DEBUG] {method} {path}")
 
         if path == "/auth/login/":
             request._audittrail_event_type = ActivityLog.EventType.USER_LOGIN
@@ -31,14 +70,17 @@ class AuditTrailMiddleware(MiddlewareMixin):
         elif path == "/save-to-database/create/" and method == "POST":
             request._audittrail_event_type = ActivityLog.EventType.DATASET_SAVED
 
-        elif path.startswith("/api/v1/comments/") and method == "POST":
+        elif path.startswith("/api/v1/comments/") and method in ("POST", "PUT", "PATCH", "DELETE"):
             request._audittrail_event_type = ActivityLog.EventType.ANNOTATION_UPDATED
 
-        elif path.startswith("/api/v1/annotations/") and method == "GET":
+        elif path.startswith("/api/v1/annotations/"):
             request._audittrail_event_type = ActivityLog.EventType.FEATURE_USED
 
         elif path.startswith("/api/v1/documents/") and method in ("PATCH", "PUT"):
             request._audittrail_event_type = ActivityLog.EventType.ANNOTATION_UPDATED
+
+        elif path.startswith("/api/chat/"):
+            request._audittrail_event_type = ActivityLog.EventType.FEATURE_USED
 
         elif path == "/auth/api/protected-endpoint/" and method == "GET":
             request._audittrail_event_type = ActivityLog.EventType.FEATURE_USED
@@ -60,16 +102,19 @@ class AuditTrailMiddleware(MiddlewareMixin):
         user = getattr(request, "user", None)
         is_auth = bool(user and user.is_authenticated)
 
-        # 1) special case: LOGIN, user still anon
-        if event_type == ActivityLog.EventType.USER_LOGIN and not is_auth:
+        # whatever we computed earlier
+        precomputed_username = getattr(request, "audit_username", "") or ""
+
+        # --- 1) LOGIN: extract from payload, save, log ---
+        if event_type == ActivityLog.EventType.USER_LOGIN:
             guessed_username = ""
 
-            # try JSON
             raw = getattr(request, "_audittrail_raw_body", b"") or b""
             try:
                 payload = json.loads(raw.decode() or "{}")
             except Exception:
                 payload = {}
+
             guessed_username = (
                 payload.get("username")
                 or payload.get("email")
@@ -77,7 +122,6 @@ class AuditTrailMiddleware(MiddlewareMixin):
                 or ""
             )
 
-            # try form
             if not guessed_username and hasattr(request, "POST"):
                 guessed_username = (
                     request.POST.get("username")
@@ -85,40 +129,64 @@ class AuditTrailMiddleware(MiddlewareMixin):
                     or ""
                 )
 
-            # store in session so future requests can use it
             if guessed_username and hasattr(request, "session"):
                 request.session[AUDIT_SESSION_KEY] = guessed_username
 
             log_activity(
-                user=None,
+                user=user if is_auth else None,
                 event_type=event_type,
                 request=request,
                 metadata={**base_meta, "username": guessed_username},
             )
             return response
 
-        # 2) normal path: user is authenticated -> easy
+        # --- 2) OCR: mark and also store username for later requests ---
+        if event_type == ActivityLog.EventType.OCR_UPLOADED:
+            if is_auth:
+                ocr_username = user.username
+            else:
+                ocr_username = precomputed_username or _get_last_known_username() or "anonymous"
+
+            if hasattr(request, "session"):
+                request.session[AUDIT_SESSION_KEY] = ocr_username
+
+            log_activity(
+                user=user if is_auth else None,
+                event_type=event_type,
+                request=request,
+                metadata={**base_meta, "username": ocr_username},
+            )
+            return response
+
+        # --- 3) normal authenticated requests ---
         if is_auth:
-            # also refresh session cache with real username
             if hasattr(request, "session"):
                 request.session[AUDIT_SESSION_KEY] = user.username
+
             log_activity(
                 user=user,
                 event_type=event_type,
                 request=request,
-                metadata=base_meta,
+                metadata={**base_meta, "username": user.username},
             )
             return response
 
-        # 3) anonymous request, but we have username cached in session from earlier login
+        # --- 4) anonymous: reuse whatever we have, or DB fallback ---
         session_username = ""
         if hasattr(request, "session"):
-            session_username = request.session.get(AUDIT_SESSION_KEY, "")
+            session_username = request.session.get(AUDIT_SESSION_KEY, "") or ""
+
+        final_username = (
+            session_username
+            or precomputed_username
+            or _get_last_known_username()
+            or "anonymous"
+        )
 
         log_activity(
             user=None,
             event_type=event_type,
             request=request,
-            metadata={**base_meta, "username": session_username},
+            metadata={**base_meta, "username": final_username},
         )
         return response

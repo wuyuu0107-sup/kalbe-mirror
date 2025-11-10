@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     'search',
     "predictions",
     "user_settings",
+    'audittrail',
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -130,6 +131,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_prometheus.middleware.PrometheusAfterMiddleware',
+    'audittrail.middleware.AuditTrailMiddleware',
 ]
 
 ROOT_URLCONF = "kalbe_be.urls"

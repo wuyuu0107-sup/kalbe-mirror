@@ -41,6 +41,7 @@ urlpatterns = [
     path('search/', include('search.urls')),
     path('', include('django_prometheus.urls')),
     path('api/user-settings/', include('user_settings.urls')),
+    path("audit/", include("audittrail.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

@@ -148,3 +148,36 @@ class FolderMoveView(generics.GenericAPIView):
             obj.save()
             moved_ids.append(obj.id)
         return Response({"moved_files": moved_ids, "message": f"Moved {len(moved_ids)} files from {source_dir} to {target_dir}."})
+
+
+class FolderDeleteView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticatedAndVerified]
+
+    def delete(self, request):
+        source_dir = request.data.get('source_dir')
+        if source_dir is None:
+            return Response({"detail": "source_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        source_prefix = f"datasets/csvs/{source_dir}/"
+        files_to_delete = CSV.objects.filter(file__startswith=source_prefix)
+        if not files_to_delete.exists():
+            return Response({"detail": "No files found in source directory."}, status=status.HTTP_404_NOT_FOUND)
+
+        deleted_ids = []
+        for obj in files_to_delete:
+            # Delete the file from storage
+            if obj.file:
+                storage = obj.file.storage
+                name = obj.file.name
+                if name:
+                    try:
+                        storage.delete(name)
+                    except Exception:
+                        # Ignore storage errors so delete doesn't crash
+                        pass
+            # Delete the record
+            obj_id = obj.id
+            obj.delete()
+            deleted_ids.append(obj_id)
+
+        return Response({"deleted_files": deleted_ids, "message": f"Deleted {len(deleted_ids)} files from {source_dir}."})

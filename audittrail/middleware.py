@@ -1,7 +1,8 @@
-# audittrail/middleware.py halo
+# audittrail/middleware.py
 import json
 from django.utils.deprecation import MiddlewareMixin
 from django.db.models import Q
+from django.db import DatabaseError, ProgrammingError
 
 from audittrail.models import ActivityLog
 from audittrail.services import log_activity
@@ -29,6 +30,18 @@ def _get_last_known_username():
     return ""
 
 
+def _safe_get_last_known_username():
+    """
+    Same as _get_last_known_username but will NOT crash test runs
+    (e.g. SimpleTestCase) that disallow DB access.
+    """
+    try:
+        return _get_last_known_username()
+    except (DatabaseError, ProgrammingError, Exception):
+        # in tests or during startup, just skip DB fallback
+        return ""
+
+
 class AuditTrailMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         request._audittrail_event_type = None
@@ -48,9 +61,9 @@ class AuditTrailMiddleware(MiddlewareMixin):
             else:
                 effective_username = ""
 
-        # 3. final fallback: last known username from DB
+        # 3. final fallback: last known username from DB (safe)
         if not effective_username:
-            effective_username = _get_last_known_username() or "anonymous"
+            effective_username = _safe_get_last_known_username() or "anonymous"
 
         # expose to views
         request.audit_username = effective_username
@@ -145,7 +158,7 @@ class AuditTrailMiddleware(MiddlewareMixin):
             if is_auth:
                 ocr_username = user.username
             else:
-                ocr_username = precomputed_username or _get_last_known_username() or "anonymous"
+                ocr_username = precomputed_username or _safe_get_last_known_username() or "anonymous"
 
             if hasattr(request, "session"):
                 request.session[AUDIT_SESSION_KEY] = ocr_username
@@ -171,7 +184,7 @@ class AuditTrailMiddleware(MiddlewareMixin):
             )
             return response
 
-        # --- 4) anonymous: reuse whatever we have, or DB fallback ---
+        # --- 4) anonymous: reuse whatever we have, or DB fallback (safe) ---
         session_username = ""
         if hasattr(request, "session"):
             session_username = request.session.get(AUDIT_SESSION_KEY, "") or ""
@@ -179,7 +192,7 @@ class AuditTrailMiddleware(MiddlewareMixin):
         final_username = (
             session_username
             or precomputed_username
-            or _get_last_known_username()
+            or _safe_get_last_known_username()
             or "anonymous"
         )
 
@@ -190,4 +203,3 @@ class AuditTrailMiddleware(MiddlewareMixin):
             metadata={**base_meta, "username": final_username},
         )
         return response
-

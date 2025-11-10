@@ -1,6 +1,6 @@
 from django.utils import timezone
 from django.db.models import Max, Count
-from authentication.models import User  # adjust import to your user model
+from authentication.models import User
 from dashboard.models import FeatureUsage
 
 def record_feature_use(request, feature_key: str):

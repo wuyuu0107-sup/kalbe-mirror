@@ -21,7 +21,7 @@ import os, time, json, re, mimetypes
 from django.http import HttpResponse
 from django.shortcuts import render
 from dotenv import load_dotenv
-
+from notification.triggers import notify_ocr_failed, notify_ocr_completed
 
 # --- PDF support flag for tests / optional dependency ---
 try:
@@ -278,6 +278,7 @@ def ocr_test_page(request):
         result: dict = {}
 
         if pdf_file and api_key:
+            session_id = request.COOKIES.get("sessionid")
             try:
                 # 0) Supabase client (for Storage uploads)
                 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -497,10 +498,23 @@ Provide ONLY a single JSON object with those sections/keys.
 
                 # Optional debug: confirm order in server logs
                 # print("STRUCTURED_DATA_KEYS_ORDER:", list(ordered.keys()))
+                notify_ocr_completed(
+                    session_id,
+                    path=final_pdf_url,
+                    size=len(pdf_bytes),
+                    job_id=None
+                )
 
                 return HttpResponse(json.dumps(result), content_type="application/json")
 
             except Exception as err:
+                notify_ocr_failed(
+                    session_id,
+                    path=getattr(pdf_file, "name", None),
+                    reason=str(err),
+                    job_id=None
+                )
+
                 result = {
                     "success": False,
                     "error": str(err),

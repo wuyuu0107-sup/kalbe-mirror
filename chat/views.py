@@ -30,19 +30,26 @@ def _get_or_create_demo_user_id(request) -> uuid.UUID:
 
 
 def _attach_demo_cookie_if_needed(request, resp, user_id: uuid.UUID):
+    # Authenticated user: don't mess with cookies
     if getattr(request, "user", None) and getattr(request.user, "is_authenticated", False):
         return
 
-    cookies = getattr(request, "COOKIES", {}) or {}
-    if cookies.get(DEMO_COOKIE_NAME):
-        return
+    # # Comment out this block temporarily for testing
+    # # Handle tests / fake requests safely
+    # cookies = getattr(request, "COOKIES", {}) or {}
+    # if cookies.get(DEMO_COOKIE_NAME):
+    #     return
 
+    # Cross-site friendly cookie
+    log.info(f"DEBUG: Setting cookie with user_id: {user_id}") # Add this log
     resp.set_cookie(
         DEMO_COOKIE_NAME,
         str(user_id),
-        max_age=60 * 60 * 24 * 365 * 2,
-        samesite="None",
-        secure=True,
+        max_age=60 * 60 * 24 * 365 * 2,  # 2 years
+        path="/",
+        secure=True,          # required for SameSite=None
+        samesite="None",      # allow from Vercel -> DuckDNS
+        httponly=False,       # can be False; you only read it server-side
     )
 
 
@@ -115,10 +122,9 @@ def _payload(request) -> dict:
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 def sessions(request):
-    """GET: list user's sessions (for sidebar)
-       POST: create a new empty session
-    """
     user_id = _current_user_id(request)
+    log.info(f"DEBUG: _current_user_id returned: {user_id}")
+    log.info(f"DEBUG: Request COOKIES: {request.COOKIES}")
 
     if request.method == "GET":
         qs = ChatSession.objects.filter(user_id=user_id).order_by("-updated_at", "-created_at")
@@ -133,7 +139,9 @@ def sessions(request):
             for x in qs[:50]
         ]
         resp = Response({"sessions": data}, status=200)
+        log.info(f"DEBUG: About to call _attach_demo_cookie_if_needed with user_id: {user_id}")
         _attach_demo_cookie_if_needed(request, resp, user_id)
+        log.info(f"DEBUG: Response headers after _attach_demo_cookie_if_needed: {resp}")
         return resp
 
     # POST → create

@@ -181,3 +181,58 @@ class FolderDeleteView(generics.GenericAPIView):
             deleted_ids.append(obj_id)
 
         return Response({"deleted_files": deleted_ids, "message": f"Deleted {len(deleted_ids)} files from {source_dir}."})
+
+
+class CSVFileRenameView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticatedAndVerified]
+
+    def post(self, request, pk):
+        obj = get_object_or_404(CSV, pk=pk)
+        new_name = request.data.get('new_name')
+        if not new_name:
+            return Response({"detail": "new_name is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        current_path = obj.file.path
+        dir_path = os.path.dirname(current_path)
+        new_full_path = os.path.join(dir_path, new_name)
+
+        try:
+            os.rename(current_path, new_full_path)
+        except Exception as e:
+            return Response({"detail": f"Failed to rename file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        obj.file.name = obj.file.name.replace(os.path.basename(current_path), new_name)
+        obj.save()
+        serializer = CSVFileSerializer(obj, context={'request': request})
+        return Response(serializer.data)
+
+
+class FolderRenameView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticatedAndVerified]
+
+    def post(self, request):
+        source_dir = request.data.get('source_dir')
+        new_name = request.data.get('new_name')
+        if not source_dir or not new_name:
+            return Response({"detail": "source_dir and new_name are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        full_source_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir)
+        parent_dir = os.path.dirname(full_source_dir)
+        full_target_dir = os.path.join(parent_dir, new_name)
+
+        try:
+            os.rename(full_source_dir, full_target_dir)
+        except Exception as e:
+            return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        source_prefix = f"datasets/csvs/{source_dir}/"
+        files_to_update = CSV.objects.filter(file__startswith=source_prefix)
+        updated_ids = []
+        for obj in files_to_update:
+            old_path = obj.file.name
+            new_path = old_path.replace(source_prefix, f"datasets/csvs/{new_name}/", 1)
+            obj.file.name = new_path
+            obj.save()
+            updated_ids.append(obj.id)
+
+        return Response({"updated_files": updated_ids, "message": f"Renamed folder from {source_dir} to {new_name}."})

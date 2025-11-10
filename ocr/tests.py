@@ -20,11 +20,6 @@ class OCRTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("status", resp.json())
 
-    # def test_upload_page_renders(self):
-    #     resp = self.client.get("/ocr/")
-    #     self.assertEqual(resp.status_code, 200)
-    #     self.assertIn(b"Upload", resp.content)
-
     def test_missing_file_returns_error(self):
         # view returns JSON with success False and an error message when pdf or API key missing
         resp = self.client.post("/ocr/", {})

@@ -14,18 +14,9 @@ from ocr.utils.spellchecker import correct_word
 from ocr.utils.normalization import normalize_payload, order_sections
 from ocr.utils.response_builders import build_success_response, build_error_response
 
-try:
-    import fitz
-    HAS_PDF = True
-except ImportError:
-    fitz = None
-    HAS_PDF = False
-
-
 @csrf_exempt
 def health(request):
     return JsonResponse({"status": "ok"}, status=200)
-
 
 @csrf_exempt
 @track_feature("ocr")

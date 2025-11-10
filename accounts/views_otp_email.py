@@ -3,11 +3,12 @@ import json
 from typing import Any, Dict
 
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt  # ⬅️ tambahin ini
 from django.http import JsonResponse, HttpRequest
 from django.core.mail import send_mail
 from django.conf import settings
 from django.apps import apps
-from django.contrib.auth.hashers import make_password  # ⬅️ simpan password sbg hash
+from django.contrib.auth.hashers import make_password  # simpan password sbg hash
 
 from .utils import generate_otp
 from .services import cache_store as cs
@@ -26,6 +27,7 @@ def _read_json(request: HttpRequest) -> Dict[str, Any]:
         return {}
 
 
+@csrf_exempt     # ⬅️ CSRF DIMATIKAN DI SINI
 @require_POST
 def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
     """
@@ -55,6 +57,7 @@ def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "ok"})
 
 
+@csrf_exempt     # ⬅️ CSRF DIMATIKAN JUGA DI SINI
 @require_POST
 def password_reset_otp_confirm(request: HttpRequest) -> JsonResponse:
     """
@@ -64,19 +67,23 @@ def password_reset_otp_confirm(request: HttpRequest) -> JsonResponse:
     data = _read_json(request)
     email = (data.get("email") or "").strip().lower()
     otp_in = (data.get("otp") or "").strip()
-    new_pw = (data.get("password") or "").strip()
+    new_pw = (
+        data.get("password")       # FE kamu kirim `password`
+        or data.get("new_password")  # jaga-jaga kalau nanti ganti nama field
+        or ""
+    ).strip()
 
     if not email or not otp_in or not new_pw:
         return JsonResponse({"error": "missing fields"}, status=400)
 
-    # Validasi kekuatan password (opsional, tapi kamu sudah pakai)
+    # Validasi kekuatan password
     if not is_strong_password(new_pw):
         return JsonResponse({"error": "weak password"}, status=400)
 
     try:
         user = AuthUser.objects.get(email=email)
     except AuthUser.DoesNotExist:
-        # Jangan bocorkan apakah email valid (opsi: tetap spesifik kalau mau)
+        # Up to you: mau generic atau spesifik.
         return JsonResponse({"error": "invalid email"}, status=400)
 
     # Cocokkan OTP dari cache
@@ -100,8 +107,10 @@ def password_reset_otp_confirm(request: HttpRequest) -> JsonResponse:
     cs.delete_otp(email)
 
     # FE bisa redirect ke /authentication/login
-    return JsonResponse({
-        "status": "success",
-        "message": "Password updated successfully.",
-        "redirect": "/authentication/login"
-    })
+    return JsonResponse(
+        {
+            "status": "success",
+            "message": "Password updated successfully.",
+            "redirect": "/authentication/login",
+        }
+    )

@@ -743,3 +743,68 @@ class DatasetFileManagementTests(TestCase):
         new_path = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', "renamed_empty")
         self.assertFalse(os.path.exists(old_path))
         self.assertTrue(os.path.exists(new_path))
+
+    def test_rename_file_os_rename_raises_returns_500_and_db_not_updated(self):
+        self._login(self.researcher)
+        # Upload file
+        upload_resp = self._upload_csv("willfail.csv", b"col\nval\n")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        old_path = obj.file.path
+        old_name = obj.file.name
+        self.assertTrue(os.path.exists(old_path))
+
+        # Patch os.rename in the views module to raise
+        with mock.patch('dataset.views.os.rename', side_effect=OSError("Permission denied")):
+            rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
+            rename_resp = self.client.post(rename_url, {"new_name": "newname.csv"})
+            self.assertEqual(rename_resp.status_code, 500)
+            self.assertIn("Failed to rename file", rename_resp.json().get("detail", ""))
+
+        # Ensure DB not updated and file still in old location
+        obj.refresh_from_db()
+        self.assertEqual(obj.file.name, old_name)
+        self.assertTrue(os.path.exists(old_path))
+
+
+    def test_rename_folder_os_rename_raises_returns_500_and_db_not_updated(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("f1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("f2.csv")
+        id2 = upload2.json()["id"]
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
+        source_dir = "folder_fail_rename"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        # Move files into source dir
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "f1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "f2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
+        obj2.save()
+
+        # Patch os.rename in the views module to raise when attempting to rename the folder
+        with mock.patch('dataset.views.os.rename', side_effect=OSError("Disk full")):
+            rename_url = reverse("folder_rename")
+            rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_name_folder"})
+            self.assertEqual(rename_resp.status_code, 500)
+            self.assertIn("Failed to rename folder", rename_resp.json().get("detail", ""))
+
+        # Ensure DB not updated for files (still reference source_dir) and files still exist
+        obj1.refresh_from_db()
+        obj2.refresh_from_db()
+        self.assertIn(source_dir, obj1.file.name)
+        self.assertIn(source_dir, obj2.file.name)
+        self.assertTrue(os.path.exists(obj1.file.path))
+        self.assertTrue(os.path.exists(obj2.file.path))

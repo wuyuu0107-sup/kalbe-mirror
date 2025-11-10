@@ -84,13 +84,15 @@ class CSVFileMoveView(generics.GenericAPIView):
     def post(self, request, pk):
         obj = get_object_or_404(CSV, pk=pk)
         target_dir = request.data.get('target_dir')
-        if not target_dir:
+        if target_dir is None:
             return Response({"detail": "target_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if target_dir == '/':
+            target_dir = ''
 
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
-        new_path = f"datasets/csvs/{target_dir}/{filename}"
+        new_path = f"datasets/csvs/{target_dir}/{filename}" if target_dir else f"datasets/csvs/{filename}"
         # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir)
+        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
         # Move file
         old_path = obj.file.path
@@ -112,20 +114,24 @@ class FolderMoveView(generics.GenericAPIView):
     def post(self, request):
         source_dir = request.data.get('source_dir')
         target_dir = request.data.get('target_dir')
-        if not source_dir or not target_dir:
+        if source_dir is None or target_dir is None:
             return Response({"detail": "source_dir and target_dir are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if target_dir == '/':
+            target_dir = ''
+
         source_prefix = f"datasets/csvs/{source_dir}/"
         files_to_move = CSV.objects.filter(file__startswith=source_prefix)
         if not files_to_move.exists():
             return Response({"detail": "No files found in source directory."}, status=status.HTTP_404_NOT_FOUND)
         # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir)
+        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
         moved_ids = []
         for obj in files_to_move:
             path = obj.file.name
             relative_path = path[len(source_prefix):]
-            new_path = f"datasets/csvs/{target_dir}/{relative_path}"
+            source_folder_name = os.path.basename(source_dir.rstrip('/'))
+            new_path = f"datasets/csvs/{target_dir}/{source_folder_name}/{relative_path}" if target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
             # Move file
             old_full_path = obj.file.path
             new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)

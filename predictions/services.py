@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Protocol
-
+import sys
 from django.conf import settings
 
 # Default to predictions/run_model.py if not set in settings
@@ -51,7 +51,7 @@ class SubprocessModelRunner:
             output_csv_path = tempdir / "prediction_result.csv"
 
             cmd = [
-                "python",
+                sys.executable,
                 str(runner_tmp),
                 "--input",
                 input_csv_path,

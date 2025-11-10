@@ -73,19 +73,39 @@ def _human_pct(num: float, den: float) -> str:
         return "0%"
 
 def _render_table(cols: List[str], rows: List[Tuple[Any, ...]], max_rows: int = 8) -> str:
+    # No rows at all
     if not rows:
         return "(empty)"
-    widths = [
-        max(len(str(cols[i])), *(len(str(r[i])) for r in rows[:max_rows]))
-        for i in range(len(cols))
+
+    # If columns are missing or empty, fall back to a bullet-style list
+    if not cols or all((c is None or str(c).strip() == "") for c in cols):
+        lines = []
+        for row in rows[:max_rows]:
+            # join non-empty cells, just in case
+            txt = " | ".join(str(v) for v in row if str(v).strip() != "")
+            if not txt:
+                txt = "(empty row)"
+            lines.append(f"- {txt}")
+        if len(rows) > max_rows:
+            lines.append(f"- ... ({len(rows) - max_rows} more)")
+        return "\n".join(lines)
+
+    # Normal Markdown table
+    display_rows = rows[:max_rows]
+
+    header = "| " + " | ".join(str(c).strip() for c in cols) + " |"
+    separator = "| " + " | ".join("---" for _ in cols) + " |"
+    body_lines = [
+        "| " + " | ".join(str(cell).strip() for cell in row) + " |"
+        for row in display_rows
     ]
-    def fmt_row(r): return " | ".join(str(r[i]).ljust(widths[i]) for i in range(len(cols)))
-    lines = [fmt_row(cols), "-+-".join("-" * w for w in widths)]
-    for r in rows[:max_rows]:
-        lines.append(fmt_row(r))
+
     if len(rows) > max_rows:
-        lines.append(f"... ({len(rows) - max_rows} more)")
-    return "\n".join(lines)
+        body_lines.append(f"| ... | ({len(rows) - max_rows} more rows) |")
+
+    return "\n".join([header, separator] + body_lines)
+
+
 
 
 # =========================
@@ -169,10 +189,6 @@ class SemanticQAService:
     formatter: AnswerFormatter
 
     def answer(self, user_message: str, session_id: str | None = None) -> str:
-        # Guardrail (kept from legacy code)
-        if "meaning of life" in user_message.lower():
-            return ("I’m sorry, I can only assist with information about your clinical "
-                    "dataset and related analytics.")
 
         # 1) NL -> SQL
         sql = self.sqlgen.generate(user_message)

@@ -188,14 +188,21 @@ class SemanticSQLGenerator:
     ) -> str:
         schema = schema_hint or _schema_hint_from_allowed(ALLOWED)
 
-        # use the injected builder (SRP + DIP)
+        # Build prompt for the LLM
         prompt = self.prompt_builder.build(user_message, schema)
 
-        raw_sql = (self.llm.complete(prompt) or "").strip()
+        # Call injected LLM (may be real Gemini or a mocked version in tests)
+        raw_sql = self.llm.complete(prompt)
+
+        # ✅ Normalize to string to be robust against mocks / non-str returns
+        if not isinstance(raw_sql, str):
+            raw_sql = str(raw_sql)
+
+        raw_sql = (raw_sql or "").strip()
         if not raw_sql:
             raise ValueError("llm_empty_sql")
 
-        # use the injected post-processor (SRP)
+        # Validate and post-process
         sql = self.post_processor.validate_select_only(raw_sql)
         sql = self.post_processor.maybe_add_limit(sql, add_default_limit)
         return sql

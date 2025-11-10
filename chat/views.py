@@ -10,8 +10,11 @@ import json
 import logging
 
 from .models import ChatSession, ChatMessage
-from .service import answer_question
+from .service import answer_question as chat_service
+from .guardrails import run_with_guardrails
 from notification.triggers import notify_chat_reply
+from . import service as chat_service
+
 
 DEMO_COOKIE_NAME = "demo_user_id"
 log = logging.getLogger(__name__)
@@ -27,11 +30,21 @@ def _get_or_create_demo_user_id(request) -> uuid.UUID:
 
 
 def _attach_demo_cookie_if_needed(request, resp, user_id: uuid.UUID):
-    # If authenticated user is present, no cookie needed
     if getattr(request, "user", None) and getattr(request.user, "is_authenticated", False):
         return
-    # If we used a demo user id, persist it
-    resp.set_cookie(DEMO_COOKIE_NAME, str(user_id), max_age=60 * 60 * 24 * 365 * 2, samesite="Lax")
+
+    cookies = getattr(request, "COOKIES", {}) or {}
+    if cookies.get(DEMO_COOKIE_NAME):
+        return
+
+    resp.set_cookie(
+        DEMO_COOKIE_NAME,
+        str(user_id),
+        max_age=60 * 60 * 24 * 365 * 2,
+        samesite="None",
+        secure=True,
+    )
+
 
 
 def _current_user_id(request) -> uuid.UUID:
@@ -200,70 +213,67 @@ def post_message(request, sid):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def ask(request, sid):
-    """Append user message, call engine, append assistant, return answer"""
+    """
+    Append user message, call engine, append assistant, return answer.
+
+    Behavior:
+    - URL kwarg: sid
+    - Reads question from: text, q, question, content
+    - Returns:
+        * 400 + {"error": "empty question"} if missing/blank
+        * 404 if session not found for this user
+        * 200 + {"answer": <string>} on success
+    - Persists both user and assistant messages.
+    - Uses chat.service.answer_question so test patches work.
+    - No exception handling (errors will bubble up to DRF middleware).
+    """
     user_id = _current_user_id(request)
+
+    # Ensure session belongs to this (demo or real) user
     sess = get_object_or_404(ChatSession, pk=sid, user_id=user_id)
 
     data = _payload(request)
-    # accept q / question / content for flexibility in tests & frontend
-    q_raw = data.get("q") or data.get("question") or data.get("content") or ""
+
+    # Accept all aliases (incl. "text" used in tests)
+    q_raw = (
+        data.get("text")
+        or data.get("q")
+        or data.get("question")
+        or data.get("content")
+        or ""
+    )
     q = str(q_raw).strip()
+
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp
 
-    # store user msg
+    # Store user message
     ChatMessage.objects.create(session=sess, role="user", content=q)
 
-    try:
-        answer = answer_question(q)  # your existing service
-        if isinstance(answer, dict):
-            # optionally pretty-print JSON or pick a key
-            answer = json.dumps(answer, ensure_ascii=False, indent=2)
-        ChatMessage.objects.create(session=sess, role="assistant", content=answer)
+    # ✅ No try/except — directly call guardrails + service
+    answer = run_with_guardrails(q, chat_service.answer_question)
 
-        session_id = request.COOKIES.get("sessionid")
-        if session_id:
-            notify_chat_reply(session_id)
+    # If guardrails returns a dict, serialize to JSON; strings pass through.
+    if isinstance(answer, dict):
+        answer = json.dumps(answer, ensure_ascii=False, indent=2)
 
-        # keep sidebar metadata fresh
-        preview = _first_words(answer, 12)
-        if not sess.title:
-            sess.title = _first_words(q)
-        sess.last_message_preview = preview
-        sess.save(update_fields=["title", "last_message_preview", "updated_at"])
+    # Store assistant message
+    ChatMessage.objects.create(session=sess, role="assistant", content=answer)
 
-        resp = Response({"answer": answer}, status=200)
-        _attach_demo_cookie_if_needed(request, resp, user_id)
-        return resp
+    # Optional: notify via cookie session id
+    session_id_cookie = request.COOKIES.get("sessionid")
+    if session_id_cookie:
+        notify_chat_reply(session_id_cookie)
 
-    except Exception as e:
-        # Classify a couple of “normal transient” failures so logs aren’t noisy
-        msg = (str(e) or e.__class__.__name__).strip()
-        is_transient = msg in {"empty_response", "llm_empty_sql"}
+    # Update session metadata
+    if not sess.title:
+        sess.title = _first_words(q)
+    sess.last_message_preview = _first_words(answer, 12)
+    sess.save(update_fields=["title", "last_message_preview", "updated_at"])
 
-        if is_transient:
-            log.info("ask(): transient LLM empty output: %s", msg)
-        else:
-            # full stack only for unexpected errors
-            log.exception("ask() failed: %s", msg)
+    resp = Response({"answer": answer}, status=200)
+    _attach_demo_cookie_if_needed(request, resp, user_id)
+    return resp
 
-        # Friendly demo reply in DEBUG so tests/UAT don’t look broken
-        if settings.DEBUG:
-            demo = (
-                "Mohon tanyakan pertanyaan yang relevan dengan data klinis. "
-                f"Saat ini aku belum bisa menjawab: {q[:200]}"
-                + (f" (detail: {msg})" if msg else "")
-            )
-            ChatMessage.objects.create(session=sess, role="assistant", content=demo)
-            sess.last_message_preview = _first_words(demo, 12)
-            sess.save(update_fields=["last_message_preview", "updated_at"])
-            resp = Response({"answer": demo}, status=200)
-            _attach_demo_cookie_if_needed(request, resp, user_id)
-            return resp
-
-        # Production: generic error body + correct cookie handling
-        resp = Response({"error": "failed to answer question"}, status=502)
-        _attach_demo_cookie_if_needed(request, resp, user_id)
-        return resp

@@ -9,16 +9,6 @@ class ServiceTests(SimpleTestCase):
     def setUp(self):
         os.environ.setdefault("DATABASE_URL", "postgresql://fake:fake@localhost:5432/testdb")
 
-    # @patch("chat.llm.ask_gemini_text", return_value="SELECT COUNT(*) FROM patients")
-    # @patch("chat.service.DB")
-    # def test_semantic_count_ok(self, mock_db_cls, _mock_llm):
-    #     from chat.service import answer_question
-    #     mock_db = mock_db_cls.return_value
-    #     mock_db.query.return_value = {"rows": [(1254,)], "columns": ["count"]}
-
-    #     out = answer_question("How many patients are there?")
-    #     self.assertTrue("There" in out or "patient" in out or "1254" in out)
-
     @patch("chat.sqlgen.ask_gemini_text",
         return_value="SELECT sin, subject_initials FROM patients WHERE EXTRACT(YEAR FROM screening_date)=2024")
     @patch("chat.service.DB")
@@ -90,11 +80,22 @@ class TestServiceBranch(SimpleTestCase):
     # --- _render_table branches (L33–46) ---
     def test_render_table_empty_and_more_indicator(self):
         from chat.service import _render_table
+
+        # When no rows, still returns "(empty)"
         self.assertEqual(_render_table(["a", "b"], []), "(empty)")
+
+        # When rows exceed max_rows, expect Markdown table + ellipsis row
         cols = ["c1", "c2", "c3"]
-        rows = [(i, i + 1, i + 2) for i in range(10)]
+        rows = [(i, i + 1, i + 2) for i in range(10)]  # 10 rows total
         out = _render_table(cols, rows, max_rows=8)
-        self.assertIn("... (", out)  # hits line 45
+
+        # Basic sanity: header & separator are present
+        self.assertIn("| c1 | c2 | c3 |", out)
+        self.assertIn("| --- | --- | --- |", out)
+
+        # Ellipsis row in Markdown style for the remaining rows
+        self.assertIn("| ... | (2 more rows) |", out)
+
 
     # --- no results (L112–114) ---
     @patch("chat.service.DB")
@@ -148,10 +149,14 @@ class TestServiceBranch(SimpleTestCase):
         mock_db = mock_db_cls.return_value
         rows = [("r", i, i * 2) for i in range(12)]
         mock_db.query.return_value = {"columns": ["c1", "c2", "c3"], "rows": rows}
+
         from chat.service import answer_question
         out = answer_question("list rows")
-        self.assertTrue(out.startswith("Found "))
-        self.assertIn("... (", out)
+
+        self.assertTrue(out.startswith("Found 12 rows."))  # still true
+        # New Markdown "more rows" indicator inside the rendered table
+        self.assertIn("| ... | (", out)
+
 
     # --- large cols default path (L129–130) ---
     @patch("chat.service.DB")

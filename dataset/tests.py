@@ -618,3 +618,128 @@ class DatasetFileManagementTests(TestCase):
         self.assertTrue(os.path.exists(new_path_fs))
         # The DB record should have been deleted regardless
         self.assertFalse(CSV.objects.filter(pk=obj_id).exists())
+
+    # Rename file tests
+    def test_researcher_can_rename_file(self):
+        self._login(self.researcher)
+        # Upload file
+        upload_resp = self._upload_csv("oldname.csv", b"col\nval\n")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        old_path = obj.file.path
+        old_name = obj.file.name
+        self.assertTrue(os.path.exists(old_path))
+        # Rename file
+        rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
+        rename_resp = self.client.post(rename_url, {"new_name": "newname.csv"})
+        self.assertEqual(rename_resp.status_code, 200)
+        data = rename_resp.json()
+        self.assertEqual(data["id"], obj_id)
+        self.assertIn("newname.csv", data["filename"])
+        # Refresh obj
+        obj.refresh_from_db()
+        new_path = obj.file.path
+        self.assertTrue(os.path.exists(new_path))
+        self.assertFalse(os.path.exists(old_path))
+        self.assertIn("newname.csv", obj.file.name)
+
+    def test_rename_file_unauthenticated_forbidden(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        client2 = Client()
+        rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
+        resp = client2.post(rename_url, {"new_name": "new.csv"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_rename_file_missing_new_name_400(self):
+        self._login(self.researcher)
+        upload_resp = self._upload_csv()
+        obj_id = upload_resp.json()["id"]
+        rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
+        resp = self.client.post(rename_url, {})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("new_name is required", resp.json()["detail"])
+
+    def test_rename_file_invalid_pk_404(self):
+        self._login(self.researcher)
+        rename_url = reverse("csvfile_rename", kwargs={"pk": 99999})
+        resp = self.client.post(rename_url, {"new_name": "new.csv"})
+        self.assertEqual(resp.status_code, 404)
+
+    # Rename folder tests
+    def test_researcher_can_rename_folder(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Manually move to source dir
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
+        source_dir = "old_folder"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        # Move files
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
+        obj2.save()
+        # Now rename folder
+        rename_url = reverse("folder_rename")
+        rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_folder"})
+        self.assertEqual(rename_resp.status_code, 200)
+        data = rename_resp.json()
+        self.assertIn("updated_files", data)
+        self.assertEqual(len(data["updated_files"]), 2)
+        self.assertIn(id1, data["updated_files"])
+        self.assertIn(id2, data["updated_files"])
+        # Check files renamed
+        obj1.refresh_from_db()
+        obj2.refresh_from_db()
+        self.assertIn("new_folder", obj1.file.name)
+        self.assertIn("new_folder", obj2.file.name)
+        self.assertTrue(os.path.exists(obj1.file.path))
+        self.assertTrue(os.path.exists(obj2.file.path))
+        self.assertFalse(os.path.exists(new_path1))
+        self.assertFalse(os.path.exists(new_path2))
+
+    def test_rename_folder_unauthenticated_forbidden(self):
+        rename_url = reverse("folder_rename")
+        resp = self.client.post(rename_url, {"source_dir": "old", "new_name": "new"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_rename_folder_missing_params_400(self):
+        self._login(self.researcher)
+        rename_url = reverse("folder_rename")
+        resp = self.client.post(rename_url, {"source_dir": "old"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("source_dir and new_name are required", resp.json()["detail"])
+
+    def test_rename_folder_no_files_200(self):
+        self._login(self.researcher)
+        # Create empty folder
+        empty_dir = "empty_folder"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', empty_dir), exist_ok=True)
+        rename_url = reverse("folder_rename")
+        rename_resp = self.client.post(rename_url, {"source_dir": empty_dir, "new_name": "renamed_empty"})
+        self.assertEqual(rename_resp.status_code, 200)
+        data = rename_resp.json()
+        self.assertIn("updated_files", data)
+        self.assertEqual(len(data["updated_files"]), 0)
+        # Check directory renamed
+        old_path = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', empty_dir)
+        new_path = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', "renamed_empty")
+        self.assertFalse(os.path.exists(old_path))
+        self.assertTrue(os.path.exists(new_path))

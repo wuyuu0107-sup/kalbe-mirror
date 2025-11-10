@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import tempfile
@@ -458,3 +459,162 @@ class DatasetFileManagementTests(TestCase):
             self.assertFalse(CSV.objects.filter(pk=obj_id).exists())
             # File should still exist on disk because delete failed
             self.assertTrue(os.path.exists(file_path))
+
+    # Additional tests for uncovered lines and FolderDeleteView
+    def test_move_file_with_root_target_dir_sets_to_empty(self):
+        self._login(self.researcher)
+        # Upload file
+        upload_resp = self._upload_csv("test.csv", b"col\nval\n")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        old_path = obj.file.path
+        self.assertTrue(os.path.exists(old_path))
+        # Move to root dir by setting target_dir='/'
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        move_resp = self.client.post(move_url, {"target_dir": "/"})
+        self.assertEqual(move_resp.status_code, 200)
+        data = move_resp.json()
+        self.assertEqual(data["id"], obj_id)
+        # Since target_dir='' after setting, new_path should be datasets/csvs/filename
+        self.assertEqual(data["file_path"], "datasets/csvs/test.csv")  # Directly in root
+        # Refresh obj
+        obj.refresh_from_db()
+        new_path = obj.file.path
+        self.assertTrue(os.path.exists(new_path))
+        # Check it's in root
+        self.assertEqual(os.path.dirname(obj.file.name), "datasets/csvs")
+
+    def test_move_folder_with_root_target_dir_sets_to_empty(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Manually move to source dir
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
+        source_dir = "source_dir"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        # Move files
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
+        obj2.save()
+        # Now move folder to root by setting target_dir='/'
+        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "/"})
+        self.assertEqual(move_resp.status_code, 200)
+        data = move_resp.json()
+        self.assertIn("moved_files", data)
+        self.assertEqual(len(data["moved_files"]), 2)
+        # Check files moved to root
+        obj1.refresh_from_db()
+        obj2.refresh_from_db()
+        # After moving to root, the folder name is appended, so it should be datasets/csvs/source_dir/filename
+        self.assertEqual(obj1.file.name, f"datasets/csvs/source_dir/{actual_filename1}")
+        self.assertEqual(obj2.file.name, f"datasets/csvs/source_dir/{actual_filename2}")
+        self.assertTrue(os.path.exists(obj1.file.path))
+        self.assertTrue(os.path.exists(obj2.file.path))
+
+    def test_folder_delete_success(self):
+        self._login(self.researcher)
+        # Create files in source dir
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Manually move to source dir
+        obj1 = CSV.objects.get(pk=id1)
+        obj2 = CSV.objects.get(pk=id2)
+        source_dir = "delete_dir"
+        # Create source dir
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        # Move files
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
+        obj1.save()
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
+        obj2.save()
+        # Now delete folder
+        delete_url = reverse("folder_delete")
+        delete_resp = self.client.delete(delete_url, json.dumps({"source_dir": source_dir}), content_type='application/json')
+        self.assertEqual(delete_resp.status_code, 200)
+        data = delete_resp.json()
+        self.assertIn("deleted_files", data)
+        self.assertEqual(len(data["deleted_files"]), 2)
+        self.assertIn(id1, data["deleted_files"])
+        self.assertIn(id2, data["deleted_files"])
+        # Check files and records deleted
+        self.assertFalse(CSV.objects.filter(pk=id1).exists())
+        self.assertFalse(CSV.objects.filter(pk=id2).exists())
+        self.assertFalse(os.path.exists(new_path1))
+        self.assertFalse(os.path.exists(new_path2))
+
+    def test_folder_delete_unauthenticated_forbidden(self):
+        delete_url = reverse("folder_delete")
+        resp = self.client.delete(delete_url, json.dumps({"source_dir": "some_dir"}), content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_folder_delete_missing_source_dir_400(self):
+        self._login(self.researcher)
+        delete_url = reverse("folder_delete")
+        resp = self.client.delete(delete_url, json.dumps({}), content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("source_dir is required", resp.json()["detail"])
+
+    def test_folder_delete_no_files_404(self):
+        self._login(self.researcher)
+        delete_url = reverse("folder_delete")
+        resp = self.client.delete(delete_url, json.dumps({"source_dir": "empty_dir"}), content_type='application/json')
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No files found", resp.json()["detail"])
+
+    def test_folder_delete_ignores_storage_delete_exceptions(self):
+        self._login(self.researcher)
+        # Upload a file
+        upload_resp = self._upload_csv("faildelete.csv")
+        self.assertEqual(upload_resp.status_code, 201)
+        obj_id = upload_resp.json()["id"]
+        obj = CSV.objects.get(pk=obj_id)
+        file_path = obj.file.path
+
+        # Move the uploaded file into a source directory so FolderDeleteView will find it
+        source_dir = "fail_delete_dir"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        actual_filename = os.path.basename(obj.file.name) if obj.file else "faildelete.csv"
+        new_path_fs = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename)
+        os.rename(file_path, new_path_fs)
+        obj.file.name = f"datasets/csvs/{source_dir}/{actual_filename}"
+        obj.save()
+
+        # Patch storage.delete to raise an exception to hit the except Exception: pass branch
+        with mock.patch('django.core.files.storage.default_storage.delete', side_effect=Exception("storage fail")):
+            delete_url = reverse("folder_delete")
+            delete_resp = self.client.delete(delete_url, json.dumps({"source_dir": source_dir}), content_type='application/json')
+            # Should still return 200 and report the deleted DB record
+            self.assertEqual(delete_resp.status_code, 200)
+            data = delete_resp.json()
+            self.assertIn("deleted_files", data)
+            self.assertIn(obj_id, data["deleted_files"])
+
+        # The file should still exist on disk because storage.delete raised
+        self.assertTrue(os.path.exists(new_path_fs))
+        # The DB record should have been deleted regardless
+        self.assertFalse(CSV.objects.filter(pk=obj_id).exists())

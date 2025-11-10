@@ -30,27 +30,19 @@ def _get_or_create_demo_user_id(request) -> uuid.UUID:
 
 
 def _attach_demo_cookie_if_needed(request, resp, user_id: uuid.UUID):
-    """
-    Attach demo_user_id cookie (used for unauthenticated users) if missing.
-    Must be SameSite=None; Secure for cross-origin requests.
-    """
-    # Skip if real authenticated user
     if getattr(request, "user", None) and getattr(request.user, "is_authenticated", False):
         return
 
-    existing = request.COOKIES.get(DEMO_COOKIE_NAME)
-    if existing == str(user_id):
+    cookies = getattr(request, "COOKIES", {}) or {}
+    if cookies.get(DEMO_COOKIE_NAME):
         return
 
     resp.set_cookie(
         DEMO_COOKIE_NAME,
         str(user_id),
-        max_age=60 * 60 * 24 * 365 * 2,  # 2 years
-        secure=True,                      # ✅ required for SameSite=None
-        samesite="None",                  # ✅ allow cross-site (vercel → duckdns)
-        httponly=False,                   # frontend doesn’t need to read it, but can
-        path="/",
-        # domain="kscan.duckdns.org",     # uncomment if you serve from subdomains later
+        max_age=60 * 60 * 24 * 365 * 2,
+        samesite="None",
+        secure=True,
     )
 
 

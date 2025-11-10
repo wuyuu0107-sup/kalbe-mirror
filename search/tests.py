@@ -1,16 +1,22 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 from django.test import Client, TestCase
+import unittest
+from typing import Optional
+
 from .services import SearchService, search_storage_files
 from .interfaces import SearchStrategy, StorageProvider
 from .storage import SupabaseStorageProvider
-from typing import Optional
+# TODO: Uncomment when these modules are created
+# from .commands import SearchCriteria, SimpleSearchCommand, FilteredSearchCommand
+# from .invoker import SearchCommandInvoker
+# from .models import SearchResult
+
 
 class MockStorageProvider(StorageProvider):
     """Mock storage provider for testing"""
     def __init__(self, files=None):
         self.files = files or []
-    def list_files(self, bucket_name: str):
-        return self.files
+    
     def list_files(self, bucket_name: str):
         return self.files
         
@@ -26,6 +32,7 @@ class MockStorageProvider(StorageProvider):
         initial_length = len(self.files)
         self.files = [f for f in self.files if f['name'] != file_path]
         return len(self.files) < initial_length
+
 
 class StorageSearchTests(TestCase):
     """Test suite for storage search functionality"""
@@ -49,6 +56,7 @@ class StorageSearchTests(TestCase):
         service.search_files("test", "query")
         
         strategy.search.assert_called_once()
+
     def test_search_files_connection_error(self):
         """Test handling of connection errors"""
         class FailingStorageProvider(StorageProvider):
@@ -64,8 +72,9 @@ class StorageSearchTests(TestCase):
         storage = FailingStorageProvider()
         service = SearchService(storage_provider=storage)
 
-        with self.assertRaises(Exception):
-            service.search_files(bucket_name="test-bucket", search_term="test")
+        with self.assertRaises(Exception) as ctx:
+            service.search_files("test-bucket", "test")
+        self.assertIn("Connection error", str(ctx.exception))
 
     def test_search_files_exact_match(self):
         """Test searching files with exact name match"""
@@ -121,25 +130,6 @@ class StorageSearchTests(TestCase):
 
         self.assertEqual(len(results), 0)
 
-    def test_search_files_connection_error(self):
-        """Test handling of connection errors"""
-        class FailingStorageProvider(StorageProvider):
-            def list_files(self, bucket_name: str):
-                raise Exception("Connection error")
-                
-            def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
-                raise Exception("Connection error")
-                
-            def delete_file(self, bucket_name: str, file_path: str) -> bool:
-                raise Exception("Connection error")
-
-        storage = FailingStorageProvider()
-        service = SearchService(storage_provider=storage)
-
-        with self.assertRaises(Exception) as ctx:
-            service.search_files("test-bucket", "test")
-        self.assertIn("Connection error", str(ctx.exception))
-
     def test_search_files_with_extension_filter(self):
         """Test searching files with specific extension filter"""
         mock_files = [
@@ -173,6 +163,7 @@ class StorageSearchTests(TestCase):
                 mock_provider.return_value = storage
                 results = search_storage_files("test-bucket", "test")
                 self.assertEqual(len(results), 1)
+
 
 class ViewTests(TestCase):
     """Test suite for views"""
@@ -212,6 +203,7 @@ class ViewTests(TestCase):
             self.assertEqual(response.status_code, 500)
             self.assertIn('error', response.json())
 
+
 class StorageProviderTests(TestCase):
     """Test suite for storage provider"""
     
@@ -244,7 +236,6 @@ class StorageProviderTests(TestCase):
         self.env_patcher.stop()
         self.client_patcher.stop()
 
-
     def test_storage_provider_errors(self):
         """Test error handling in storage provider"""
         self.mock_bucket.download.side_effect = Exception("Download error")
@@ -264,6 +255,7 @@ class StorageProviderTests(TestCase):
         with self.assertRaises(Exception) as ctx:
             provider.list_files("test-bucket")
         self.assertIn("Error listing files", str(ctx.exception))
+
 
 class SearchStrategyTests(TestCase):
     """Test suite for search strategies"""
@@ -296,6 +288,7 @@ class SearchStrategyTests(TestCase):
         results = strategy.search(files, "nonexistent")
         self.assertEqual(len(results), 0)
 
+
 class InterfaceTests(TestCase):
     """Test suite for interfaces"""
     
@@ -321,3 +314,76 @@ class InterfaceTests(TestCase):
             
         with self.assertRaises(TypeError):
             PartialStrategy()
+
+
+# TODO: Uncomment this class when commands.py, invoker.py, and SearchResult are created
+"""
+class TestSearchCommands(unittest.TestCase):
+    Test suite for search commands
+    
+    def setUp(self):
+        self.mock_service = Mock()
+        self.invoker = SearchCommandInvoker()
+        self.sample_results = [
+            SearchResult(id=1, title="Test1", content="Content1", relevance_score=0.9),
+            SearchResult(id=2, title="Test2", content="Content2", relevance_score=0.8)
+        ]
+        self.mock_service.search.return_value = self.sample_results
+
+    def test_simple_search_command(self):
+        Test simple search command execution
+        # Arrange
+        criteria = SearchCriteria(query="test")
+        command = SimpleSearchCommand(criteria, self.mock_service)
+
+        # Act
+        results = self.invoker.execute_command(command)
+
+        # Assert
+        self.assertEqual(len(results), 2)
+        self.mock_service.search.assert_called_once_with("test")
+
+    def test_filtered_search_command(self):
+        Test filtered search command execution
+        # Arrange
+        criteria = SearchCriteria(
+            query="test",
+            filters={"relevance_score": 0.9}
+        )
+        command = FilteredSearchCommand(criteria, self.mock_service)
+
+        # Act
+        results = self.invoker.execute_command(command)
+
+        # Assert
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].relevance_score, 0.9)
+
+    def test_command_undo(self):
+        Test command undo functionality
+        # Arrange
+        criteria = SearchCriteria(query="test")
+        command = SimpleSearchCommand(criteria, self.mock_service)
+
+        # Act
+        self.invoker.execute_command(command)
+        self.invoker.undo_last()
+
+        # Assert
+        self.assertIsNone(command.last_results)
+
+    def test_command_history(self):
+        Test command history tracking
+        # Arrange
+        criteria1 = SearchCriteria(query="test1")
+        criteria2 = SearchCriteria(query="test2")
+        command1 = SimpleSearchCommand(criteria1, self.mock_service)
+        command2 = SimpleSearchCommand(criteria2, self.mock_service)
+
+        # Act
+        self.invoker.execute_command(command1)
+        self.invoker.execute_command(command2)
+
+        # Assert
+        self.assertEqual(len(self.invoker._history), 2)
+"""

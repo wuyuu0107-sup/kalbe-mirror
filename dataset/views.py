@@ -3,6 +3,7 @@ import shutil
 from django.conf import settings
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
@@ -86,14 +87,34 @@ class CSVFileMoveView(generics.GenericAPIView):
         target_dir = request.data.get('target_dir')
         if target_dir is None:
             return Response({"detail": "target_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle root directory
         if target_dir == '/':
             target_dir = ''
 
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
         new_path = f"datasets/csvs/{target_dir}/{filename}" if target_dir else f"datasets/csvs/{filename}"
+
+        # Don't move if it's the same location
+        if obj.file.name == new_path:
+            serializer = CSVFileSerializer(obj, context={'request': request})
+            return Response(serializer.data)
+
+        # Check for duplicate file in target directory
+        if CSV.objects.filter(file=new_path).exists():
+            return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if a folder with the same base name exists.
+        # e.g. moving file datasets/csvs/file.csv -> folder to check is datasets/csvs/file/
+        base_no_ext = os.path.splitext(new_path)[0]
+        potential_folder_path = base_no_ext.rstrip('/') + '/'
+        if CSV.objects.filter(file__startswith=potential_folder_path).exists():
+            return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Ensure target dir exists
         full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
+
         # Move file
         old_path = obj.file.path
         new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
@@ -101,6 +122,7 @@ class CSVFileMoveView(generics.GenericAPIView):
             shutil.move(old_path, new_full_path)
         except Exception as e:
             return Response({"detail": f"Failed to move file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         # Update DB only if move succeeded
         obj.file.name = new_path
         obj.save()
@@ -116,6 +138,8 @@ class FolderMoveView(generics.GenericAPIView):
         target_dir = request.data.get('target_dir')
         if source_dir is None or target_dir is None:
             return Response({"detail": "source_dir and target_dir are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle root directory
         if target_dir == '/':
             target_dir = ''
 
@@ -123,18 +147,36 @@ class FolderMoveView(generics.GenericAPIView):
         files_to_move = CSV.objects.filter(file__startswith=source_prefix)
         if not files_to_move.exists():
             return Response({"detail": "No files found in source directory."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for duplicate folder or file in target directory
+        source_folder_name = os.path.basename(source_dir.rstrip('/'))
+        new_folder_prefix = f"datasets/csvs/{target_dir}/{source_folder_name}/" if target_dir else f"datasets/csvs/{source_folder_name}/"
+
+        # Check if a folder with the same name exists in the target directory.
+        # Exclude files that are part of the source directory (the ones being moved) so we don't
+        # detect the moving folder itself as an existing folder in the target.
+        if CSV.objects.filter(file__startswith=new_folder_prefix).exclude(file__startswith=source_prefix).exists():
+            return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if a file with the same base name exists (with or without extension)
+        new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
+        if CSV.objects.filter(Q(file=new_file_path) | Q(file__startswith=new_file_path + '.')).exists():
+            return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Ensure target dir exists
         full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
+
         moved_ids = []
         for obj in files_to_move:
             path = obj.file.name
             relative_path = path[len(source_prefix):]
-            source_folder_name = os.path.basename(source_dir.rstrip('/'))
             new_path = f"datasets/csvs/{target_dir}/{source_folder_name}/{relative_path}" if target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
+
             # Move file
             old_full_path = obj.file.path
             new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
+
             # Ensure subdirs
             os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
             try:
@@ -143,10 +185,12 @@ class FolderMoveView(generics.GenericAPIView):
                 # If move fails, skip this file and continue with others? Or fail the whole operation?
                 # For now, fail the whole operation to maintain consistency
                 return Response({"detail": f"Failed to move file {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             # Update DB only if move succeeded
             obj.file.name = new_path
             obj.save()
             moved_ids.append(obj.id)
+
         return Response({"moved_files": moved_ids, "message": f"Moved {len(moved_ids)} files from {source_dir} to {target_dir}."})
 
 
@@ -192,16 +236,46 @@ class CSVFileRenameView(generics.GenericAPIView):
         if not new_name:
             return Response({"detail": "new_name is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        current_path = obj.file.path
+        current_path = obj.file.name
         dir_path = os.path.dirname(current_path)
-        new_full_path = os.path.join(dir_path, new_name)
+        # Build storage name using POSIX style separators regardless of OS so it matches FileField naming
+        if dir_path:
+            new_path = f"{dir_path.rstrip('/\\')}/{new_name}"
+        else:
+            new_path = new_name
+
+        # Don't rename if it's the same name
+        if current_path == new_path:
+            serializer = CSVFileSerializer(obj, context={'request': request})
+            return Response(serializer.data)
+
+        # Check for duplicate file in same directory (excluding current file)
+        if CSV.objects.filter(file=new_path).exclude(pk=obj.pk).exists():
+            return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if a folder with the same base name exists (strip extension then check prefix)
+        base_no_ext = os.path.splitext(new_path)[0]
+        potential_folder_path = base_no_ext.rstrip('/') + '/'
+        if CSV.objects.filter(file__startswith=potential_folder_path).exists():
+            return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        current_full_path = obj.file.path
+        dir_full_path = os.path.dirname(current_full_path)
+        new_full_path = os.path.join(dir_full_path, new_name)
 
         try:
-            os.rename(current_path, new_full_path)
+            os.rename(current_full_path, new_full_path)
+        except FileNotFoundError:
+            return Response({"detail": "Source file not found."}, status=status.HTTP_404_NOT_FOUND)
+        except OSError as e:
+            # Handle duplicate file errors at filesystem level
+            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
+                return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"Failed to rename file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return Response({"detail": f"Failed to rename file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        obj.file.name = obj.file.name.replace(os.path.basename(current_path), new_name)
+        obj.file.name = new_path
         obj.save()
         serializer = CSVFileSerializer(obj, context={'request': request})
         return Response(serializer.data)
@@ -216,12 +290,37 @@ class FolderRenameView(generics.GenericAPIView):
         if not source_dir or not new_name:
             return Response({"detail": "source_dir and new_name are required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Don't rename if it's the same name
+        if source_dir == new_name:
+            return Response({"updated_files": [], "message": f"Folder name unchanged."})
+
         full_source_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir)
         parent_dir = os.path.dirname(full_source_dir)
         full_target_dir = os.path.join(parent_dir, new_name)
 
+        # Check for duplicate folder in parent directory
+        new_folder_prefix = f"datasets/csvs/{new_name}/"
+        if CSV.objects.filter(file__startswith=new_folder_prefix).exists():
+            return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if a file with the same base name exists (file or file + extension)
+        new_file_path = f"datasets/csvs/{new_name}"
+        if CSV.objects.filter(Q(file=new_file_path) | Q(file__startswith=new_file_path + '.')).exists():
+            return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if source directory exists
+        if not os.path.exists(full_source_dir):
+            return Response({"detail": "Source directory not found."}, status=status.HTTP_404_NOT_FOUND)
+
         try:
             os.rename(full_source_dir, full_target_dir)
+        except FileNotFoundError:
+            return Response({"detail": "Source directory not found."}, status=status.HTTP_404_NOT_FOUND)
+        except OSError as e:
+            # Handle duplicate directory errors at filesystem level
+            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
+                return Response({"detail": "A file or folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

@@ -512,6 +512,9 @@ class DatasetFileManagementTests(TestCase):
         obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
         obj2.save()
         # Now move folder to root by setting target_dir='/'
+        # First ensure no conflicts exist in root
+        if CSV.objects.filter(file=f"datasets/csvs/{source_dir}").exists():
+            CSV.objects.filter(file=f"datasets/csvs/{source_dir}").delete()
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "/"})
         self.assertEqual(move_resp.status_code, 200)
         data = move_resp.json()
@@ -808,3 +811,125 @@ class DatasetFileManagementTests(TestCase):
         self.assertIn(source_dir, obj2.file.name)
         self.assertTrue(os.path.exists(obj1.file.path))
         self.assertTrue(os.path.exists(obj2.file.path))
+
+    # Test cases for duplicate name checks in move and rename operations
+    def test_move_file_to_duplicate_name_returns_400(self):
+        self._login(self.researcher)
+        # Upload two files with different names
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Create a target directory where a file with the same filename already exists
+        target_dir = "conflict_dir"
+        filename2 = upload2.json().get("filename")
+        conflict_storage_path = f"datasets/csvs/{target_dir}/{filename2}"
+        # Make sure the directory exists on disk
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir), exist_ok=True)
+        # Create a DB record that claims to own the destination path
+        CSV.objects.create(name=os.path.splitext(filename2)[0], file=conflict_storage_path)
+
+        # Now attempt to move file2 into target_dir where a file with same name exists
+        move_url = reverse("csvfile_move", kwargs={"pk": id2})
+        move_resp = self.client.post(move_url, {"target_dir": target_dir})
+        self.assertEqual(move_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+
+    def test_move_file_to_duplicate_folder_name_returns_400(self):
+        self._login(self.researcher)
+        # Upload file
+        upload = self._upload_csv("file.csv")
+        obj_id = upload.json()["id"]
+        # Put the file into a source subdir so that moving to root will actually change location
+        obj = CSV.objects.get(pk=obj_id)
+        source_dir = "src_for_move"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        old_path = obj.file.path
+        actual_filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
+        new_path_fs = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename)
+        os.rename(old_path, new_path_fs)
+        obj.file.name = f"datasets/csvs/{source_dir}/{actual_filename}"
+        obj.save()
+
+        # Create a folder with same base name as the file at the root
+        folder_name = "file"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', folder_name), exist_ok=True)
+        # Add a file under that folder so the DB reflects it
+        upload2 = self._upload_csv("subfile.csv")
+        obj2 = CSV.objects.get(pk=upload2.json()["id"])
+        obj2.file.name = f"datasets/csvs/{folder_name}/subfile.csv"
+        obj2.save()
+
+        # Now try to move the original file back to root where folder "file" exists
+        move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
+        move_resp = self.client.post(move_url, {"target_dir": ""})
+        self.assertEqual(move_resp.status_code, 400)
+        self.assertIn("A folder with this name already exists", move_resp.json()["detail"])
+
+    def test_move_folder_to_duplicate_name_returns_400(self):
+        self._login(self.researcher)
+        # Create folder with files
+        upload1 = self._upload_csv("f1.csv")
+        id1 = upload1.json()["id"]
+        obj1 = CSV.objects.get(pk=id1)
+        source_dir = "source"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        old_path1 = obj1.file.path
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, "f1.csv")
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/f1.csv"
+        obj1.save()
+        # Create a file with same name as folder
+        upload2 = self._upload_csv("source.csv")  # This creates source.csv in root
+        # Now try to move folder to root where "source.csv" exists
+        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
+        self.assertEqual(move_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+
+    def test_rename_file_to_duplicate_name_returns_400(self):
+        self._login(self.researcher)
+        # Upload two files
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Rename file2 to file1.csv
+        rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
+        rename_resp = self.client.post(rename_url, {"new_name": "file1.csv"})
+        self.assertEqual(rename_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+
+    def test_rename_file_to_duplicate_folder_name_returns_400(self):
+        self._login(self.researcher)
+        # Upload file
+        upload = self._upload_csv("file.csv")
+        obj_id = upload.json()["id"]
+        # Create folder with same name (without extension)
+        folder_name = "file"  # Same as uploaded file name without .csv
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', folder_name), exist_ok=True)
+        upload2 = self._upload_csv("sub.csv")
+        obj2 = CSV.objects.get(pk=upload2.json()["id"])
+        obj2.file.name = f"datasets/csvs/{folder_name}/sub.csv"
+        obj2.save()
+        # Rename file.csv to "file" (same as folder name)
+        rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
+        rename_resp = self.client.post(rename_url, {"new_name": "file"})  # Same name as folder
+        self.assertEqual(rename_resp.status_code, 400)
+        self.assertIn("A folder with this name already exists", rename_resp.json()["detail"])
+
+    def test_rename_folder_to_duplicate_name_returns_400(self):
+        self._login(self.researcher)
+        # Create folder
+        source_dir = "old_folder"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        upload = self._upload_csv("f.csv")
+        obj = CSV.objects.get(pk=upload.json()["id"])
+        obj.file.name = f"datasets/csvs/{source_dir}/f.csv"
+        obj.save()
+        # Create a file with name "new_folder"
+        upload2 = self._upload_csv("new_folder.csv")
+        # Rename folder to "new_folder"
+        rename_url = reverse("folder_rename")
+        rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_folder"})
+        self.assertEqual(rename_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])

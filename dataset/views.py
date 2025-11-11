@@ -4,6 +4,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from django.db.models.functions import Lower
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
@@ -100,15 +101,15 @@ class CSVFileMoveView(generics.GenericAPIView):
             serializer = CSVFileSerializer(obj, context={'request': request})
             return Response(serializer.data)
 
-        # Check for duplicate file in target directory
-        if CSV.objects.filter(file=new_path).exists():
+        # Check for duplicate file in target directory (case-insensitive)
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a folder with the same base name exists.
+        # Check if a folder with the same base name exists (case-insensitive).
         # e.g. moving file datasets/csvs/file.csv -> folder to check is datasets/csvs/file/
         base_no_ext = os.path.splitext(new_path)[0]
         potential_folder_path = base_no_ext.rstrip('/') + '/'
-        if CSV.objects.filter(file__startswith=potential_folder_path).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Ensure target dir exists
@@ -152,15 +153,15 @@ class FolderMoveView(generics.GenericAPIView):
         source_folder_name = os.path.basename(source_dir.rstrip('/'))
         new_folder_prefix = f"datasets/csvs/{target_dir}/{source_folder_name}/" if target_dir else f"datasets/csvs/{source_folder_name}/"
 
-        # Check if a folder with the same name exists in the target directory.
+        # Check if a folder with the same name exists in the target directory (case-insensitive).
         # Exclude files that are part of the source directory (the ones being moved) so we don't
         # detect the moving folder itself as an existing folder in the target.
-        if CSV.objects.filter(file__startswith=new_folder_prefix).exclude(file__startswith=source_prefix).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exclude(file__startswith=source_prefix).exists():
             return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same base name exists (with or without extension)
+        # Check if a file with the same base name exists (with or without extension, case-insensitive)
         new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
-        if CSV.objects.filter(Q(file=new_file_path) | Q(file__startswith=new_file_path + '.')).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(Q(lower_file__exact=new_file_path.lower()) | Q(lower_file__startswith=(new_file_path + '.').lower())).exists():
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Ensure target dir exists
@@ -249,14 +250,14 @@ class CSVFileRenameView(generics.GenericAPIView):
             serializer = CSVFileSerializer(obj, context={'request': request})
             return Response(serializer.data)
 
-        # Check for duplicate file in same directory (excluding current file)
-        if CSV.objects.filter(file=new_path).exclude(pk=obj.pk).exists():
+        # Check for duplicate file in same directory (excluding current file, case-insensitive)
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exclude(pk=obj.pk).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a folder with the same base name exists (strip extension then check prefix)
+        # Check if a folder with the same base name exists (strip extension then check prefix, case-insensitive)
         base_no_ext = os.path.splitext(new_path)[0]
         potential_folder_path = base_no_ext.rstrip('/') + '/'
-        if CSV.objects.filter(file__startswith=potential_folder_path).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         current_full_path = obj.file.path
@@ -298,14 +299,14 @@ class FolderRenameView(generics.GenericAPIView):
         parent_dir = os.path.dirname(full_source_dir)
         full_target_dir = os.path.join(parent_dir, new_name)
 
-        # Check for duplicate folder in parent directory
+        # Check for duplicate folder in parent directory (case-insensitive)
         new_folder_prefix = f"datasets/csvs/{new_name}/"
-        if CSV.objects.filter(file__startswith=new_folder_prefix).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same base name exists (file or file + extension)
+        # Check if a file with the same base name exists (file or file + extension, case-insensitive)
         new_file_path = f"datasets/csvs/{new_name}"
-        if CSV.objects.filter(Q(file=new_file_path) | Q(file__startswith=new_file_path + '.')).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(Q(lower_file__exact=new_file_path.lower()) | Q(lower_file__startswith=(new_file_path + '.').lower())).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if source directory exists

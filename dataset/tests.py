@@ -933,3 +933,75 @@ class DatasetFileManagementTests(TestCase):
         rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_folder"})
         self.assertEqual(rename_resp.status_code, 400)
         self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+
+    def test_move_file_case_insensitive_duplicate(self):
+        self._login(self.researcher)
+        # Upload file "test.csv" in root
+        upload1 = self._upload_csv("test.csv")
+        id1 = upload1.json()["id"]
+        # Upload file "TEST.csv" in subdir
+        target_dir = "subdir"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir), exist_ok=True)
+        upload2 = self._upload_csv("TEST.csv")
+        id2 = upload2.json()["id"]
+        obj2 = CSV.objects.get(pk=id2)
+        obj2.file.name = f"datasets/csvs/{target_dir}/TEST.csv"
+        obj2.save()
+        # Try to move "test.csv" to subdir where "TEST.csv" exists (case-insensitive duplicate)
+        move_url = reverse("csvfile_move", kwargs={"pk": id1})
+        move_resp = self.client.post(move_url, {"target_dir": target_dir})
+        self.assertEqual(move_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+
+    def test_rename_file_case_insensitive_duplicate(self):
+        self._login(self.researcher)
+        # Upload two files
+        upload1 = self._upload_csv("file1.csv")
+        id1 = upload1.json()["id"]
+        upload2 = self._upload_csv("file2.csv")
+        id2 = upload2.json()["id"]
+        # Rename file2 to file1.csv
+        rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
+        rename_resp = self.client.post(rename_url, {"new_name": "FILE1.csv"})
+        self.assertEqual(rename_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+
+    def test_move_folder_case_insensitive_duplicate(self):
+        self._login(self.researcher)
+        # Create folder "source" with files
+        source_dir = "source"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        upload1 = self._upload_csv("f1.csv")
+        obj1 = CSV.objects.get(pk=upload1.json()["id"])
+        obj1.file.name = f"datasets/csvs/{source_dir}/f1.csv"
+        obj1.save()
+        # Create folder "TARGET" with files
+        # Use a folder name that differs only by case to exercise the
+        # case-insensitive duplicate detection (e.g. SOURCE vs source)
+        target_dir = "SOURCE"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir), exist_ok=True)
+        upload2 = self._upload_csv("f2.csv")
+        obj2 = CSV.objects.get(pk=upload2.json()["id"])
+        obj2.file.name = f"datasets/csvs/{target_dir}/f2.csv"
+        obj2.save()
+        # Try to move "source" to root where "TARGET" exists (case-insensitive duplicate)
+        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
+        self.assertEqual(move_resp.status_code, 400)
+        self.assertIn("A folder with this name already exists", move_resp.json()["detail"])
+
+    def test_rename_folder_case_insensitive_duplicate(self):
+        self._login(self.researcher)
+        # Create folder
+        source_dir = "old_folder"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
+        upload = self._upload_csv("f.csv")
+        obj = CSV.objects.get(pk=upload.json()["id"])
+        obj.file.name = f"datasets/csvs/{source_dir}/f.csv"
+        obj.save()
+        # Create a file with name "new_folder"
+        upload2 = self._upload_csv("new_folder.csv")
+        # Rename folder to "new_folder"
+        rename_url = reverse("folder_rename")
+        rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "NEW_FOLDER"})
+        self.assertEqual(rename_resp.status_code, 400)
+        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])

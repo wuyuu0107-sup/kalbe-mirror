@@ -325,19 +325,37 @@ class FolderRenameView(generics.GenericAPIView):
         if source_dir == new_name:
             return Response({"updated_files": [], "message": f"Folder name unchanged."})
 
+        # full filesystem paths
         full_source_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir)
         parent_dir = os.path.dirname(full_source_dir)
         full_target_dir = os.path.join(parent_dir, new_name)
 
-        # Check for duplicate folder in parent directory (case-insensitive)
-        new_folder_prefix = f"datasets/csvs/{new_name}/"
-        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exists():
+        # Compute the parent-relative portion of the source_dir so we can
+        # perform DB checks and updates scoped to the same parent (siblings only).
+        # Use POSIX-like separators for the DB-stored file paths (they use '/').
+        source_dir_norm = source_dir.rstrip('/\\')
+        parent_rel = os.path.dirname(source_dir_norm)
+
+        # Build DB prefixes that include the parent path when necessary so checks
+        # are limited to the parent directory (siblings) rather than global.
+        if parent_rel:
+            new_folder_prefix = f"datasets/csvs/{parent_rel}/{new_name}/"
+            new_file_path = f"datasets/csvs/{parent_rel}/{new_name}"
+        else:
+            new_folder_prefix = f"datasets/csvs/{new_name}/"
+            new_file_path = f"datasets/csvs/{new_name}"
+
+        source_prefix = f"datasets/csvs/{source_dir_norm}/"
+
+        # Check for duplicate folder in parent directory (case-insensitive).
+        # Exclude any files that are part of the source directory to avoid
+        # detecting the folder being renamed as a conflict with itself.
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exclude(file__startswith=source_prefix).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same name exists (exact match only, case-insensitive)
-        # For a folder named "hello", check if file "datasets/csvs/hello" exists (without extension)
+        # Check if a file with the same name exists in the same parent (exact match only, case-insensitive)
+        # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
         # Do NOT match "hello.csv" - that's a different file
-        new_file_path = f"datasets/csvs/{new_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -360,12 +378,13 @@ class FolderRenameView(generics.GenericAPIView):
         except Exception as e:
             return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        source_prefix = f"datasets/csvs/{source_dir}/"
+        # Use normalized source_prefix (parent-aware) when updating DB entries
         files_to_update = CSV.objects.filter(file__startswith=source_prefix)
         updated_ids = []
         for obj in files_to_update:
             old_path = obj.file.name
-            new_path = old_path.replace(source_prefix, f"datasets/csvs/{new_name}/", 1)
+            # Replace only the source_prefix with the new folder prefix that preserves parent
+            new_path = old_path.replace(source_prefix, new_folder_prefix, 1)
             obj.file.name = new_path
             obj.save()
             updated_ids.append(obj.id)

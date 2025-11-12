@@ -14,6 +14,19 @@ from .serializers import CSVFileSerializer
 from .permissions import IsAuthenticatedAndVerified
 
 
+def cleanup_orphaned_directory(directory_path):
+    """
+    If a directory exists on the physical filesystem but has no corresponding
+    files in the database, delete it.
+    """
+    if os.path.exists(directory_path) and os.path.isdir(directory_path):
+        try:
+            shutil.rmtree(directory_path)
+        except Exception:
+            # If cleanup fails, continue anyway (not critical)
+            pass
+
+
 class CSVFileListCreateView(generics.ListCreateAPIView):
     queryset = CSV.objects.all().order_by("-created_at")
     serializer_class = CSVFileSerializer
@@ -112,6 +125,10 @@ class CSVFileMoveView(generics.GenericAPIView):
         potential_folder_path = base_no_ext.rstrip('/') + '/'
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Clean up orphaned directory if it exists in physical files only
+        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, base_no_ext)
+        cleanup_orphaned_directory(orphaned_folder_path)
 
         # Ensure target dir exists
         full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
@@ -166,6 +183,10 @@ class FolderMoveView(generics.GenericAPIView):
         new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Clean up orphaned directory if it exists in physical files only
+        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_file_path)
+        cleanup_orphaned_directory(orphaned_folder_path)
 
         # Ensure target dir exists
         full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
@@ -265,6 +286,10 @@ class CSVFileRenameView(generics.GenericAPIView):
         if new_path == base_no_ext and CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Clean up orphaned directory if it exists in physical files only
+        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, base_no_ext)
+        cleanup_orphaned_directory(orphaned_folder_path)
+
         current_full_path = obj.file.path
         dir_full_path = os.path.dirname(current_full_path)
         new_full_path = os.path.join(dir_full_path, new_name)
@@ -315,6 +340,9 @@ class FolderRenameView(generics.GenericAPIView):
         new_file_path = f"datasets/csvs/{new_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Clean up orphaned directory if it exists in physical files only
+        cleanup_orphaned_directory(full_target_dir)
 
         # Check if source directory exists
         if not os.path.exists(full_source_dir):

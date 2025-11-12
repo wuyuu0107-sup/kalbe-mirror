@@ -120,14 +120,15 @@ class CSVFileMoveView(generics.GenericAPIView):
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a folder with the same name exists (case-insensitive).
-        # For a file named "datasets/csvs/hello.csv", check if folder "datasets/csvs/hello/" exists
-        base_no_ext = os.path.splitext(new_path)[0]
-        potential_folder_path = base_no_ext.rstrip('/') + '/'
+        potential_folder_path = new_path.rstrip('/') + '/'  # do NOT strip extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
-            return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"detail": "A folder with this exact name already exists in the target directory."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, base_no_ext)
+        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
         # Ensure target dir exists
@@ -279,15 +280,16 @@ class CSVFileRenameView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exclude(pk=obj.pk).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if renaming would create a collision with a folder that has the same name (no extension)
-        # e.g., cannot rename "hello.csv" to "hello" if folder "hello/" exists
-        base_no_ext = os.path.splitext(new_path)[0]
-        potential_folder_path = base_no_ext.rstrip('/') + '/'
-        if new_path == base_no_ext and CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
-            return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if renaming would create a collision with a folder that has the same name
+        potential_folder_path = new_path.rstrip('/') + '/'
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
+            return Response(
+                {"detail": "A folder with this name already exists in the directory."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, base_no_ext)
+        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
         current_full_path = obj.file.path

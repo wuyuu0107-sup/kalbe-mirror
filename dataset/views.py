@@ -102,11 +102,12 @@ class CSVFileMoveView(generics.GenericAPIView):
             return Response(serializer.data)
 
         # Check for duplicate file in target directory (case-insensitive)
+        # Only check for exact match - file names must match completely including extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a folder with the same base name exists (case-insensitive).
-        # e.g. moving file datasets/csvs/file.csv -> folder to check is datasets/csvs/file/
+        # Check if a folder with the same name exists (case-insensitive).
+        # For a file named "datasets/csvs/hello.csv", check if folder "datasets/csvs/hello/" exists
         base_no_ext = os.path.splitext(new_path)[0]
         potential_folder_path = base_no_ext.rstrip('/') + '/'
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
@@ -159,9 +160,11 @@ class FolderMoveView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exclude(file__startswith=source_prefix).exists():
             return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same base name exists (with or without extension, case-insensitive)
+        # Check if a file with the same name exists (exact match only, case-insensitive)
+        # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
+        # Do NOT match "hello.csv" - that's a different file
         new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
-        if CSV.objects.annotate(lower_file=Lower('file')).filter(Q(lower_file__exact=new_file_path.lower()) | Q(lower_file__startswith=(new_file_path + '.').lower())).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Ensure target dir exists
@@ -251,13 +254,15 @@ class CSVFileRenameView(generics.GenericAPIView):
             return Response(serializer.data)
 
         # Check for duplicate file in same directory (excluding current file, case-insensitive)
+        # Only check for exact match - file names must match completely including extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exclude(pk=obj.pk).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a folder with the same base name exists (strip extension then check prefix, case-insensitive)
+        # Check if renaming would create a collision with a folder that has the same name (no extension)
+        # e.g., cannot rename "hello.csv" to "hello" if folder "hello/" exists
         base_no_ext = os.path.splitext(new_path)[0]
         potential_folder_path = base_no_ext.rstrip('/') + '/'
-        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
+        if new_path == base_no_ext and CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         current_full_path = obj.file.path
@@ -304,9 +309,11 @@ class FolderRenameView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exists():
             return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if a file with the same base name exists (file or file + extension, case-insensitive)
+        # Check if a file with the same name exists (exact match only, case-insensitive)
+        # For a folder named "hello", check if file "datasets/csvs/hello" exists (without extension)
+        # Do NOT match "hello.csv" - that's a different file
         new_file_path = f"datasets/csvs/{new_name}"
-        if CSV.objects.annotate(lower_file=Lower('file')).filter(Q(lower_file__exact=new_file_path.lower()) | Q(lower_file__startswith=(new_file_path + '.').lower())).exists():
+        if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if source directory exists

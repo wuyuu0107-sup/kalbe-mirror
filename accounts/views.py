@@ -8,6 +8,7 @@ from django.http import JsonResponse, HttpRequest
 from django.core.cache import cache
 from django.utils import timezone
 from django.apps import apps  # ⬅️ kunci: ambil model eksplisit dari app 'authentication'
+from django.views.decorators.csrf import csrf_exempt  # ⬅️ TAMBAH INI
 
 from .passwords import is_strong_password  # asumsi sudah ada
 from .utils import generate_otp
@@ -26,6 +27,7 @@ def _read_json(request: HttpRequest) -> Dict[str, Any]:
         return {}
 
 
+@csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
 @require_POST
 def request_password_reset(request: HttpRequest) -> JsonResponse:
     """
@@ -44,6 +46,7 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "ok"})
 
 
+@csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
 @require_POST
 def reset_password_confirm(request: HttpRequest) -> JsonResponse:
     """
@@ -53,7 +56,14 @@ def reset_password_confirm(request: HttpRequest) -> JsonResponse:
     data = _read_json(request)
     email = (data.get("email") or "").strip().lower()
     otp = (data.get("otp") or "").strip()
-    new_password = (data.get("new_password") or "").strip()
+
+    # ⬅️ FRONTEND lu kirim field `password`, bukan `new_password`
+    # jadi kita handle dua-duanya biar fleksibel
+    new_password = (
+        data.get("new_password")
+        or data.get("password")
+        or ""
+    ).strip()
 
     if not email or not otp or not new_password:
         return JsonResponse({"error": "missing fields"}, status=400)

@@ -27,17 +27,19 @@ urlpatterns = [
     path('ocr/', include('ocr.urls')),
     path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
     path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
-    path('auth/', include('authentication.urls')),
     path('api/protected-endpoint/', protected_endpoint),
     path('', include('annotation.urls')),
     path('csv/', include('csv_export.urls')),
     path('save-to-database/', include('save_to_database.urls')),
     path('dataset/', include('dataset.urls')),
     path('dashboard/', include('dashboard.urls')),
-    path("", include("dashboard.urls")),
     path('search/', include('search.urls')),
+    path('notification/', include('notification.urls')),
+    path('', include('django_prometheus.urls')), 
+    path("", include("dashboard.urls")),
     path('', include('django_prometheus.urls')),
     path('api/user-settings/', include('user_settings.urls')),
+    path("audit/", include("audittrail.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

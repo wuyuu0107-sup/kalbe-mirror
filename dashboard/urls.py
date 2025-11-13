@@ -10,12 +10,12 @@ router.register(r'chat-suggestions', ChatSuggestionViewSet, basename='chat-sugge
 
 urlpatterns = [
     path('api/', include(router.urls)),
+    path("user/", views.whoami, name="user"),
     path("whoami/", views.whoami, name="whoami"),
-    path("recent-files/<int:limit>/", views.recent_files_json, name="recent-files-json"),
+    path("recent-files/<int:limit>/", views.recent_files_json, name="recent-files"),
     path("recent-files-json/<int:limit>/", views.recent_files_json, name="recent_files_json"),
-    path("recent-features/", views.recent_features_json, name="recent-features-json"),
+    path("recent-features/", views.recent_features_json, name="recent-features"),
     path("recent-files-json/", views.recent_files_json, name="recent_files_json"),
     path("recent-features-json/", views.recent_features_json, name="recent_features_json"),
     path("breadcrumbs/", views.breadcrumbs_json, name="breadcrumbs"),
-    path("user", whoami, name="whoami"),
 ]

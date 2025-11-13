@@ -2,7 +2,7 @@ import io
 import csv
 import json
 import logging
-from typing import Any, Dict, List, Union, Optional
+from typing import Any, Dict, List, Union
 
 # reuse existing flatten function
 from csv_export.utility.json_to_csv import flatten_json

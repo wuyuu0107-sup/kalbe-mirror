@@ -1,10 +1,6 @@
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.core.exceptions import ValidationError
-from django.urls import reverse
 from authentication.models import User
-from django.contrib.auth.hashers import make_password
-from unittest.mock import patch
-import uuid
 
 class UserModelTest(TestCase):
 

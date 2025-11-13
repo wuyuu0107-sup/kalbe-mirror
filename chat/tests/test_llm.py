@@ -1,17 +1,8 @@
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 from types import SimpleNamespace as NS
-import os
-import sys
-import uuid
 import json
-
-from authentication.models import User
-from django.urls import reverse
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
-from django.contrib.auth.hashers import make_password
-
-from chat.models import ChatSession
 
 class LlmTests(SimpleTestCase):
     def _resp_with_text(self, text):
@@ -94,10 +85,7 @@ class ViewsGuardrailsIntegrationTests(APITestCase):
         self.assertEqual(r.json()["answer"], "guarded-answer")
         mock_run.assert_called_once()
 
-import json
 import time
-from unittest import mock
-from unittest.mock import patch, Mock
 from django.test import SimpleTestCase, override_settings
 
 from chat import llm

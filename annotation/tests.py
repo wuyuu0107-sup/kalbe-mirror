@@ -1,26 +1,16 @@
 from django.test import TestCase, Client, override_settings
 from .models import Patient, Document
-from unittest.mock import patch
 from authentication.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 import os
-import io
 import json
-import types
 import unittest
-import base64
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
-from rest_framework.test import APIClient
-from rest_framework import status
 from annotation.models import Annotation
 from annotation import views
 from annotation.serializers import AnnotationSerializer, DocumentSerializer
-from django.test import TestCase, Client
-from .models import Document, Patient
-from unittest.mock import patch, MagicMock
-
 
 # If your file already declared HAS_COMMENTS earlier, you can reuse it.
 try:

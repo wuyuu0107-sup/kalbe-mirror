@@ -9,6 +9,5 @@ from authentication.models import User
 from django.urls import reverse
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
-from django.contrib.auth.hashers import make_password
 
 from chat.models import ChatSession

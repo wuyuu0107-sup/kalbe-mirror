@@ -1,14 +1,9 @@
-from unittest.mock import patch, Mock, MagicMock
-from types import SimpleNamespace as NS
+from unittest.mock import patch, Mock
 from chat import sqlgen
-
-from authentication.models import User
-from django.urls import reverse
 from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APITestCase
+from authentication.models import User
 from django.contrib.auth.hashers import make_password
-
-from chat.models import ChatSession
 
 class GuardrailsTests(SimpleTestCase):
     # Note: These tests mock the internal _get_rails function that returns the LLMRails instance.
@@ -103,9 +98,6 @@ class GuardrailsTests(SimpleTestCase):
 
 class ViewsGuardrailsIntegrationTests(APITestCase):
     def setUp(self):
-        from authentication.models import User
-        from django.contrib.auth.hashers import make_password
-
         self.user = User.objects.create(
             username="gruser",
             password=make_password("pw"),

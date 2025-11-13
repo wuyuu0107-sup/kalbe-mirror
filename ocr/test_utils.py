@@ -330,7 +330,7 @@ class SpellcheckerTests(TestCase):
 class ProcessMeasurementSectionsTests(TestCase):
     
     def test_process_measurement_sections_updates_base(self):
-        from ocr.utils.normalization import _process_measurement_sections, _default_payload, URINALYSIS_FIELDS
+        from ocr.utils.normalization import _process_measurement_sections, _default_payload
         
         norm = {
             "URINALYSIS": {

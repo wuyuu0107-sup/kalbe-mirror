@@ -1,6 +1,5 @@
 import os
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from supabase import create_client
 
 BUCKET = os.getenv("SUPABASE_CSV_BUCKET", "csv")

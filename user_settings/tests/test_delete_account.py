@@ -1,15 +1,13 @@
 import json
-import uuid
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import TestCase, Client, RequestFactory
 from django.urls import reverse
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password
 from django.http import JsonResponse
 from authentication.models import User
 from ..serializers import DeleteAccountSerializer
 from ..services.passwords import AccountDeletionResult
-from ..views import get_authenticated_user
 
 
 class DeleteAccountTestCase(TestCase):

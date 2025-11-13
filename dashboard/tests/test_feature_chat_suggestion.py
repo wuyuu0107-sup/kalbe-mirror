@@ -2,7 +2,6 @@ from django.test import TestCase
 from authentication.models import User
 from rest_framework.test import APITestCase
 from rest_framework import status
-from datetime import datetime
 from dashboard.models import ChatSuggestion
 
 

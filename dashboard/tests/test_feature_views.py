@@ -3,7 +3,6 @@ from authentication.models import User
 from unittest.mock import patch, MagicMock
 from dashboard import views
 from dashboard.views import CsrfExemptSessionAuthentication
-from django.http import JsonResponse
 
 class ViewsMissingCoverageTests(TestCase):
     def setUp(self):

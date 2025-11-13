@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import csv
 
 class ExportStrategy(ABC):
     """Strategy Pattern: Abstract strategy for data export"""

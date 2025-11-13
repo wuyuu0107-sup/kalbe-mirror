@@ -1,9 +1,6 @@
 import json
-import csv
-from io import StringIO
 from unittest.mock import patch, Mock
 from django.test import TestCase, Client
-from django.urls import reverse
 from django.http import HttpResponse
 
 

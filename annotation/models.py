@@ -1,5 +1,5 @@
 from django.db import models
-from django.utils import timezone  # <- you'll need this for the prompt
+# from django.utils import timezone  # <- you'll need this for the prompt
 
 class Document(models.Model):
     SOURCE_CHOICES = (('json','JSON'), ('pdf','PDF'))

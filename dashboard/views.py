@@ -1,12 +1,10 @@
 from __future__ import annotations
 from urllib.parse import unquote
-from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
 from authentication.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
 from .models import ChatSuggestion
 from .serializers import ChatSuggestionSerializer
 from rest_framework.permissions import IsAuthenticatedOrReadOnly

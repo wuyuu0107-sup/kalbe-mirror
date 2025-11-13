@@ -1,17 +1,5 @@
-from unittest.mock import patch, Mock, MagicMock
-from types import SimpleNamespace as NS
-import os
-import sys
-import uuid
-import json
-
-from authentication.models import User
-from django.urls import reverse
+from unittest.mock import patch
 from django.test import SimpleTestCase
-from rest_framework.test import APITestCase
-from django.contrib.auth.hashers import make_password
-
-from chat.models import ChatSession
 
 class SqlGenTests(SimpleTestCase):
     @patch("chat.sqlgen.ask_gemini_text", return_value="SELECT COUNT(*) FROM patients")

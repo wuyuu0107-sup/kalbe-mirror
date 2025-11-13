@@ -1,6 +1,17 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
+from types import SimpleNamespace as NS
 import os
+import sys
+import uuid
+import json
+
+from authentication.models import User
+from django.urls import reverse
 from django.test import SimpleTestCase
+from rest_framework.test import APITestCase
+from django.contrib.auth.hashers import make_password
+
+from chat.models import ChatSession
 
 class RepoTests(SimpleTestCase):
     def setUp(self):

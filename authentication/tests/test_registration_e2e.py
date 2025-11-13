@@ -1,6 +1,7 @@
 import json
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.contrib.auth.hashers import check_password
 from authentication.models import User
 
 

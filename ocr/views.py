@@ -10,6 +10,7 @@ from dashboard.tracking import track_feature
 from ocr.services.gemini import GeminiService
 from ocr.services.storage import StorageService
 from ocr.services.document import DocumentService
+from ocr.utils.spellchecker import correct_word
 from ocr.utils.normalization import normalize_payload, order_sections
 from ocr.utils.response_builders import build_success_response, build_error_response
 

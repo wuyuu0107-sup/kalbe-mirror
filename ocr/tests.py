@@ -1,5 +1,6 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from typing import Dict, Any
 
 from ocr.utils.normalization import (
     normalize_payload,
@@ -7,7 +8,9 @@ from ocr.utils.normalization import (
     _process_demography,
     _process_vital_signs,
     _process_serology,
+    _process_measurement_sections,
     _collect_extra_sections,
+    _build_ordered_output
 )
 
 

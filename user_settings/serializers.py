@@ -3,6 +3,7 @@ from django.contrib.auth.hashers import check_password
 from django.core.exceptions import ValidationError
 from authentication.validators import validate_password
 
+
 class ChangePasswordSerializer(forms.Form):
     """
     Serializer for password change request.
@@ -89,7 +90,7 @@ class ChangePasswordSerializer(forms.Form):
             return True, {}
         except ValidationError as e:
             return False, {'non_field_errors': e.messages}
-        except Exception:
+        except Exception as e:
             errors = {}
             if hasattr(self, 'errors'):
                 errors = dict(self.errors)

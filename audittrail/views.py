@@ -6,6 +6,8 @@ def ping(request):
     return JsonResponse({"status": "ok"})
 
 # audittrail/views_logviewer.py
+from datetime import datetime
+
 from django.utils.timezone import make_aware
 from rest_framework import viewsets
 from rest_framework.pagination import PageNumberPagination

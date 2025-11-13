@@ -1,4 +1,7 @@
 # dashboard/nav.py
+
+from django.apps import apps
+
 try:
     from annotation.models import Annotation
 except ImportError:

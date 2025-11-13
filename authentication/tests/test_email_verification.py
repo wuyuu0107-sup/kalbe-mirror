@@ -242,6 +242,8 @@ class EmailVerificationTest(TestCase):
 
     def test_verify_otp_expired(self):
         """Test OTP verification with expired code"""
+        from django.utils import timezone
+        from datetime import timedelta
         
         user = User.objects.create(
             username="otpuser4",
@@ -267,7 +269,10 @@ class EmailVerificationTest(TestCase):
         self.assertIsNone(user.otp_expires_at)
 
     def test_is_otp_expired(self):
-        """Test OTP expiry check"""        
+        """Test OTP expiry check"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
         user = User.objects.create(
             username="otpuser5",
             password="password123",

@@ -1,7 +1,8 @@
+import logging
 import sys
 from django.test import TestCase
 from django.apps import apps
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 from save_to_database.apps import SaveToDatabaseConfig
 
 

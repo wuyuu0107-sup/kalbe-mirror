@@ -14,6 +14,8 @@ from .models import ChatSession, ChatMessage
 from .service import answer_question as chat_service
 from .guardrails import run_with_guardrails
 from notification.triggers import notify_chat_reply
+from . import service as chat_service
+
 
 DEMO_COOKIE_NAME = "demo_user_id"
 log = logging.getLogger(__name__)

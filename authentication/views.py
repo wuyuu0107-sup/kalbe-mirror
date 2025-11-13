@@ -5,6 +5,7 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User

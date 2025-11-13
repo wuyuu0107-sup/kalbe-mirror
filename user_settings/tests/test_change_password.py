@@ -1,4 +1,5 @@
 import json
+import uuid
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import TestCase, Client, RequestFactory

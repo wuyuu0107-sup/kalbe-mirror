@@ -6,8 +6,8 @@ from django.core.files.base import ContentFile
 
 from rest_framework import viewsets, mixins, filters, status
 from rest_framework.response import Response
-from rest_framework.decorators import action, api_view, authentication_classes
-from rest_framework.permissions import AllowAny, BasePermission
+from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 
 from django_filters.rest_framework import DjangoFilterBackend

@@ -1,5 +1,7 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 from types import SimpleNamespace as NS
+import os
+import sys
 import uuid
 import json
 

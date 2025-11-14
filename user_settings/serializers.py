@@ -95,3 +95,34 @@ class ChangePasswordSerializer(forms.Form):
             if hasattr(self, 'errors'):
                 errors = dict(self.errors)
             return False, errors
+
+
+class DeleteAccountSerializer(forms.Form):
+    """
+    Serializer for account deletion request.
+    Validates current password before allowing deletion.
+    """
+    current_password = forms.CharField(
+        max_length=255,
+        widget=forms.PasswordInput(),
+        help_text="Current password for verification"
+    )
+
+    def __init__(self, user=None, *args, **kwargs):
+        """Initialize with user instance for password verification"""
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_current_password(self):
+        """Validate that the current password is correct"""
+        current_password = self.cleaned_data.get('current_password')
+        
+        if not current_password:
+            raise ValidationError("Current password is required")
+        
+        if self.user:
+            passwords_match = check_password(current_password, self.user.password)
+            if not passwords_match:
+                raise ValidationError("Current password is incorrect")
+        
+        return current_password

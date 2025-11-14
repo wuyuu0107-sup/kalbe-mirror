@@ -17,6 +17,5 @@ urlpatterns = [
     path("recent-files-json/", views.recent_files_json, name="recent_files_json"),
     path("recent-features-json/", views.recent_features_json, name="recent_features_json"),
     path("breadcrumbs/", views.breadcrumbs_json, name="breadcrumbs"),
-    path("breadcrumbs_demo/", views.breadcrumbs_demo, name="breadcrumbs_demo"),
     path("user", whoami, name="whoami"),
 ]

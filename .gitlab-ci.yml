@@ -27,12 +27,25 @@ test:
   stage: test
   script:
     - python manage.py migrate --noinput
-    - python manage.py test --keepdb
-    - coverage run --source='.' manage.py test
+    - coverage run --source='.' manage.py test --keepdb
+    - coverage report -m
+    - coverage xml
+    - coverage html
+    - coverage report --fail-under=70
+  coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
+    paths:
+      - htmlcov/
     reports:
       junit: reports/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
 
 deploy:
   stage: deploy

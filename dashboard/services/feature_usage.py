@@ -1,6 +1,6 @@
 from django.utils import timezone
 from django.db.models import Max, Count
-from authentication.models import User  # adjust import to your user model
+from authentication.models import User
 from dashboard.models import FeatureUsage
 
 def record_feature_use(request, feature_key: str):
@@ -22,14 +22,8 @@ def record_feature_use(request, feature_key: str):
         print(f"[record_feature_use] Error: {e}")
 
 
-def get_recent_features(request, limit=4):
+def get_recent_features(user, limit=4):
     try:
-        user = None
-
-        user_id = request.session.get("user_id")
-        if user_id:
-            user = User.objects.filter(user_id=user_id).first()
-
         if not user:
             return []
         

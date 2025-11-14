@@ -3,6 +3,18 @@ from urllib.parse import unquote
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
 from authentication.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.core.exceptions import ValidationError
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from .models import ChatSuggestion
+from .serializers import ChatSuggestionSerializer
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return  # Disable CSRF
 
 # Uncomment when being used
 # from django.contrib.auth.decorators import login_required
@@ -16,8 +28,21 @@ from dashboard.services.feature_usage import get_recent_features
 
 # Create your views here.
 
-def recent_files_json(request):
-    items = get_recent_files()
+def whoami(request):
+    return JsonResponse({
+        "cookie_sessionid": request.COOKIES.get("sessionid"),
+        "user_id": request.session.get("user_id"),
+        "username": request.session.get("username"),
+    })
+
+@csrf_exempt
+def recent_files_json(request, limit):
+    try:
+        items = get_recent_files(limit)
+        print("DEBUG: get_recent_files() returned:", items)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
     for i in items:
         if hasattr(i.get("updated_at"), "isoformat"):
             i["updated_at"] = i["updated_at"].isoformat()
@@ -31,7 +56,7 @@ def recent_features_json(request):
 
     try:
         user = User.objects.get(user_id=user_id)
-    except User.DoesNotExist:
+    except (User.DoesNotExist, ValueError, ValidationError):
         return JsonResponse({"error": "User not found"}, status=404)
 
     items = get_recent_features(user)
@@ -80,5 +105,16 @@ def breadcrumbs_json(request):
 
     return JsonResponse(crumbs, safe=False)
 
-def breadcrumbs_demo(request):
-    return render(request, "dashboard/breadcrumbs_demo.html")
+class ChatSuggestionViewSet(viewsets.ModelViewSet):
+    serializer_class = ChatSuggestionSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    authentication_classes = [CsrfExemptSessionAuthentication, BasicAuthentication]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return ChatSuggestion.objects.none()
+        return ChatSuggestion.objects.filter(user_id=user.user_id)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)

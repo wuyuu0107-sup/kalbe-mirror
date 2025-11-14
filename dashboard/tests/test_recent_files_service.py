@@ -1,5 +1,7 @@
 import datetime as dt
-from unittest import TestCase, mock
+from django.test import TestCase
+from dashboard.services import feature_usage
+from unittest import mock
 
 # Services
 from dashboard.services.recent_files import get_recent_files
@@ -29,3 +31,37 @@ class RecentFileServiceTests(TestCase):
         
         self.assertEqual([f["name"] for f in out], ["c.csv", "b.csv", "a.csv", "d.csv"])
         self.assertTrue({"name", "updated_at", "size", "path"}.issubset(out[0].keys()))
+
+class FeatureUsageServiceTests(TestCase):
+
+    @mock.patch("dashboard.services.feature_usage.FeatureUsage.objects.create")
+    def test_record_feature_use_handles_exception(self, mock_create):
+        
+        mock_create.side_effect = Exception("DB down")
+        request = mock.Mock()
+        request.session = {"user_id": "123"}
+
+        with mock.patch("builtins.print") as mock_print:
+            feature_usage.record_feature_use(request, "test-feature")
+
+        mock_print.assert_called_once()
+        args, _ = mock_print.call_args
+        self.assertIn("[record_feature_use] Error:", args[0])
+
+    @mock.patch("dashboard.services.feature_usage.FeatureUsage.objects.filter")
+    def test_get_recent_features_returns_empty_on_exception(self, mock_filter):
+
+        mock_filter.side_effect = Exception("DB down")
+
+        with mock.patch("builtins.print") as mock_print:
+            result = feature_usage.get_recent_features(user=mock.Mock())
+
+        self.assertEqual(result, [])
+        mock_print.assert_called_once()
+        args, _ = mock_print.call_args
+        self.assertIn("[get_recent_features] Error:", args[0])
+
+    def test_get_recent_features_returns_empty_if_no_user(self):
+        
+        result = feature_usage.get_recent_features(user=None)
+        self.assertEqual(result, [])

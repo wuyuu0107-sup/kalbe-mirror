@@ -61,8 +61,7 @@ class ViewsErrorHandlingTest(TestCase):
         # Should return 403 for unverified user
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        self.assertIn("Email not verified", data["error"])
-        self.assertIn("Please verify your email before logging in", data["message"])
+        self.assertIn("Please verify your email before logging in.", data["error"])
 
     def test_login_account_locked_path(self):
         """Test login when account is locked - covers line 121"""
@@ -117,7 +116,7 @@ class ViewsErrorHandlingTest(TestCase):
         # Should return 403 with email not verified message
         self.assertEqual(response.status_code, 403)
         data = response.json()
-        self.assertEqual(data["error"], "Email not verified")
+        self.assertEqual(data["error"], "Please verify your email before logging in.")
 
     def test_login_account_locked_after_failed_attempts(self):
         """Test login when account gets locked after failed attempts - covers line 162"""

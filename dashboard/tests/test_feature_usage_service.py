@@ -60,7 +60,7 @@ class FeatureUsageServiceTests(TestCase):
         with mock.patch("django.utils.timezone.now", return_value=t2):
             record_feature_use(req, "Import File")
 
-        recent = get_recent_features(req)
+        recent = get_recent_features(self.user)
         names = [r["feature_key"] for r in recent]
         self.assertEqual(names, ["Import File", "Scan ke CSV"])
         self.assertIn("last_used_at", recent[0])
@@ -83,9 +83,9 @@ class FeatureUsageServiceTests(TestCase):
         record_feature_use(req_alice, "Scan ke CSV")
         record_feature_use(req_user, "Import File")
 
-        recent_alice = get_recent_features(req_alice)
+        recent_alice = get_recent_features(alice)
         self.assertEqual([r["feature_key"] for r in recent_alice], ["Scan ke CSV"])
 
-        recent_bob = get_recent_features(req_user)
-        self.assertEqual([r["feature_key"] for r in recent_bob], ["Import File"])
+        recent_user = get_recent_features(self.user)
+        self.assertEqual([r["feature_key"] for r in recent_user], ["Import File"])
 

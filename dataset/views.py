@@ -37,7 +37,7 @@ class CSVFileListCreateView(generics.ListCreateAPIView):
         # require a file under key 'file'
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
-            return Response({"detail": "No file provided under 'file' field."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Tidak ada berkas yang diberikan di bidang 'file'."}, status=status.HTTP_400_BAD_REQUEST)
         name = os.path.splitext(uploaded_file.name)[0]
         instance = CSV.objects.create(name=name, file=uploaded_file, source_json=None)
         serializer = self.get_serializer(instance, context={"request": request})
@@ -100,7 +100,7 @@ class CSVFileMoveView(generics.GenericAPIView):
         obj = get_object_or_404(CSV, pk=pk)
         target_dir = request.data.get('target_dir')
         if target_dir is None:
-            return Response({"detail": "target_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Handle root directory
         if target_dir == '/':
@@ -117,13 +117,13 @@ class CSVFileMoveView(generics.GenericAPIView):
         # Check for duplicate file in target directory (case-insensitive)
         # Only check for exact match - file names must match completely including extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exists():
-            return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Berkas dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a folder with the same name exists (case-insensitive).
         potential_folder_path = new_path.rstrip('/') + '/'  # do NOT strip extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response(
-                {"detail": "A folder with this exact name already exists in the target directory."},
+                {"detail": "Folder dengan nama tepat ini sudah ada di direktori tujuan."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -141,7 +141,7 @@ class CSVFileMoveView(generics.GenericAPIView):
         try:
             shutil.move(old_path, new_full_path)
         except Exception as e:
-            return Response({"detail": f"Failed to move file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"detail": f"Gagal memindahkan berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Update DB only if move succeeded
         obj.file.name = new_path
@@ -157,7 +157,7 @@ class FolderMoveView(generics.GenericAPIView):
         source_dir = request.data.get('source_dir')
         target_dir = request.data.get('target_dir')
         if source_dir is None or target_dir is None:
-            return Response({"detail": "source_dir and target_dir are required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "source_dir dan target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Handle root directory
         if target_dir == '/':
@@ -166,7 +166,7 @@ class FolderMoveView(generics.GenericAPIView):
         source_prefix = f"datasets/csvs/{source_dir}/"
         files_to_move = CSV.objects.filter(file__startswith=source_prefix)
         if not files_to_move.exists():
-            return Response({"detail": "No files found in source directory."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Tidak ada berkas yang ditemukan di direktori sumber."}, status=status.HTTP_404_NOT_FOUND)
 
         # Check for duplicate folder or file in target directory
         source_folder_name = os.path.basename(source_dir.rstrip('/'))
@@ -176,14 +176,14 @@ class FolderMoveView(generics.GenericAPIView):
         # Exclude files that are part of the source directory (the ones being moved) so we don't
         # detect the moving folder itself as an existing folder in the target.
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exclude(file__startswith=source_prefix).exists():
-            return Response({"detail": "A folder with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Folder dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a file with the same name exists (exact match only, case-insensitive)
         # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
         # Do NOT match "hello.csv" - that's a different file
         new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
-            return Response({"detail": "A file with this name already exists in the target directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Berkas dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Clean up orphaned directory if it exists in physical files only
         orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_file_path)
@@ -210,14 +210,14 @@ class FolderMoveView(generics.GenericAPIView):
             except Exception as e:
                 # If move fails, skip this file and continue with others? Or fail the whole operation?
                 # For now, fail the whole operation to maintain consistency
-                return Response({"detail": f"Failed to move file {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"detail": f"Gagal memindahkan berkas {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Update DB only if move succeeded
             obj.file.name = new_path
             obj.save()
             moved_ids.append(obj.id)
 
-        return Response({"moved_files": moved_ids, "message": f"Moved {len(moved_ids)} files from {source_dir} to {target_dir}."})
+        return Response({"moved_files": moved_ids, "message": f"Dipindahkan {len(moved_ids)} berkas dari {source_dir} ke {target_dir}."})
 
 
 class FolderDeleteView(generics.GenericAPIView):
@@ -226,12 +226,12 @@ class FolderDeleteView(generics.GenericAPIView):
     def delete(self, request):
         source_dir = request.data.get('source_dir')
         if source_dir is None:
-            return Response({"detail": "source_dir is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "source_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
         source_prefix = f"datasets/csvs/{source_dir}/"
         files_to_delete = CSV.objects.filter(file__startswith=source_prefix)
         if not files_to_delete.exists():
-            return Response({"detail": "No files found in source directory."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Tidak ada berkas yang ditemukan di direktori sumber."}, status=status.HTTP_404_NOT_FOUND)
 
         deleted_ids = []
         for obj in files_to_delete:
@@ -250,7 +250,7 @@ class FolderDeleteView(generics.GenericAPIView):
             obj.delete()
             deleted_ids.append(obj_id)
 
-        return Response({"deleted_files": deleted_ids, "message": f"Deleted {len(deleted_ids)} files from {source_dir}."})
+        return Response({"deleted_files": deleted_ids, "message": f"Dihapus {len(deleted_ids)} berkas dari {source_dir}."})
 
 
 class CSVFileRenameView(generics.GenericAPIView):
@@ -260,7 +260,7 @@ class CSVFileRenameView(generics.GenericAPIView):
         obj = get_object_or_404(CSV, pk=pk)
         new_name = request.data.get('new_name')
         if not new_name:
-            return Response({"detail": "new_name is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "new_name diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
         current_path = obj.file.name
         dir_path = os.path.dirname(current_path)
@@ -278,13 +278,13 @@ class CSVFileRenameView(generics.GenericAPIView):
         # Check for duplicate file in same directory (excluding current file, case-insensitive)
         # Only check for exact match - file names must match completely including extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_path.lower()).exclude(pk=obj.pk).exists():
-            return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if renaming would create a collision with a folder that has the same name
         potential_folder_path = new_path.rstrip('/') + '/'
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response(
-                {"detail": "A folder with this name already exists in the directory."},
+                {"detail": "Folder dengan nama ini sudah ada di direktori."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -299,14 +299,14 @@ class CSVFileRenameView(generics.GenericAPIView):
         try:
             os.rename(current_full_path, new_full_path)
         except FileNotFoundError:
-            return Response({"detail": "Source file not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Berkas sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
         except OSError as e:
             # Handle duplicate file errors at filesystem level
             if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Failed to rename file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return Response({"detail": f"Failed to rename file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         obj.file.name = new_path
         obj.save()
@@ -321,11 +321,11 @@ class FolderRenameView(generics.GenericAPIView):
         source_dir = request.data.get('source_dir')
         new_name = request.data.get('new_name')
         if not source_dir or not new_name:
-            return Response({"detail": "source_dir and new_name are required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "source_dir dan new_name diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Don't rename if it's the same name
         if source_dir == new_name:
-            return Response({"updated_files": [], "message": f"Folder name unchanged."})
+            return Response({"updated_files": [], "message": f"Nama folder tidak berubah."})
 
         # full filesystem paths
         full_source_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir)
@@ -353,32 +353,32 @@ class FolderRenameView(generics.GenericAPIView):
         # Exclude any files that are part of the source directory to avoid
         # detecting the folder being renamed as a conflict with itself.
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=new_folder_prefix.lower()).exclude(file__startswith=source_prefix).exists():
-            return Response({"detail": "A folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Folder dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if a file with the same name exists in the same parent (exact match only, case-insensitive)
         # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
         # Do NOT match "hello.csv" - that's a different file
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
-            return Response({"detail": "A file with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Clean up orphaned directory if it exists in physical files only
         cleanup_orphaned_directory(full_target_dir)
 
         # Check if source directory exists
         if not os.path.exists(full_source_dir):
-            return Response({"detail": "Source directory not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             os.rename(full_source_dir, full_target_dir)
         except FileNotFoundError:
-            return Response({"detail": "Source directory not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
         except OSError as e:
             # Handle duplicate directory errors at filesystem level
             if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "A file or folder with this name already exists in the directory."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"detail": "Berkas atau folder dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return Response({"detail": f"Failed to rename folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Use normalized source_prefix (parent-aware) when updating DB entries
         files_to_update = CSV.objects.filter(file__startswith=source_prefix)
@@ -391,4 +391,4 @@ class FolderRenameView(generics.GenericAPIView):
             obj.save()
             updated_ids.append(obj.id)
 
-        return Response({"updated_files": updated_ids, "message": f"Renamed folder from {source_dir} to {new_name}."})
+        return Response({"updated_files": updated_ids, "message": f"Folder diubah nama dari {source_dir} ke {new_name}."})

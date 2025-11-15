@@ -18,8 +18,8 @@ _password_service = PasswordChangeService(
     password_encoder=DjangoPasswordEncoder(),
 )
 
-AUTHENTICATION_REQUIRED = "Authentication required"
-INVALID_PAYLOAD = "Invalid payload"
+AUTHENTICATION_REQUIRED = "Autentikasi diperlukan"
+INVALID_PAYLOAD = "Payload tidak valid"
 
 
 def get_authenticated_user(request):
@@ -62,7 +62,7 @@ def change_password(request):
         if not user:
             return JsonResponse({
                 "error": AUTHENTICATION_REQUIRED,
-                "message": "You must be logged in to change your password"
+                "message": "Anda harus login untuk mengubah password"
             }, status=401)
 
         # Parse JSON payload
@@ -73,13 +73,13 @@ def change_password(request):
         if data is None:
             return JsonResponse({
                 "error": INVALID_PAYLOAD,
-                "message": "Request body must contain valid JSON"
+                "message": "Request body harus berisi JSON yang valid"
             }, status=400)
         
         if not isinstance(data, dict):
             return JsonResponse({
                 "error": INVALID_PAYLOAD,
-                "message": "Request body must be a JSON object"
+                "message": "Request body harus berupa objek JSON"
             }, status=400)
 
         # Validate required fields
@@ -88,9 +88,9 @@ def change_password(request):
         
         if missing_fields:
             return JsonResponse({
-                "error": "Missing required fields",
+                "error": "Field yang diperlukan tidak ada",
                 "missing_fields": missing_fields,
-                "message": f"The following fields are required: {', '.join(missing_fields)}"
+                "message": f"Field berikut ini diperlukan: {', '.join(missing_fields)}"
             }, status=400)
 
         # Initialize and validate the serializer
@@ -98,9 +98,9 @@ def change_password(request):
         
         if not serializer.is_valid():
             return JsonResponse({
-                "error": "Validation failed",
+                "error": "Validasi gagal",
                 "validation_errors": serializer.errors,
-                "message": "Please fix the validation errors and try again"
+                "message": "Silakan perbaiki kesalahan validasi dan coba lagi"
             }, status=400)
 
         result = _password_service.change_password(
@@ -110,7 +110,7 @@ def change_password(request):
 
         if not result.success:
             return JsonResponse({
-                "error": "Password change failed",
+                "error": "Gagal mengubah password",
                 "message": result.message,
             }, status=400)
 
@@ -124,8 +124,8 @@ def change_password(request):
     except Exception as e:
         logger.error(f"Error changing password for user {request.session.get('username', 'unknown')}: {str(e)}")
         return JsonResponse({
-            "error": "Internal server error",
-            "message": "An unexpected error occurred. Please try again later."
+            "error": "Kesalahan server internal",
+            "message": "Terjadi kesalahan yang tidak terduga. Silakan coba lagi nanti."
         }, status=500)
 
 
@@ -135,13 +135,13 @@ def user_profile(request):
     This is a helper endpoint to get current user info.
     """
     if request.method != 'GET':
-        return JsonResponse({"error": "Method not allowed"}, status=405)
+        return JsonResponse({"error": "Metode tidak diizinkan"}, status=405)
     
     user = get_authenticated_user(request)
     if not user:
         return JsonResponse({
             "error": AUTHENTICATION_REQUIRED,
-            "message": "You must be logged in to view profile"
+            "message": "Anda harus login untuk melihat profil"
         }, status=401)
     
     return JsonResponse({
@@ -178,7 +178,7 @@ def delete_account(request):
         if not user:
             return JsonResponse({
                 "error": AUTHENTICATION_REQUIRED,
-                "message": "You must be logged in to delete your account"
+                "message": "Anda harus login untuk menghapus akun"
             }, status=401)
 
         # Parse JSON payload
@@ -189,20 +189,20 @@ def delete_account(request):
         if data is None:
             return JsonResponse({
                 "error": INVALID_PAYLOAD,
-                "message": "Request body must contain valid JSON"
+                "message": "Request body harus berisi JSON yang valid"
             }, status=400)
         
         if not isinstance(data, dict):
             return JsonResponse({
                 "error": INVALID_PAYLOAD,
-                "message": "Request body must be a JSON object"
+                "message": "Request body harus berupa objek JSON"
             }, status=400)
 
         # Validate required fields
         if not data.get('current_password'):
             return JsonResponse({
-                "error": "Missing required field",
-                "message": "Current password is required"
+                "error": "Field yang diperlukan tidak ada",
+                "message": "Kata sandi saat ini diperlukan"
             }, status=400)
 
         # Initialize and validate the serializer
@@ -210,9 +210,9 @@ def delete_account(request):
         
         if not serializer.is_valid():
             return JsonResponse({
-                "error": "Validation failed",
+                "error": "Validasi gagal",
                 "validation_errors": serializer.errors,
-                "message": "Please fix the validation errors and try again"
+                "message": "❌ Password salah"
             }, status=400)
 
         result = _password_service.delete_account(
@@ -222,7 +222,7 @@ def delete_account(request):
 
         if not result.success:
             return JsonResponse({
-                "error": "Account deletion failed",
+                "error": "Gagal menghapus akun",
                 "message": result.message,
             }, status=400)
 
@@ -239,6 +239,6 @@ def delete_account(request):
     except Exception as e:
         logger.error(f"Error deleting account for user {request.session.get('username', 'unknown')}: {str(e)}")
         return JsonResponse({
-            "error": "Internal server error",
-            "message": "An unexpected error occurred. Please try again later."
+            "error": "Kesalahan server internal",
+            "message": "Terjadi kesalahan yang tidak terduga. Silakan coba lagi nanti."
         }, status=500)

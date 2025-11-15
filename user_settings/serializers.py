@@ -12,18 +12,18 @@ class ChangePasswordSerializer(forms.Form):
     current_password = forms.CharField(
         max_length=255,
         widget=forms.PasswordInput(),
-        help_text="Current password for verification"
+        help_text="Password lama untuk verifikasi"
     )
     new_password = forms.CharField(
         max_length=255,
         min_length=8,
         widget=forms.PasswordInput(),
-        help_text="New password (minimum 8 characters)"
+        help_text="Password baru (minimal 8 karakter)"
     )
     confirm_password = forms.CharField(
         max_length=255,
         widget=forms.PasswordInput(),
-        help_text="Confirm new password"
+        help_text="Konfirmasi password baru"
     )
 
     def __init__(self, user=None, *args, **kwargs):
@@ -36,12 +36,12 @@ class ChangePasswordSerializer(forms.Form):
         current_password = self.cleaned_data.get('current_password')
         
         if not current_password:
-            raise ValidationError("Current password is required")
+            raise ValidationError("Password lama diperlukan")
         
         if self.user:
             passwords_match = check_password(current_password, self.user.password)
             if not passwords_match:
-                raise ValidationError("Current password is incorrect")
+                raise ValidationError("Password lama salah")
         
         return current_password
 
@@ -51,11 +51,11 @@ class ChangePasswordSerializer(forms.Form):
         current_password = self.cleaned_data.get('current_password')
         
         if not new_password:
-            raise ValidationError("New password is required")
+            raise ValidationError("Password baru diperlukan")
         
         # Check if new password is different from current password
         if current_password and new_password == current_password:
-            raise ValidationError("New password must be different from current password")
+            raise ValidationError("Password baru harus berbeda dari password lama")
         
         # Password strength validation – reuse authentication validator
         try:
@@ -73,7 +73,7 @@ class ChangePasswordSerializer(forms.Form):
 
         if new_password and confirm_password:
             if new_password != confirm_password:
-                raise ValidationError("New password and confirmation password do not match")
+                raise ValidationError("Password baru dan konfirmasi kata sandi tidak cocok")
 
         return cleaned_data
 
@@ -105,7 +105,7 @@ class DeleteAccountSerializer(forms.Form):
     current_password = forms.CharField(
         max_length=255,
         widget=forms.PasswordInput(),
-        help_text="Current password for verification"
+        help_text="Password lama untuk verifikasi"
     )
 
     def __init__(self, user=None, *args, **kwargs):
@@ -118,11 +118,11 @@ class DeleteAccountSerializer(forms.Form):
         current_password = self.cleaned_data.get('current_password')
         
         if not current_password:
-            raise ValidationError("Current password is required")
+            raise ValidationError("Password lama diperlukan")
         
         if self.user:
             passwords_match = check_password(current_password, self.user.password)
             if not passwords_match:
-                raise ValidationError("Current password is incorrect")
+                raise ValidationError("Password lama salah")
         
         return current_password

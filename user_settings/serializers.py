@@ -73,7 +73,7 @@ class ChangePasswordSerializer(forms.Form):
 
         if new_password and confirm_password:
             if new_password != confirm_password:
-                raise ValidationError("Password baru dan konfirmasi kata sandi tidak cocok")
+                raise ValidationError("Password baru dan konfirmasi password tidak cocok")
 
         return cleaned_data
 

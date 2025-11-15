@@ -202,7 +202,7 @@ def delete_account(request):
         if not data.get('current_password'):
             return JsonResponse({
                 "error": "Field yang diperlukan tidak ada",
-                "message": "Kata sandi saat ini diperlukan"
+                "message": "Password lama diperlukan"
             }, status=400)
 
         # Initialize and validate the serializer

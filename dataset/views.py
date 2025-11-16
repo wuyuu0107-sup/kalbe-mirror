@@ -5,6 +5,8 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
@@ -93,6 +95,7 @@ class CSVFileDownloadView(generics.GenericAPIView):
         return response
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class CSVFileMoveView(generics.GenericAPIView):
     permission_classes = [IsAuthenticatedAndVerified]
 
@@ -150,6 +153,7 @@ class CSVFileMoveView(generics.GenericAPIView):
         return Response(serializer.data)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class FolderMoveView(generics.GenericAPIView):
     permission_classes = [IsAuthenticatedAndVerified]
 
@@ -253,6 +257,7 @@ class FolderDeleteView(generics.GenericAPIView):
         return Response({"deleted_files": deleted_ids, "message": f"Dihapus {len(deleted_ids)} berkas dari {source_dir}."})
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class CSVFileRenameView(generics.GenericAPIView):
     permission_classes = [IsAuthenticatedAndVerified]
 
@@ -314,6 +319,7 @@ class CSVFileRenameView(generics.GenericAPIView):
         return Response(serializer.data)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class FolderRenameView(generics.GenericAPIView):
     permission_classes = [IsAuthenticatedAndVerified]
 

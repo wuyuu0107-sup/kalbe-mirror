@@ -487,43 +487,61 @@ class DatasetFileManagementTests(TestCase):
 
     def test_move_folder_with_root_target_dir_sets_to_empty(self):
         self._login(self.researcher)
-        # Create files in source dir
-        upload1 = self._upload_csv("file1.csv")
+        # Create files in source dir - use unique names to avoid timestamp conflicts
+        upload1 = self._upload_csv("unique_file1.csv")
         id1 = upload1.json()["id"]
-        upload2 = self._upload_csv("file2.csv")
+        upload2 = self._upload_csv("unique_file2.csv")
         id2 = upload2.json()["id"]
-        # Manually move to source dir
+        
+        # Get the actual file names with timestamps
         obj1 = CSV.objects.get(pk=id1)
         obj2 = CSV.objects.get(pk=id2)
-        source_dir = "source_dir"
+        
+        # Place the source folder under a parent so moving to root actually changes paths
+        source_dir = "parent/source_dir"
         # Create source dir
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
-        # Move files
+        source_dir_path = os.path.join(settings.MEDIA_ROOT, 'datasets', 'csvs', source_dir)
+        os.makedirs(source_dir_path, exist_ok=True)
+        
+        # Move files using their actual names (with timestamps)
         old_path1 = obj1.file.path
-        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "file1.csv"
-        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        actual_filename1 = os.path.basename(obj1.file.name)
+        new_path1 = os.path.join(source_dir_path, actual_filename1)
+        
+        # Ensure the source file exists before moving
+        self.assertTrue(os.path.exists(old_path1), f"Source file should exist at {old_path1}")
+        
         os.rename(old_path1, new_path1)
         obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
         obj1.save()
+        
         old_path2 = obj2.file.path
-        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "file2.csv"
-        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename2)
+        actual_filename2 = os.path.basename(obj2.file.name)
+        new_path2 = os.path.join(source_dir_path, actual_filename2)
+        
+        # Ensure the source file exists before moving
+        self.assertTrue(os.path.exists(old_path2), f"Source file should exist at {old_path2}")
+        
         os.rename(old_path2, new_path2)
         obj2.file.name = f"datasets/csvs/{source_dir}/{actual_filename2}"
         obj2.save()
+        
+        # Verify files are in the source directory before the folder move
+        self.assertTrue(os.path.exists(new_path1), f"File1 should be in source dir at {new_path1}")
+        self.assertTrue(os.path.exists(new_path2), f"File2 should be in source dir at {new_path2}")
+        
         # Now move folder to root by setting target_dir='/'
-        # First ensure no conflicts exist in root
-        if CSV.objects.filter(file=f"datasets/csvs/{source_dir}").exists():
-            CSV.objects.filter(file=f"datasets/csvs/{source_dir}").delete()
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "/"})
+        
         self.assertEqual(move_resp.status_code, 200)
         data = move_resp.json()
         self.assertIn("moved_files", data)
         self.assertEqual(len(data["moved_files"]), 2)
-        # Check files moved to root
+        
+        # Check files moved - they should be in the same folder name but under root
         obj1.refresh_from_db()
         obj2.refresh_from_db()
-        # After moving to root, the folder name is appended, so it should be datasets/csvs/source_dir/filename
+        # After moving to root with target_dir='/', the files should be in datasets/csvs/source_dir/filename
         self.assertEqual(obj1.file.name, f"datasets/csvs/source_dir/{actual_filename1}")
         self.assertEqual(obj2.file.name, f"datasets/csvs/source_dir/{actual_filename2}")
         self.assertTrue(os.path.exists(obj1.file.path))
@@ -833,7 +851,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": id2})
         move_resp = self.client.post(move_url, {"target_dir": target_dir})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 
     def test_move_file_to_duplicate_folder_name_returns_400(self):
         self._login(self.researcher)
@@ -852,7 +870,7 @@ class DatasetFileManagementTests(TestCase):
         obj.save()
 
         # Create a folder with same base name as the file at the root
-        folder_name = "file"
+        folder_name = "file.csv"  # WITH extension to match the view's check
         os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', folder_name), exist_ok=True)
         # Add a file under that folder so the DB reflects it
         upload2 = self._upload_csv("subfile.csv")
@@ -860,11 +878,11 @@ class DatasetFileManagementTests(TestCase):
         obj2.file.name = f"datasets/csvs/{folder_name}/subfile.csv"
         obj2.save()
 
-        # Now try to move the original file back to root where folder "file" exists
+        # Now try to move the original file back to root where folder "file.csv" exists
         move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
         move_resp = self.client.post(move_url, {"target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("Folder dengan nama ini sudah ada", move_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 
     def test_move_folder_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -879,12 +897,16 @@ class DatasetFileManagementTests(TestCase):
         os.rename(old_path1, new_path1)
         obj1.file.name = f"datasets/csvs/{source_dir}/f1.csv"
         obj1.save()
-        # Create a file with same name as folder
-        upload2 = self._upload_csv("source.csv")  # This creates source.csv in root
-        # Now try to move folder to root where "source.csv" exists
+        
+        # Create a file with same name as folder (without extension) - but the view checks for exact match
+        # We need to create a file at the exact path that the view will check
+        target_file_path = "datasets/csvs/source"  # This is what the view checks for
+        conflict_file = CSV.objects.create(name="source", file=target_file_path)
+        
+        # Now try to move folder to root where "source" file exists
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 
     def test_rename_file_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -897,25 +919,25 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
         rename_resp = self.client.post(rename_url, {"new_name": "file1.csv"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori.", rename_resp.json()["detail"])
 
     def test_rename_file_to_duplicate_folder_name_returns_400(self):
         self._login(self.researcher)
         # Upload file
         upload = self._upload_csv("file.csv")
         obj_id = upload.json()["id"]
-        # Create folder with same name (without extension)
-        folder_name = "file"  # Same as uploaded file name without .csv
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', folder_name), exist_ok=True)
+        # Create folder without extension and put a file inside
+        folder_name = "file"  # Without extension to match the view's check
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets', 'csvs', folder_name), exist_ok=True)
         upload2 = self._upload_csv("sub.csv")
         obj2 = CSV.objects.get(pk=upload2.json()["id"])
         obj2.file.name = f"datasets/csvs/{folder_name}/sub.csv"
         obj2.save()
-        # Rename file.csv to "file" (same as folder name)
+        # Rename file.csv to "file" (without extension) to conflict with the folder
         rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
-        rename_resp = self.client.post(rename_url, {"new_name": "file"})  # Same name as folder
+        rename_resp = self.client.post(rename_url, {"new_name": "file"})  # Without extension
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("Folder dengan nama ini sudah ada", rename_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada di direktori.", rename_resp.json()["detail"])
 
     def test_rename_folder_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -926,13 +948,16 @@ class DatasetFileManagementTests(TestCase):
         obj = CSV.objects.get(pk=upload.json()["id"])
         obj.file.name = f"datasets/csvs/{source_dir}/f.csv"
         obj.save()
-        # Create a file with name "new_folder"
-        upload2 = self._upload_csv("new_folder.csv")
+        # Create a file with name "new_folder" (without extension)
+        # The view checks for exact match at the target path
+        target_file_path = "datasets/csvs/new_folder"
+        conflict_file = CSV.objects.create(name="new_folder", file=target_file_path)
+        
         # Rename folder to "new_folder"
         rename_url = reverse("folder_rename")
         rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_folder"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori.", rename_resp.json()["detail"])
 
     def test_move_file_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -951,7 +976,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": id1})
         move_resp = self.client.post(move_url, {"target_dir": target_dir})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 
     def test_rename_file_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -964,7 +989,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
         rename_resp = self.client.post(rename_url, {"new_name": "FILE1.csv"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori.", rename_resp.json()["detail"])
 
     def test_move_folder_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -975,19 +1000,17 @@ class DatasetFileManagementTests(TestCase):
         obj1 = CSV.objects.get(pk=upload1.json()["id"])
         obj1.file.name = f"datasets/csvs/{source_dir}/f1.csv"
         obj1.save()
-        # Create folder "TARGET" with files
-        # Use a folder name that differs only by case to exercise the
-        # case-insensitive duplicate detection (e.g. SOURCE vs source)
-        target_dir = "SOURCE"
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir), exist_ok=True)
+        # Create folder "SOURCE" with files (same name, different case)
+        existing_folder = "SOURCE"
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', existing_folder), exist_ok=True)
         upload2 = self._upload_csv("f2.csv")
         obj2 = CSV.objects.get(pk=upload2.json()["id"])
-        obj2.file.name = f"datasets/csvs/{target_dir}/f2.csv"
+        obj2.file.name = f"datasets/csvs/{existing_folder}/f2.csv"
         obj2.save()
-        # Try to move "source" to root where "TARGET" exists (case-insensitive duplicate)
+        # Try to move "source" to root where "SOURCE" exists (case-insensitive duplicate)
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("Folder dengan nama ini sudah ada", move_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 
     def test_rename_folder_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -998,10 +1021,13 @@ class DatasetFileManagementTests(TestCase):
         obj = CSV.objects.get(pk=upload.json()["id"])
         obj.file.name = f"datasets/csvs/{source_dir}/f.csv"
         obj.save()
-        # Create a file with name "new_folder"
-        upload2 = self._upload_csv("new_folder.csv")
-        # Rename folder to "new_folder"
+        # Create a file with name "new_folder" (without extension)
+        # The view checks for exact match at the target path
+        target_file_path = "datasets/csvs/NEW_FOLDER"
+        conflict_file = CSV.objects.create(name="NEW_FOLDER", file=target_file_path)
+        
+        # Rename folder to "NEW_FOLDER" (case-insensitive duplicate)
         rename_url = reverse("folder_rename")
         rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "NEW_FOLDER"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada di direktori.", rename_resp.json()["detail"])

@@ -126,7 +126,7 @@ class CSVFileMoveView(generics.GenericAPIView):
         potential_folder_path = new_path.rstrip('/') + '/'  # do NOT strip extension
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__startswith=potential_folder_path.lower()).exists():
             return Response(
-                {"detail": "Folder dengan nama tepat ini sudah ada di direktori tujuan."},
+                {"detail": "Folder dengan nama ini sudah ada di direktori tujuan."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

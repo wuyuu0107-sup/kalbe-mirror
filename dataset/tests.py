@@ -190,7 +190,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
         resp = self.client.post(move_url, {})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("target_dir is required", resp.json()["detail"])
+        self.assertIn("target_dir diperlukan", resp.json()["detail"])
 
     # Folder move tests
     def test_researcher_can_move_folder(self):
@@ -245,13 +245,13 @@ class DatasetFileManagementTests(TestCase):
         self._login(self.researcher)
         resp = self.client.post(self.folder_move_url, {"source_dir": "empty", "target_dir": "target"})
         self.assertEqual(resp.status_code, 404)
-        self.assertIn("No files found", resp.json()["detail"])
+        self.assertIn("Tidak ada berkas yang ditemukan", resp.json()["detail"])
 
     def test_move_folder_missing_params_400(self):
         self._login(self.researcher)
         resp = self.client.post(self.folder_move_url, {"source_dir": "src"})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("source_dir and target_dir are required", resp.json()["detail"])
+        self.assertIn("source_dir dan target_dir diperlukan", resp.json()["detail"])
 
     # Test cases for error handling in file moves
     def test_move_file_fails_does_not_update_db(self):
@@ -271,7 +271,7 @@ class DatasetFileManagementTests(TestCase):
             move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
             move_resp = self.client.post(move_url, {"target_dir": "new_dir"})
             self.assertEqual(move_resp.status_code, 500)
-            self.assertIn("Failed to move file", move_resp.json()["detail"])
+            self.assertIn("Gagal memindahkan berkas", move_resp.json()["detail"])
             # Refresh obj and check DB not updated
             obj.refresh_from_db()
             self.assertEqual(obj.file.name, old_name)
@@ -308,7 +308,7 @@ class DatasetFileManagementTests(TestCase):
         with mock.patch('dataset.views.shutil.move', side_effect=OSError("Disk full")):
             move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": "target_dir"})
             self.assertEqual(move_resp.status_code, 500)
-            self.assertIn("Failed to move file", move_resp.json()["detail"])
+            self.assertIn("Gagal memindahkan berkas", move_resp.json()["detail"])
             # Check DB not updated
             obj1.refresh_from_db()
             obj2.refresh_from_db()
@@ -580,14 +580,14 @@ class DatasetFileManagementTests(TestCase):
         delete_url = reverse("folder_delete")
         resp = self.client.delete(delete_url, json.dumps({}), content_type='application/json')
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("source_dir is required", resp.json()["detail"])
+        self.assertIn("source_dir diperlukan", resp.json()["detail"])
 
     def test_folder_delete_no_files_404(self):
         self._login(self.researcher)
         delete_url = reverse("folder_delete")
         resp = self.client.delete(delete_url, json.dumps({"source_dir": "empty_dir"}), content_type='application/json')
         self.assertEqual(resp.status_code, 404)
-        self.assertIn("No files found", resp.json()["detail"])
+        self.assertIn("Tidak ada berkas yang ditemukan", resp.json()["detail"])
 
     def test_folder_delete_ignores_storage_delete_exceptions(self):
         self._login(self.researcher)
@@ -664,7 +664,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
         resp = self.client.post(rename_url, {})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("new_name is required", resp.json()["detail"])
+        self.assertIn("new_name diperlukan", resp.json()["detail"])
 
     def test_rename_file_invalid_pk_404(self):
         self._login(self.researcher)
@@ -728,7 +728,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("folder_rename")
         resp = self.client.post(rename_url, {"source_dir": "old"})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("source_dir and new_name are required", resp.json()["detail"])
+        self.assertIn("source_dir dan new_name diperlukan", resp.json()["detail"])
 
     def test_rename_folder_no_files_200(self):
         self._login(self.researcher)
@@ -763,7 +763,7 @@ class DatasetFileManagementTests(TestCase):
             rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
             rename_resp = self.client.post(rename_url, {"new_name": "newname.csv"})
             self.assertEqual(rename_resp.status_code, 500)
-            self.assertIn("Failed to rename file", rename_resp.json().get("detail", ""))
+            self.assertIn("Gagal mengubah nama berkas", rename_resp.json().get("detail", ""))
 
         # Ensure DB not updated and file still in old location
         obj.refresh_from_db()
@@ -802,7 +802,7 @@ class DatasetFileManagementTests(TestCase):
             rename_url = reverse("folder_rename")
             rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_name_folder"})
             self.assertEqual(rename_resp.status_code, 500)
-            self.assertIn("Failed to rename folder", rename_resp.json().get("detail", ""))
+            self.assertIn("Gagal mengubah nama folder", rename_resp.json().get("detail", ""))
 
         # Ensure DB not updated for files (still reference source_dir) and files still exist
         obj1.refresh_from_db()
@@ -833,7 +833,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": id2})
         move_resp = self.client.post(move_url, {"target_dir": target_dir})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
 
     def test_move_file_to_duplicate_folder_name_returns_400(self):
         self._login(self.researcher)
@@ -864,7 +864,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": obj_id})
         move_resp = self.client.post(move_url, {"target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("A folder with this name already exists", move_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada", move_resp.json()["detail"])
 
     def test_move_folder_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -884,7 +884,7 @@ class DatasetFileManagementTests(TestCase):
         # Now try to move folder to root where "source.csv" exists
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
 
     def test_rename_file_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -897,7 +897,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
         rename_resp = self.client.post(rename_url, {"new_name": "file1.csv"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
 
     def test_rename_file_to_duplicate_folder_name_returns_400(self):
         self._login(self.researcher)
@@ -915,7 +915,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": obj_id})
         rename_resp = self.client.post(rename_url, {"new_name": "file"})  # Same name as folder
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("A folder with this name already exists", rename_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada", rename_resp.json()["detail"])
 
     def test_rename_folder_to_duplicate_name_returns_400(self):
         self._login(self.researcher)
@@ -932,7 +932,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("folder_rename")
         rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "new_folder"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
 
     def test_move_file_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -951,7 +951,7 @@ class DatasetFileManagementTests(TestCase):
         move_url = reverse("csvfile_move", kwargs={"pk": id1})
         move_resp = self.client.post(move_url, {"target_dir": target_dir})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", move_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", move_resp.json()["detail"])
 
     def test_rename_file_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -964,7 +964,7 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("csvfile_rename", kwargs={"pk": id2})
         rename_resp = self.client.post(rename_url, {"new_name": "FILE1.csv"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])
 
     def test_move_folder_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -987,7 +987,7 @@ class DatasetFileManagementTests(TestCase):
         # Try to move "source" to root where "TARGET" exists (case-insensitive duplicate)
         move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
         self.assertEqual(move_resp.status_code, 400)
-        self.assertIn("A folder with this name already exists", move_resp.json()["detail"])
+        self.assertIn("Folder dengan nama ini sudah ada", move_resp.json()["detail"])
 
     def test_rename_folder_case_insensitive_duplicate(self):
         self._login(self.researcher)
@@ -1004,4 +1004,4 @@ class DatasetFileManagementTests(TestCase):
         rename_url = reverse("folder_rename")
         rename_resp = self.client.post(rename_url, {"source_dir": source_dir, "new_name": "NEW_FOLDER"})
         self.assertEqual(rename_resp.status_code, 400)
-        self.assertIn("A file with this name already exists", rename_resp.json()["detail"])
+        self.assertIn("Berkas dengan nama ini sudah ada", rename_resp.json()["detail"])

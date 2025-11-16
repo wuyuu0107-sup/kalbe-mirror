@@ -107,6 +107,19 @@ def cleanup_orphaned_directory(directory_path):
             pass
 
 
+def normalize_directory_path(path):
+    """
+    Normalize a directory path by converting backslashes to forward slashes
+    and stripping leading/trailing slashes.
+    """
+    if not path:
+        return ''
+    # Convert backslashes to forward slashes
+    normalized = path.replace('\\', '/')
+    # Strip leading and trailing slashes
+    return normalized.strip('/')
+
+
 class CSVFileListCreateView(generics.ListCreateAPIView):
     queryset = CSV.objects.all().order_by("-created_at")
     serializer_class = CSVFileSerializer
@@ -183,13 +196,11 @@ class CSVFileMoveView(generics.GenericAPIView):
         if target_dir is None:
             return Response({"detail": "target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
+        target_dir = normalize_directory_path(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Handle root directory
-        if target_dir == '/':
-            target_dir = ''
 
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
         new_path = f"datasets/csvs/{target_dir}/{filename}" if target_dir else f"datasets/csvs/{filename}"
@@ -245,13 +256,12 @@ class FolderMoveView(generics.GenericAPIView):
         if source_dir is None or target_dir is None:
             return Response({"detail": "source_dir dan target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
+        source_dir = normalize_directory_path(source_dir)
+        target_dir = normalize_directory_path(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Handle root directory
-        if target_dir == '/':
-            target_dir = ''
 
         source_prefix = f"datasets/csvs/{source_dir}/"
         files_to_move = CSV.objects.filter(file__startswith=source_prefix)
@@ -317,6 +327,8 @@ class FolderDeleteView(generics.GenericAPIView):
         source_dir = request.data.get('source_dir')
         if source_dir is None:
             return Response({"detail": "source_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        source_dir = normalize_directory_path(source_dir)
 
         source_prefix = f"datasets/csvs/{source_dir}/"
         files_to_delete = CSV.objects.filter(file__startswith=source_prefix)

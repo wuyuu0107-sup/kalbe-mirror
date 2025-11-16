@@ -1,5 +1,6 @@
 import os
 import shutil
+import re
 from django.conf import settings
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -14,6 +15,83 @@ from rest_framework.response import Response
 from save_to_database.models import CSV
 from .serializers import CSVFileSerializer
 from .permissions import IsAuthenticatedAndVerified
+
+
+def is_valid_name(name):
+    """
+    Check if a file or folder name is valid.
+
+    Rules enforced (cross-platform conservative):
+    - Not empty, not exactly '.' or '..'
+    - Must not contain the null byte
+    - Must not contain path separators '/' or '\\'
+    - Must not contain invalid Windows characters: <>:"/\\|?*
+    - Must not end with a space or a period (Windows restriction)
+    - Must not be a Windows reserved device name (CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9)
+      — including if an extension is present (e.g. CON.txt is invalid)
+    - Names starting with '.' are allowed (hidden files on Unix)
+    - Dots inside the name (like '..world') are allowed
+    """
+    if not name:
+        return False
+
+    # Disallow exactly current/parent directory
+    if name in ('.', '..'):
+        return False
+
+    # Disallow null byte
+    if '\x00' in name or '\0' in name:
+        return False
+
+    # Disallow path separators
+    if '/' in name or '\\' in name:
+        return False
+
+    # Disallow Windows-invalid characters
+    invalid_chars_re = re.compile(r'[<>:"/\\|?*]')
+    if invalid_chars_re.search(name):
+        return False
+
+    # Disallow trailing space or dot (Windows restriction)
+    if name.endswith(' ') or name.endswith('.'):
+        return False
+
+    # Reserved device names on Windows (case-insensitive)
+    reserved = {'con', 'prn', 'aux', 'nul'}
+    reserved.update({f'com{i}' for i in range(1, 10)})
+    reserved.update({f'lpt{i}' for i in range(1, 10)})
+
+    base = name.split('.', 1)[0].lower()  # check base name before extension
+    if base in reserved:
+        return False
+
+    return True
+
+
+def is_valid_path(path):
+    """
+    Check if a path is valid.
+
+    - Empty path (root) is allowed
+    - Split path on '/' or '\\', each component must be a valid name
+    - Reject empty components (double slashes produce invalid empty names)
+    """
+    if not path:
+        return True  # Empty path is ok for root
+
+    # Normalize separators to '/' and strip only leading/trailing slashes
+    parts = path.replace('\\', '/').strip('/').split('/')
+
+    # Reject empty components
+    if any(part == '' for part in parts):
+        return False
+
+    # Check each component
+    for part in parts:
+        if not is_valid_name(part):
+            return False
+
+    return True
 
 
 def cleanup_orphaned_directory(directory_path):
@@ -105,6 +183,10 @@ class CSVFileMoveView(generics.GenericAPIView):
         if target_dir is None:
             return Response({"detail": "target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate target_dir
+        if not is_valid_path(target_dir):
+            return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Handle root directory
         if target_dir == '/':
             target_dir = ''
@@ -162,6 +244,10 @@ class FolderMoveView(generics.GenericAPIView):
         target_dir = request.data.get('target_dir')
         if source_dir is None or target_dir is None:
             return Response({"detail": "source_dir dan target_dir diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate target_dir
+        if not is_valid_path(target_dir):
+            return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Handle root directory
         if target_dir == '/':
@@ -267,6 +353,10 @@ class CSVFileRenameView(generics.GenericAPIView):
         if not new_name:
             return Response({"detail": "new_name diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate new_name
+        if not is_valid_name(new_name):
+            return Response({"detail": "new_name tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
+
         current_path = obj.file.name
         dir_path = os.path.dirname(current_path)
         # Build storage name using POSIX style separators regardless of OS so it matches FileField naming
@@ -328,6 +418,10 @@ class FolderRenameView(generics.GenericAPIView):
         new_name = request.data.get('new_name')
         if not source_dir or not new_name:
             return Response({"detail": "source_dir dan new_name diperlukan."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate new_name
+        if not is_valid_name(new_name):
+            return Response({"detail": "new_name tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Don't rename if it's the same name
         if source_dir == new_name:

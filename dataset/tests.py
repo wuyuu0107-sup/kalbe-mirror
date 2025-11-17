@@ -993,22 +993,37 @@ class DatasetFileManagementTests(TestCase):
 
     def test_move_folder_case_insensitive_duplicate(self):
         self._login(self.researcher)
-        # Create folder "source" with files
+        
+        # Create folder "source" in root (datasets/csvs/source) with a file in it
         source_dir = "source"
         os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir), exist_ok=True)
         upload1 = self._upload_csv("f1.csv")
         obj1 = CSV.objects.get(pk=upload1.json()["id"])
-        obj1.file.name = f"datasets/csvs/{source_dir}/f1.csv"
+        old_path1 = obj1.file.path
+        actual_filename1 = os.path.basename(obj1.file.name) if obj1.file else "f1.csv"
+        new_path1 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', source_dir, actual_filename1)
+        os.rename(old_path1, new_path1)
+        obj1.file.name = f"datasets/csvs/{source_dir}/{actual_filename1}"
         obj1.save()
-        # Create folder "SOURCE" with files (same name, different case)
+        
+        # Create folder "test" and inside it create folder "SOURCE" (datasets/csvs/test/SOURCE) with a file
+        parent_dir = "test"
         existing_folder = "SOURCE"
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', existing_folder), exist_ok=True)
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', parent_dir, existing_folder), exist_ok=True)
         upload2 = self._upload_csv("f2.csv")
         obj2 = CSV.objects.get(pk=upload2.json()["id"])
-        obj2.file.name = f"datasets/csvs/{existing_folder}/f2.csv"
+        old_path2 = obj2.file.path
+        actual_filename2 = os.path.basename(obj2.file.name) if obj2.file else "f2.csv"
+        new_path2 = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', parent_dir, existing_folder, actual_filename2)
+        os.rename(old_path2, new_path2)
+        obj2.file.name = f"datasets/csvs/{parent_dir}/{existing_folder}/{actual_filename2}"
         obj2.save()
-        # Try to move "source" to root where "SOURCE" exists (case-insensitive duplicate)
-        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": ""})
+        
+        # Try to move "source" from root to "test" directory where "SOURCE" already exists
+        # This should fail on both Windows and Linux due to case-insensitive duplicate detection in the database
+        move_resp = self.client.post(self.folder_move_url, {"source_dir": source_dir, "target_dir": parent_dir})
+        
+        # This should always return 400 because the database check is case-insensitive
         self.assertEqual(move_resp.status_code, 400)
         self.assertIn("Folder dengan nama ini sudah ada di direktori tujuan.", move_resp.json()["detail"])
 

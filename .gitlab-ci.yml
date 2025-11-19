@@ -10,26 +10,22 @@ variables:
   PIP_NO_CACHE_DIR: "1"
   DJANGO_SETTINGS_MODULE: "kalbe_be.test_settings"
   SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
-  GIT_DEPTH: "0"
-  #TMPDIR: "$CI_PROJECT_DIR/.tmp"  
+  GIT_DEPTH: "0"  
 
 cache:
   paths:
     - .cache/pip
 
-before_script:
-  #- mkdir -p "$TMPDIR"                               
-  - mkdir -p "$PIP_CACHE_DIR"
+before_script:                              
   - python -V
   - pip install --upgrade pip
-  - pip install --no-cache-dir -r requirements.txt
+  - pip install --no-cache-dir -r requirements-ci.txt
   - pip install --no-cache-dir coverage
 
 test:
   image: python:3.12
   stage: test
   script:
-    - mkdir -p reports 
     - python manage.py migrate --noinput
     - coverage run --source='.' manage.py test --keepdb
     - coverage report -m
@@ -41,8 +37,6 @@ test:
     when: always
     paths:
       - htmlcov/
-      - coverage.xml
-      - reports/junit.xml
     reports:
       junit: reports/junit.xml
       coverage_report:

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from django.urls import reverse
@@ -189,6 +190,7 @@ class PredictCsvApiTests(SimpleTestCase):
 
     def setUp(self):
         self.url = reverse("predictions:predict_csv")
+        cache.clear()
 
     def _dummy_csv_bytes(self):
         return b"SIN,Subject Initials\n14515,YSSA\n9723,RDHO\n"
@@ -215,6 +217,8 @@ class PredictCsvApiTests(SimpleTestCase):
         self.assertIn("rows", data)
         self.assertEqual(len(data["rows"]), 2)
         self.assertEqual(data["rows"][0]["prediction"], "low")
+        self.assertIn("download_id", data)
+        self.assertTrue(data["download_id"])
         mock_runner.run.assert_called_once()
 
     def test_reject_non_csv_in_view(self):
@@ -258,6 +262,40 @@ class PredictCsvApiTests(SimpleTestCase):
         body = json.loads(resp.content)
         self.assertIn("detail", body)
         self.assertIn("crash in model", body["detail"])
+
+    @patch("predictions.views.SubprocessModelRunner")
+    def test_download_endpoint_serves_cached_csv(self, MockRunner):
+        mock_runner = MockRunner.return_value
+        mock_runner.run.return_value = [
+            {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"}
+        ]
+
+        file_obj = io.BytesIO(self._dummy_csv_bytes())
+        file_obj.name = "patients.csv"
+
+        resp = self.client.post(
+            self.url,
+            data={"file": file_obj},
+            format="multipart",
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = json.loads(resp.content)
+        download_id = payload.get("download_id")
+        self.assertTrue(download_id)
+
+        download_url = reverse("predictions:predict_csv_download", args=[download_id])
+        download_resp = self.client.get(download_url)
+        self.assertEqual(download_resp.status_code, 200)
+        self.assertEqual(download_resp["Content-Type"], "text/csv")
+        self.assertIn("attachment", download_resp["Content-Disposition"])
+        body = download_resp.content.decode()
+        self.assertIn("Subject Initials", body)
+        self.assertIn("YSSA", body)
+
+    def test_download_endpoint_404_when_missing(self):
+        download_url = reverse("predictions:predict_csv_download", args=["missing"])
+        resp = self.client.get(download_url)
+        self.assertEqual(resp.status_code, 404)
 
 
 # =====================================================================

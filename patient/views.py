@@ -1,3 +1,6 @@
 from django.shortcuts import render
+from .models import Patient
 
 # Create your views here.
+def patient(request):
+    return Patient.objects.all()

@@ -19,7 +19,7 @@ cache:
 before_script:                              
   - python -V
   - pip install --upgrade pip
-  - pip install --no-cache-dir -r requirements-ci.txt
+  - pip install --no-cache-dir -r requirements.txt
   - pip install --no-cache-dir coverage
 
 test:

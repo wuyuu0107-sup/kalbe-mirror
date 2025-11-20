@@ -12,7 +12,7 @@ import unittest
 import base64
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 from rest_framework import status
 from annotation.models import Annotation
 from annotation import views
@@ -20,6 +20,16 @@ from annotation.serializers import AnnotationSerializer, DocumentSerializer
 from django.test import TestCase, Client
 from .models import Document, Patient
 from unittest.mock import patch, MagicMock
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from rest_framework.test import APIRequestFactory
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from annotation import views
+from rest_framework import status
+
 
 
 # If your file already declared HAS_COMMENTS earlier, you can reuse it.
@@ -28,6 +38,35 @@ try:
     HAS_COMMENTS = True
 except Exception:
     HAS_COMMENTS = False
+
+User = get_user_model()
+
+# Helper: create a user that works whether or not custom fields exist
+def _create_test_user(**overrides):
+    """
+    Create a User for tests, only passing custom fields if they exist
+    on the current User model (so it works across branches).
+    """
+    base = {
+        "username": "testuser",
+        "email": "testuser@example.com",
+        "password": "testpassword",
+    }
+    base.update(overrides)
+
+    # detect available fields on the User model
+    field_names = {f.name for f in User._meta.get_fields()}
+
+    # only add these if the model actually has them
+    if "is_verified" in field_names and "is_verified" not in base:
+        base["is_verified"] = True
+    if "otp_code" in field_names and "otp_code" not in base:
+        base["otp_code"] = "000000"
+    if "failed_login_attempts" in field_names and "failed_login_attempts" not in base:
+        base["failed_login_attempts"] = 0
+
+    return User.objects.create(**base)
+
 
 
 class AnnotationCRUDTests(TestCase):
@@ -39,13 +78,12 @@ class AnnotationCRUDTests(TestCase):
             "type": "drawing",
             "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}]
         }
-
-        self.user = User.objects.create(
+        self.user = _create_test_user(
             username='testuser',
             password='testpassword',
             email='testuser@example.com',
-            is_verified=True
         )
+
         # ensure researcher role
         try:
             self.user.roles = ['researcher']
@@ -204,12 +242,12 @@ class AnnotationCRUDTests(TestCase):
 
 
     def test_admin_hit_post_only_function_endpoint_get_is_405(self):
-        admin = User.objects.create(
+        admin = _create_test_user(
             username='adminfunc',
             password='pw',
             email='adminfunc@example.com',
-            is_verified=True
         )
+
         try:
             admin.roles = ['admin']
             admin.save(update_fields=['roles'])
@@ -232,12 +270,12 @@ class AnnotationAPITests(TestCase):
         self.client = APIClient()
 
         # Create a test user
-        self.user = User.objects.create(
+        self.user = _create_test_user(
             username='testuser',
             password='testpassword',
             email='testuser@example.com',
-            is_verified=True
         )
+
         try:
             self.user.roles = ['researcher']
             self.user.save(update_fields=['roles'])
@@ -351,12 +389,12 @@ class AnnotationAPITests(TestCase):
 
     def test_admin_can_access_annotations(self):
         # admin is an authenticated user; with new policy they CAN access
-        admin = User.objects.create(
+        admin = _create_test_user(
             username='adminapi',
             email='adminapi@example.com',
             password='pw',
-            is_verified=True,
         )
+
         try:
             admin.roles = ['admin']
             admin.save(update_fields=['roles'])
@@ -380,12 +418,12 @@ class _AuthAPIMixin:
         from authentication.models import User
 
         # create a verified researcher
-        self.user = User.objects.create(
+        self.user = _create_test_user(
             username="apitester",
             email="api@test.local",
             password="pass12345",
-            is_verified=True,              # <--- IMPORTANT for CI
         )
+
         try:
             self.user.roles = ['researcher']  # covers AnnotationViewSet(IsResearcher)
             self.user.save(update_fields=['roles'])
@@ -1039,6 +1077,565 @@ class AnnotationUtilsTests(unittest.TestCase):
         )
 
         self.assertEqual(result, {"status": "ok"})
+
+class StorageHelperTests(unittest.TestCase):
+    def test_storage_public_url_string_and_dict(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+
+        # case 1: get_public_url returns a plain string
+        bucket.get_public_url.return_value = "https://example.com/file.pdf"
+        url = views._storage_public_or_signed_url(sup, "my-bucket", "path/to/file.pdf")
+        self.assertEqual(url, "https://example.com/file.pdf")
+        bucket.get_public_url.assert_called_with("path/to/file.pdf")
+
+        # case 2: get_public_url returns a dict with publicURL
+        bucket.get_public_url.reset_mock()
+        bucket.get_public_url.return_value = {"publicURL": "https://example.com/public"}
+        url2 = views._storage_public_or_signed_url(sup, "my-bucket", "path/to/file2.pdf")
+        self.assertEqual(url2, "https://example.com/public")
+
+    def test_storage_signed_url_on_public_url_failure(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+
+        # force get_public_url to raise -> signed URL path
+        bucket.get_public_url.side_effect = Exception("boom")
+        bucket.create_signed_url.return_value = {"signedURL": "https://example.com/signed"}
+
+        url = views._storage_public_or_signed_url(sup, "my-bucket", "path/to/file3.pdf")
+        self.assertEqual(url, "https://example.com/signed")
+        bucket.create_signed_url.assert_called_with("path/to/file3.pdf", 7 * 24 * 3600)
+
+    def test_safe_ct_and_safe_name(self):
+        # _safe_ct
+        self.assertEqual(views._safe_ct("test.pdf"), "application/pdf")
+        # fallback when mimetype unknown
+        self.assertEqual(views._safe_ct("no-extension", "text/plain"), "text/plain")
+
+        # _safe_name sanitization
+        dirty = "a b/c#d?.pdf"
+        cleaned = views._safe_name(dirty)
+        self.assertEqual(cleaned, "a_b_c_d_.pdf")
+
+class UploadDrawingJsonTests(unittest.TestCase):
+    def test_upload_drawing_json_returns_public_url_string(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.return_value = "https://example.com/draw.json"
+
+        url = views._upload_drawing_json(
+            sup,
+            "drawings",
+            "doc/1/1.json",
+            {"foo": "bar"},
+        )
+        # should just return the public URL
+        self.assertEqual(url, "https://example.com/draw.json")
+        bucket.upload.assert_called_once()
+
+    def test_upload_drawing_json_returns_public_url_dict(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.return_value = {"publicURL": "https://example.com/public.json"}
+
+        url = views._upload_drawing_json(
+            sup,
+            "drawings",
+            "doc/1/2.json",
+            {"x": 1},
+        )
+        self.assertEqual(url, "https://example.com/public.json")
+
+    def test_upload_drawing_json_falls_back_to_signed_url(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.side_effect = Exception("no public url")
+        bucket.create_signed_url.return_value = {"signedURL": "https://example.com/signed.json"}
+
+        url = views._upload_drawing_json(
+            sup,
+            "drawings",
+            "doc/1/3.json",
+            {"y": 2},
+        )
+        self.assertEqual(url, "https://example.com/signed.json")
+
+    def test_upload_drawing_json_returns_none_on_exception(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        # make upload itself blow up
+        bucket.upload.side_effect = Exception("upload failed")
+
+        url = views._upload_drawing_json(
+            sup,
+            "drawings",
+            "doc/1/4.json",
+            {"z": 3},
+        )
+        self.assertIsNone(url)
+
+class SaveAnnotatedPageTests(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+        # loosen user as needed but keep them valid
+        self.user.is_verified = True
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save()
+
+        self.doc = Document.objects.create(source="json", payload_json={"foo": "bar"})
+        self.factory = APIRequestFactory()
+
+    def _make_request(self, url="/fake", data=None, files=None, query=""):
+        if data is None:
+            data = {}
+        path = url + (f"?{query}" if query else "")
+        request = self.factory.post(path, data, format="multipart")
+        # attach FILES manually if provided
+        if files:
+            for k, v in files.items():
+                request.FILES[k] = v
+        force_authenticate(request, user=self.user)
+        return request
+
+    def test_invalid_page_param_returns_400(self):
+        req = self._make_request(query="page=abc")
+        resp = views.save_annotated_page(req, self.doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Invalid page", resp.content)
+
+    def test_missing_image_returns_400(self):
+        # valid page but no "image" file
+        req = self._make_request(query="page=1")
+        with patch("annotation.views._get_supabase", return_value=MagicMock()):
+            resp = views.save_annotated_page(req, self.doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"No image file uploaded", resp.content)
+
+    def test_supabase_not_configured_returns_400(self):
+        image = SimpleUploadedFile("x.png", b"fakeimage", content_type="image/png")
+        req = self._make_request(query="page=1", files={"image": image})
+
+        with patch("annotation.views._get_supabase", return_value=None):
+            resp = views.save_annotated_page(req, self.doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Supabase not configured", resp.content)
+
+    def test_save_annotated_page_success(self):
+        image = SimpleUploadedFile("x.png", b"fakeimagebytes", content_type="image/png")
+        req = self._make_request(query="page=2", files={"image": image})
+
+        mock_supabase = MagicMock()
+        mock_bucket = mock_supabase.storage.from_.return_value
+        mock_bucket.upload.return_value = {"status": "ok"}
+
+        with patch("annotation.views._get_supabase", return_value=mock_supabase), \
+             patch("annotation.views._storage_public_or_signed_url", return_value="https://example.com/img2.png"):
+
+            resp = views.save_annotated_page(req, self.doc.id)
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["url"], "https://example.com/img2.png")
+
+        # verify Document.meta is updated
+        doc_refetched = Document.objects.get(id=self.doc.id)
+        self.assertIn("annotated_pages", doc_refetched.meta)
+        self.assertEqual(
+            doc_refetched.meta["annotated_pages"]["2"],
+            "https://example.com/img2.png",
+        )
+
+class BuildAnnotatedPdfTests(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+        self.user.is_verified = True
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save()
+
+        self.factory = APIRequestFactory()
+
+    def _make_request(self):
+        req = self.factory.post("/fake-build", {})
+        force_authenticate(req, user=self.user)
+        return req
+
+    def test_no_annotated_pages_returns_400(self):
+        doc = Document.objects.create(source="json", payload_json={"foo": "bar"}, meta={})
+        req = self._make_request()
+        resp = views.build_annotated_pdf(req, doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Tidak ada annotated_pages di meta", resp.content)
+
+    def test_invalid_annotated_keys_returns_400(self):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"x": "http://example.com/x.png"}},
+        )
+        req = self._make_request()
+        resp = views.build_annotated_pdf(req, doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"annotated_pages kosong atau tidak valid", resp.content)
+
+    @patch("annotation.views.requests.get")
+    def test_requests_failure_returns_400(self, mock_get):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"1": "http://example.com/1.png"}},
+        )
+        mock_get.side_effect = Exception("network down")
+        req = self._make_request()
+        resp = views.build_annotated_pdf(req, doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Gagal mengambil gambar untuk halaman 1", resp.content)
+
+    @patch("annotation.views.requests.get")
+    @patch("annotation.views.img2pdf.convert")
+    def test_img2pdf_failure_returns_400(self, mock_convert, mock_get):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"1": "http://example.com/1.png"}},
+        )
+
+        # fake image bytes
+        mock_resp = MagicMock()
+        mock_resp.content = b"imgbytes"
+        mock_resp.raise_for_status.return_value = None
+        mock_get.return_value = mock_resp
+
+        mock_convert.side_effect = Exception("convert failed")
+
+        req = self._make_request()
+        resp = views.build_annotated_pdf(req, doc.id)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Gagal membuat PDF", resp.content)
+
+    @patch("annotation.views.requests.get")
+    @patch("annotation.views.img2pdf.convert", return_value=b"%PDF-fake%")
+    def test_supabase_not_configured_returns_400(self, mock_convert, mock_get):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"1": "http://example.com/1.png"}},
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.content = b"imgbytes"
+        mock_resp.raise_for_status.return_value = None
+        mock_get.return_value = mock_resp
+
+        req = self._make_request()
+        with patch("annotation.views._get_supabase", return_value=None):
+            resp = views.build_annotated_pdf(req, doc.id)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Supabase tidak terkonfigurasi", resp.content)
+
+    @patch("annotation.views.requests.get")
+    @patch("annotation.views.img2pdf.convert", return_value=b"%PDF-fake%")
+    def test_upload_failure_returns_400(self, mock_convert, mock_get):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"1": "http://example.com/1.png"}},
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.content = b"imgbytes"
+        mock_resp.raise_for_status.return_value = None
+        mock_get.return_value = mock_resp
+
+        mock_supabase = MagicMock()
+
+        req = self._make_request()
+        with patch("annotation.views._get_supabase", return_value=mock_supabase), \
+             patch("annotation.views._storage_upload_bytes", side_effect=Exception("upload failed")):
+
+            resp = views.build_annotated_pdf(req, doc.id)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn(b"Gagal upload ke Supabase", resp.content)
+
+    @patch("annotation.views.requests.get")
+    @patch("annotation.views.img2pdf.convert", return_value=b"%PDF-fake%")
+    def test_build_annotated_pdf_success(self, mock_convert, mock_get):
+        doc = Document.objects.create(
+            source="json",
+            payload_json={"foo": "bar"},
+            meta={"annotated_pages": {"1": "http://example.com/1.png", "2": "http://example.com/2.png"}},
+        )
+
+        # order shouldn't matter; they’re sorted inside the view
+        def fake_get(url, timeout=10):
+            resp = MagicMock()
+            resp.content = b"img"
+            resp.raise_for_status.return_value = None
+            return resp
+
+        mock_get.side_effect = fake_get
+
+        mock_supabase = MagicMock()
+        req = self._make_request()
+
+        with patch("annotation.views._get_supabase", return_value=mock_supabase), \
+             patch("annotation.views._storage_upload_bytes") as mock_upload, \
+             patch("annotation.views._storage_public_or_signed_url", return_value="https://example.com/annotated.pdf"):
+
+            resp = views.build_annotated_pdf(req, doc.id)
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.data["annotated_pdf_url"], "https://example.com/annotated.pdf")
+        mock_upload.assert_called_once()
+
+        # Document.meta should contain annotated_pdf_url
+        updated = Document.objects.get(id=doc.id)
+        self.assertEqual(updated.meta["annotated_pdf_url"], "https://example.com/annotated.pdf")
+
+
+class StorageUploadBytesTests(unittest.TestCase):
+    def test_upload_bytes_calls_correct_args(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.upload.return_value = {"result": "ok"}
+
+        out = views._storage_upload_bytes(
+            sup,
+            "mybucket",
+            "path/to/file.bin",
+            b"1234",
+            "application/pdf"
+        )
+
+        bucket.upload.assert_called_once_with(
+            path="path/to/file.bin",
+            file=b"1234",
+            file_options={"contentType": "application/pdf", "upsert": "true"}
+        )
+        self.assertEqual(out, {"result": "ok"})
+
+class StorageURLDictBranchesTests(unittest.TestCase):
+    def test_public_url_dict_public_url_lowercase(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.return_value = {"public_url": "https://x.com/file.png"}
+
+        url = views._storage_public_or_signed_url(sup, "b", "file")
+        self.assertEqual(url, "https://x.com/file.png")
+
+    def test_signed_url_dict_signed_url_lowercase(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.side_effect = Exception("no public")
+        bucket.create_signed_url.return_value = {"signed_url": "https://x.com/signed.png"}
+
+        url = views._storage_public_or_signed_url(sup, "b", "file")
+        self.assertEqual(url, "https://x.com/signed.png")
+
+class SafeCTFallbackTest(unittest.TestCase):
+    def test_safe_ct_fallback(self):
+        ct = views._safe_ct("unknownfile.abcxyz", fallback="text/custom")
+        self.assertEqual(ct, "text/custom")
+
+class SafeNameEdgeCaseTest(unittest.TestCase):
+    def test_safe_name_removes_special_chars(self):
+        out = views._safe_name("%%%abc###.txt")
+        self.assertEqual(out, "_abc_.txt")
+
+
+class UploadDrawingJsonExtraBranches(unittest.TestCase):
+    def test_public_url_lowercase(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.return_value = {"public_url": "https://x.com/lower.png"}
+
+        url = views._upload_drawing_json(sup, "b", "p", {"x": 1})
+        self.assertEqual(url, "https://x.com/lower.png")
+
+    def test_signed_url_string_fallback(self):
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+        bucket.get_public_url.side_effect = Exception("no pub")
+        bucket.create_signed_url.return_value = "https://x.com/strsigned.png"
+
+        url = views._upload_drawing_json(sup, "b", "p", {"y": 2})
+        self.assertEqual(url, "https://x.com/strsigned.png")
+
+class SaveAnnotatedPageContentTypeMissingTest(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+        self.user.is_verified = True
+        self.user.save()
+
+        self.doc = Document.objects.create(source="json", payload_json={})
+        self.factory = APIRequestFactory()
+
+    def test_success_with_missing_content_type(self):
+        f = SimpleUploadedFile("noct", b"hello-bytes")  # no content_type
+        req = self.factory.post(f"/x?page=1", {}, format="multipart")
+        req.FILES["image"] = f
+        force_authenticate(req, user=self.user)
+
+        sup = MagicMock()
+        bucket = sup.storage.from_.return_value
+
+        with patch("annotation.views._get_supabase", return_value=sup), \
+             patch("annotation.views._storage_public_or_signed_url", return_value="http://x"):
+
+            resp = views.save_annotated_page(req, self.doc.id)
+
+        self.assertEqual(resp.status_code, 201)
+        bucket.upload.assert_called_once()
+        args, kwargs = bucket.upload.call_args
+        self.assertEqual(kwargs["file"], b"hello-bytes")  # verify correct data stored
+
+class BuildAnnotatedPdfOverwriteTest(_AuthAPIMixin, TestCase):
+    def setUp(self):
+        self.api_setup()
+        self.user.is_verified = True
+        self.user.save()
+
+        self.factory = APIRequestFactory()
+
+        # doc already has a previous annotated_pdf_url → will be overwritten
+        self.doc = Document.objects.create(
+            source="json",
+            payload_json={},
+            meta={
+                "annotated_pages": {"1": "http://example.com/a.png"},
+                "annotated_pdf_url": "http://old-url.com/old.pdf"
+            },
+        )
+
+    @patch("annotation.views.requests.get")
+    @patch("annotation.views.img2pdf.convert", return_value=b"%PDF-NEW%")
+    def test_overwrite_existing_pdf_url(self, mock_convert, mock_get):
+        resp_mock = MagicMock()
+        resp_mock.content = b"IMAGE"
+        resp_mock.raise_for_status.return_value = None
+        mock_get.return_value = resp_mock
+
+        sup = MagicMock()
+
+        req = self.factory.post("/build")
+        force_authenticate(req, user=self.user)
+
+        with patch("annotation.views._get_supabase", return_value=sup), \
+             patch("annotation.views._storage_upload_bytes"), \
+             patch("annotation.views._storage_public_or_signed_url", return_value="http://new-url.com/new.pdf"):
+
+            resp = views.build_annotated_pdf(req, self.doc.id)
+
+        self.assertEqual(resp.status_code, 201)
+
+        updated = Document.objects.get(id=self.doc.id)
+        self.assertEqual(updated.meta["annotated_pdf_url"], "http://new-url.com/new.pdf")
+
+class StoragePublicOrSignedUrlEdgeCaseTest(TestCase):
+    def test_storage_public_or_signed_url_returns_none_when_both_fail(self):
+        supabase = MagicMock()
+        storage = supabase.storage
+        bucket = storage.from_.return_value
+
+        # get_public_url raise → masuk ke blok kedua
+        bucket.get_public_url.side_effect = Exception("public-fail")
+        # create_signed_url juga raise → jatuh ke return None
+        bucket.create_signed_url.side_effect = Exception("signed-fail")
+
+        result = views._storage_public_or_signed_url(supabase, "bucket", "path")
+
+        bucket.get_public_url.assert_called_once_with("path")
+        bucket.create_signed_url.assert_called_once()
+        self.assertIsNone(result)
+
+class IsResearcherPermissionTests(TestCase):
+    def setUp(self):
+        self.perm = views.IsResearcher()
+
+    def test_has_permission_false_when_no_user(self):
+        request = SimpleNamespace(user=None)
+        self.assertFalse(self.perm.has_permission(request, None))
+
+    def test_has_permission_false_when_not_authenticated(self):
+        class User:
+            is_authenticated = False
+            roles = ["researcher"]
+        request = SimpleNamespace(user=User())
+        self.assertFalse(self.perm.has_permission(request, None))
+
+    def test_has_permission_true_when_researcher_role_present(self):
+        class User:
+            is_authenticated = True
+            roles = ["staff", "researcher"]
+        request = SimpleNamespace(user=User())
+        self.assertTrue(self.perm.has_permission(request, None))
+
+class FromGeminiJsonFallbackTests(TestCase):
+    @patch("annotation.views.Document")
+    @patch("annotation.views.DocumentSerializer")
+    @patch("annotation.views._get_supabase", return_value=None)
+    @patch("annotation.views.genai.GenerativeModel")
+    @patch("annotation.views.json.loads")
+    def test_from_gemini_uses_regex_fallback_when_json_loads_fails(
+        self,
+        mock_json_loads,
+        mock_model_cls,
+        mock_get_supabase,
+        mock_doc_serializer,
+        mock_document,
+    ):
+        factory = APIRequestFactory()
+        file = SimpleUploadedFile(
+            "test.pdf", b"fake-pdf-bytes", content_type="application/pdf"
+        )
+        request = factory.post("/documents/from-gemini/", {"file": file}, format="multipart")
+
+        # supaya nggak kena early-return 500
+        os.environ["GEMINI_API_KEY"] = "dummy-key"
+
+        # mock Gemini response
+        model_instance = mock_model_cls.return_value
+        model_instance.generate_content.return_value = SimpleNamespace(text='{"foo": "bar"}')
+
+        # json.loads pertama error, kedua berhasil
+        mock_json_loads.side_effect = [Exception("bad json"), {"foo": "bar"}]
+
+        mock_document.objects.create.return_value = SimpleNamespace(id=1)
+        mock_doc_serializer.return_value.data = {"id": 1}
+
+        view = views.DocumentViewSet.as_view({"post": "from_gemini"})
+        response = view(request)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # pastikan benar-benar lewat fallback (dipanggil 2x)
+        self.assertEqual(mock_json_loads.call_count, 2)
+
+class AnnotationByDocumentPatientNoPaginationTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+
+    @patch.object(views.AnnotationViewSet, "paginate_queryset", return_value=None)
+    @patch.object(views.AnnotationViewSet, "get_serializer")
+    @patch.object(views.AnnotationViewSet, "get_queryset")
+    def test_by_document_patient_without_pagination(
+        self, mock_get_queryset, mock_get_serializer, mock_paginate
+    ):
+        request = self.factory.get("/annotations/by_document_patient/")
+        view = views.AnnotationViewSet.as_view({"get": "by_document_patient"})
+
+        qs = MagicMock()
+        mock_get_queryset.return_value = qs
+        mock_get_serializer.return_value.data = [{"id": 123}]
+
+        response = view(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_get_queryset.assert_called_once()
+        mock_paginate.assert_called_once_with(qs)
+        mock_get_serializer.assert_called_once_with(qs, many=True)
 
 
 if __name__ == "__main__":

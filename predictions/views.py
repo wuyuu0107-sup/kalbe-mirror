@@ -6,6 +6,8 @@ import uuid
 
 from django.core.cache import cache
 from django.http import Http404, HttpResponse
+from .models import PredictionResult
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -53,6 +55,23 @@ class PredictCsvView(APIView):
             except FileNotFoundError:
                 pass
 
+        with transaction.atomic():
+            objs = []
+            for row in rows:
+                objs.append(
+                    PredictionResult(
+                        sin=row.get("SIN") or None,
+                        subject_initials=row.get("Subject Initials") or None,
+                        prediction=row.get("prediction") or "",
+                        # optional: store raw row and/or original filename for traceability
+                        input_data=csv_file.name,
+                        meta=row,
+                    )
+                )
+            if objs:
+                PredictionResult.objects.bulk_create(objs)
+
+        # JSON for the frontend table (unchanged)
         download_id, filename = self._cache_download(rows, csv_file.name)
 
         # JSON for the frontend table + download handle

@@ -23,9 +23,9 @@ from .serializers import DocumentSerializer, PatientSerializer, AnnotationSerial
 # Optional: reuse your normalizer if available
 try:
     from ocr.views import normalize_payload, order_sections  # if you want same schema/ordering here
-except Exception:
-    normalize_payload = lambda x: x
-    order_sections = lambda x: x
+except Exception: # pragma: no cover
+    normalize_payload = lambda x: x # pragma: no cover
+    order_sections = lambda x: x # pragma: no cover
 
 def _storage_upload_bytes(supabase: Client, bucket: str, path: str, data: bytes, content_type: str = "application/octet-stream"):
     return supabase.storage.from_(bucket).upload(

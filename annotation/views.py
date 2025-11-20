@@ -18,18 +18,14 @@ from supabase import create_client, Client
 from .models import Document, Patient, Annotation, Comment
 from .serializers import DocumentSerializer, PatientSerializer, AnnotationSerializer, CommentSerializer
 
+
+
+# Optional: reuse your normalizer if available
 try:
-    from ocr.views import normalize_payload, order_sections
+    from ocr.views import normalize_payload, order_sections  # if you want same schema/ordering here
 except Exception:
     normalize_payload = lambda x: x
     order_sections = lambda x: x
-
-def _get_supabase() -> Client | None:
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    if url and key:
-        return create_client(url, key)
-    return None
 
 def _storage_upload_bytes(supabase: Client, bucket: str, path: str, data: bytes, content_type: str = "application/octet-stream"):
     return supabase.storage.from_(bucket).upload(
@@ -79,7 +75,6 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
             "contentType": "application/json",
             "upsert": "true",
         })
-
         # Prefer public URL; fallback to a signed URL
         try:
             pub = supabase.storage.from_(bucket).get_public_url(path)
@@ -93,7 +88,6 @@ def _upload_drawing_json(supabase: Client, bucket: str, path: str, data: dict) -
         if isinstance(signed, dict):
             return signed.get("signedURL") or signed.get("signed_url")
         return signed
-    
     except Exception:
         return None
 
@@ -107,7 +101,6 @@ class IsResearcher(BasePermission):
         if not user or not getattr(user, 'is_authenticated', False):
             return False
         roles = getattr(user, 'roles', []) or []
-        
         # roles may be stored as list of strings
         return 'researcher' in roles
 
@@ -326,3 +319,127 @@ def drawing_annotation(request, document_id, patient_id, annotation_id):
     elif request.method == "DELETE":
         annotation.delete()
         return HttpResponse(status=204)
+    
+from django.shortcuts import get_object_or_404
+from rest_framework.parsers import MultiPartParser
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+def save_annotated_page(request, document_id):
+    """
+    Receive a flattened annotated page as image and store it in Supabase.
+    Also attach the URL into Document.meta['annotated_pages'][page].
+    """
+    try:
+        page = int(request.query_params.get("page", "1"))
+    except ValueError:
+        return HttpResponseBadRequest("Invalid page")
+
+    doc = get_object_or_404(Document, pk=document_id)
+
+    # Expect a multipart/form-data with "image" field
+    f = request.FILES.get("image")
+    if not f:
+        return HttpResponseBadRequest("No image file uploaded")
+
+    supabase = _get_supabase()
+    if not supabase:
+        return HttpResponseBadRequest("Supabase not configured")
+
+    bucket = os.getenv("SUPABASE_BUCKET", "ocr")
+    ts = int(time.time())
+    safe_name = _safe_name(f"doc{document_id}_page{page}_{ts}.png")
+    path = f"annotated/{document_id}/{safe_name}"
+
+    # Read all bytes
+    data = f.read()
+    _storage_upload_bytes(supabase, bucket, path, data, "image/png")
+    url = _storage_public_or_signed_url(supabase, bucket, path)
+
+    # Persist in Document.meta
+    meta = doc.meta or {}
+    annotated = meta.get("annotated_pages") or {}
+    annotated[str(page)] = url
+    meta["annotated_pages"] = annotated
+    doc.meta = meta
+    doc.save(update_fields=["meta"])
+
+    return Response({"url": url}, status=201)
+
+import io
+import requests
+import img2pdf
+from django.shortcuts import get_object_or_404
+
+@api_view(['POST'])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+def build_annotated_pdf(request, document_id):
+    """
+    Build a single multi-page PDF from all annotated page PNGs in meta['annotated_pages'].
+    Upload it to Supabase and store URL in meta['annotated_pdf_url'].
+    """
+    doc = get_object_or_404(Document, pk=document_id)
+
+    meta = doc.meta or {}
+    annotated = meta.get("annotated_pages") or {}
+
+    if not annotated:
+        return HttpResponseBadRequest("Tidak ada annotated_pages di meta. Simpan halaman terlebih dahulu.")
+
+    # Collect images sorted by page number
+    items = []
+    for k, v in annotated.items():
+        try:
+            page_num = int(k)
+        except ValueError:
+            continue
+        items.append((page_num, v))
+
+    if not items:
+        return HttpResponseBadRequest("annotated_pages kosong atau tidak valid.")
+
+    items.sort(key=lambda x: x[0])  # sort by page
+
+    image_bytes_list: list[bytes] = []
+    for page_num, url in items:
+        try:
+            r = requests.get(url, timeout=10)
+            r.raise_for_status()
+            image_bytes_list.append(r.content)
+        except Exception as e:
+            return HttpResponseBadRequest(f"Gagal mengambil gambar untuk halaman {page_num}: {e}")
+
+    # Build a single multi-page PDF
+    try:
+        pdf_bytes = img2pdf.convert(image_bytes_list)
+    except Exception as e:
+        return HttpResponseBadRequest(f"Gagal membuat PDF: {e}")
+
+    supabase = _get_supabase()
+    if not supabase:
+        return HttpResponseBadRequest("Supabase tidak terkonfigurasi.")
+
+    bucket = os.getenv("SUPABASE_BUCKET", "ocr")
+    ts = int(time.time())
+    safe_name = _safe_name(f"doc{document_id}_annotated_{ts}.pdf")
+    path = f"annotated_pdfs/{document_id}/{safe_name}"
+
+    # Upload to Supabase
+    try:
+        _storage_upload_bytes(
+            supabase,
+            bucket,
+            path,
+            pdf_bytes,
+            "application/pdf",
+        )
+        pdf_url = _storage_public_or_signed_url(supabase, bucket, path)
+    except Exception as e:
+        return HttpResponseBadRequest(f"Gagal upload ke Supabase: {e}")
+
+    # Save URL into meta
+    meta["annotated_pdf_url"] = pdf_url
+    doc.meta = meta
+    doc.save(update_fields=["meta"])
+
+    return Response({"annotated_pdf_url": pdf_url}, status=201)

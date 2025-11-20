@@ -2,7 +2,7 @@
 from django.urls import path
 from .views import (
     DocumentViewSet, PatientViewSet, AnnotationViewSet, CommentViewSet,
-    create_drawing_annotation, drawing_annotation
+    create_drawing_annotation, drawing_annotation, save_annotated_page, build_annotated_pdf
 )
 from annotation.views_page import viewer
 
@@ -55,4 +55,14 @@ urlpatterns = [
 
     # Viewer page
     path("viewer/<int:document_id>/<int:patient_id>/", viewer, name="viewer"),
+     path(
+        "api/v1/documents/<int:document_id>/annotated-page/",
+        save_annotated_page,
+        name="save_annotated_page",
+    ),
+     path(
+        "api/v1/documents/<int:document_id>/build-annotated-pdf/",
+        build_annotated_pdf,
+        name="build_annotated_pdf",
+    ),
 ]

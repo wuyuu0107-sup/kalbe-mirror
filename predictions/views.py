@@ -1,11 +1,27 @@
+import csv
+import io
+import os
 import tempfile
+import uuid
+
+from django.core.cache import cache
+from django.http import Http404, HttpResponse
 from .models import PredictionResult
 from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 from .serializers import PredictRequestSerializer
 from .services import SubprocessModelRunner, IModelRunner
+
+DOWNLOAD_CACHE_PREFIX = "predictions:download:"
+DOWNLOAD_CACHE_TIMEOUT = 15 * 60  # 15 minutes
+
+
+def _make_cache_key(download_id: str) -> str:
+    return f"{DOWNLOAD_CACHE_PREFIX}{download_id}"
+
 
 class PredictCsvView(APIView):
     """
@@ -35,7 +51,6 @@ class PredictCsvView(APIView):
         finally:
             # clean input file
             try:
-                import os
                 os.remove(tmp_in_path)
             except FileNotFoundError:
                 pass
@@ -57,4 +72,53 @@ class PredictCsvView(APIView):
                 PredictionResult.objects.bulk_create(objs)
 
         # JSON for the frontend table (unchanged)
-        return Response({"rows": rows}, status=200)
+        download_id, filename = self._cache_download(rows, csv_file.name)
+
+        # JSON for the frontend table + download handle
+        return Response(
+            {
+                "rows": rows,
+                "download_id": download_id,
+                "download_filename": filename,
+            },
+            status=200,
+        )
+
+    def _cache_download(self, rows, source_name: str):
+        if not rows:
+            csv_data = "prediction\n"
+        else:
+            headers = list(rows[0].keys())
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=headers)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+            csv_data = buffer.getvalue()
+
+        filename = self._build_filename(source_name)
+        download_id = uuid.uuid4().hex
+        payload = {"csv": csv_data, "filename": filename}
+        cache.set(_make_cache_key(download_id), payload, DOWNLOAD_CACHE_TIMEOUT)
+        return download_id, filename
+
+    def _build_filename(self, original_name: str):
+        base = (original_name or "predictions").rsplit(".", 1)[0]
+        return f"{base}_predictions.csv"
+
+
+class PredictCsvDownloadView(APIView):
+    """
+    Streams a cached CSV that was prepared by PredictCsvView.
+    """
+
+    def get(self, request, download_id: str, *args, **kwargs):
+        payload = cache.get(_make_cache_key(download_id))
+        if not payload:
+            raise Http404("Download expired or not found.")
+
+        csv_content = payload.get("csv", "")
+        filename = payload.get("filename", "predictions.csv")
+        response = HttpResponse(csv_content, content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response

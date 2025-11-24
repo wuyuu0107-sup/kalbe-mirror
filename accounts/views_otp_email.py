@@ -56,7 +56,7 @@ def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
     )
     return JsonResponse({"status": "ok"})
 
-def _parse_and_validate_payload(request):
+def _parse_payload(request):
     data = _read_json(request)
 
     email = (data.get("email") or "").strip().lower()
@@ -67,11 +67,23 @@ def _parse_and_validate_payload(request):
         or ""
     ).strip()
 
+    return email, otp_in, new_pw
+
+def _validate_payload(email, otp_in, new_pw):
     if not email or not otp_in or not new_pw:
         return False, "missing fields"
 
     if not is_strong_password(new_pw):
         return False, "weak password"
+
+    return True, None
+
+def _parse_and_validate_payload(request):
+    email, otp_in, new_pw = _parse_payload(request)
+
+    ok, error = _validate_payload(email, otp_in, new_pw)
+    if not ok:
+        return False, error
 
     return True, (email, otp_in, new_pw)
 

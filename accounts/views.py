@@ -44,6 +44,49 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
         # TODO: kirim OTP via email
     return JsonResponse({"status": "ok"})
 
+def _parse_reset_payload(request):
+    data = _read_json(request)
+
+    email = (data.get("email") or "").strip().lower()
+    otp = (data.get("otp") or "").strip()
+    new_pw = (
+        data.get("new_password")
+        or data.get("password")
+        or ""
+    ).strip()
+
+    return email, otp, new_pw
+
+def _validate_reset_fields(email, otp, new_pw):
+    if not email or not otp or not new_pw:
+        return False, "missing fields"
+
+    if not is_strong_password(new_pw):
+        return False, "weak_password"
+
+    return True, None
+
+def _check_reset_otp(email, otp):
+    cached = cache.get(f"pwdreset:{email}")
+    if cached and cached == otp:
+        return True
+    return False
+
+def _get_user_or_none(email):
+    try:
+        return AuthUser.objects.get(email=email)
+    except AuthUser.DoesNotExist:
+        return None
+
+def _apply_new_password_reset(user, new_pw):
+    user.password = new_pw
+    update_fields = ["password"]
+
+    if hasattr(user, "last_accessed"):
+        user.last_accessed = timezone.now()
+        update_fields.append("last_accessed")
+
+    user.save(update_fields=update_fields)
 
 @csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
 @require_POST
@@ -52,40 +95,20 @@ def reset_password_confirm(request: HttpRequest) -> JsonResponse:
     Phase 2: verifikasi OTP + set password baru.
     Tetap balikin {"status":"ok"} pada kegagalan verifikasi demi anti-enumeration.
     """
-    data = _read_json(request)
-    email = (data.get("email") or "").strip().lower()
-    otp = (data.get("otp") or "").strip()
+    email, otp, new_password = _parse_reset_payload(request)
 
-    # ⬅️ FRONTEND lu kirim field `password`, bukan `new_password`
-    # jadi kita handle dua-duanya biar fleksibel
-    new_password = (
-        data.get("new_password")
-        or data.get("password")
-        or ""
-    ).strip()
-
-    if not email or not otp or not new_password:
-        return JsonResponse({"error": "missing fields"}, status=400)
-
-    if not is_strong_password(new_password):
-        return JsonResponse({"error": "weak_password"}, status=400)
-
-    cached = cache.get(f"pwdreset:{email}")
-    if not cached or cached != otp:
-        return JsonResponse({"status": "ok"})  
-
-    try:
-        user = AuthUser.objects.get(email=email)
-    except AuthUser.DoesNotExist:
-        return JsonResponse({"status": "ok"})  
-
+    ok, error = _validate_reset_fields(email, otp, new_password)  
+    if not ok:
+        return JsonResponse({"error": error}, status=400)
     
-    user.password = new_password
-    if hasattr(user, "last_accessed"):
-        user.last_accessed = timezone.now()
-        user.save(update_fields=["password", "last_accessed"])
-    else:
-        user.save(update_fields=["password"])
+    if not _check_reset_otp(email, otp):
+        return JsonResponse({"status": "ok"})
 
+    user = _get_user_or_none(email)
+    if not user:
+        return JsonResponse({"status": "ok"})
+    
+    _apply_new_password_reset(user, new_password)
     cache.delete(f"pwdreset:{email}")
+    
     return JsonResponse({"status": "ok"})

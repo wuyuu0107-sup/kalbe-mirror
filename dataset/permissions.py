@@ -2,15 +2,14 @@ from rest_framework.permissions import BasePermission
 from authentication.models import User as AuthUser
 
 
-class IsResearcherOnly(BasePermission):
-    """Researcher only permission using custom session auth and roles.
+class IsAuthenticatedAndVerified(BasePermission):
+    """Authenticated and verified user permission using custom session auth.
 
     A request is permitted when:
     - session contains 'user_id' and 'username'
     - a user exists with the same username
     - the session user_id matches that user's UUID
     - user.is_verified is True
-    - 'researcher' is present in user's roles (case-insensitive match)
     """
 
     def has_permission(self, request, view):
@@ -26,5 +25,4 @@ class IsResearcherOnly(BasePermission):
             return False
         if not getattr(user, "is_verified", False):
             return False
-        roles = getattr(user, "roles", []) or []
-        return any(str(r).lower() == "researcher" for r in roles)
+        return True

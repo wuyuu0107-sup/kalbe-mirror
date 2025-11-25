@@ -1,10 +1,12 @@
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
 from .models import Notification
 from authentication.models import User
 
+@csrf_exempt
 def get_authenticated_user(request):
     """Helper function to get authenticated user from session."""
     user_id = request.session.get('user_id')
@@ -17,6 +19,7 @@ def get_authenticated_user(request):
     except User.DoesNotExist:
         return None, JsonResponse({'error': 'User not found'}, status=404)
 
+@csrf_exempt
 def notification_list(request):
     """Get paginated list of notifications for the logged-in user."""
     user, error_response = get_authenticated_user(request)
@@ -52,6 +55,7 @@ def notification_list(request):
     }
     return JsonResponse(data)
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def mark_notification_read(request, notification_id):
     """Mark a specific notification as read."""
@@ -64,6 +68,7 @@ def mark_notification_read(request, notification_id):
     notification.save()
     return JsonResponse({'status': 'success'})
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def mark_all_notifications_read(request):
     """Mark all notifications as read for the logged-in user."""
@@ -74,6 +79,7 @@ def mark_all_notifications_read(request):
     Notification.objects.filter(user=user, is_read=False).update(is_read=True)
     return JsonResponse({'status': 'success'})
 
+@csrf_exempt
 def notification_count(request):
     """Get count of unread notifications for the logged-in user."""
     user, error_response = get_authenticated_user(request)

@@ -9,6 +9,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.apps import apps
 from django.contrib.auth.hashers import make_password  # simpan password sbg hash
+from django.core.cache import cache
 
 from .utils import generate_otp
 from .services import cache_store as cs
@@ -38,11 +39,26 @@ def password_reset_otp_request(request: HttpRequest) -> JsonResponse:
     if not email:
         return JsonResponse({"error": "email is required"}, status=400)
 
+    rate_key = f"pwdreset:otp:req:{email}"
+    max_requests = 5
+    rate_window = 10 * 60  # 10 menit
+    attempts = cache.get(rate_key, 0)
+    if attempts >= max_requests:
+        return JsonResponse(
+            {
+                "error": "too_many_requests",
+                "message": "You have requested OTP too many times. Please try again later.",
+            },
+            status=429,
+        )
+
     # Cek ada user dengan email tsb; kalau tidak ada, tetap balas ok (anti-enum)
     try:
         AuthUser.objects.get(email=email)
     except AuthUser.DoesNotExist:
         return JsonResponse({"status": "ok"})
+    
+    cache.set(rate_key, attempts + 1, timeout=rate_window)
 
     otp = generate_otp()
     cs.store_otp(email, otp, ttl=600)  # berlaku 10 menit

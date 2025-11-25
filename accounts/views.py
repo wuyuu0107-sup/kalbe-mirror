@@ -1,13 +1,10 @@
 # accounts/views.py
-import json
-from typing import Any, Dict
-
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpRequest
 from django.core.cache import cache
 from django.utils import timezone
-from django.apps import apps  # ⬅️ kunci: ambil model eksplisit dari app 'authentication'
-from django.views.decorators.csrf import csrf_exempt  # ⬅️ TAMBAH INI
+from django.apps import apps  # kunci: ambil model eksplisit dari app 'authentication'
+from django.views.decorators.csrf import csrf_exempt  # TAMBAH INI
 
 from .passwords import is_strong_password  # asumsi sudah ada
 from .utils import generate_otp
@@ -17,7 +14,7 @@ from .views_otp_email import _read_json
 AuthUser = apps.get_model("authentication", "User")
 assert AuthUser._meta.db_table == "authentication_user", f"Wrong table: {AuthUser._meta.db_table}"
 
-@csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
+@csrf_exempt   # CSRF dimatikan untuk endpoint ini
 @require_POST
 # basic view function
 def request_password_reset(request: HttpRequest) -> JsonResponse:
@@ -79,7 +76,7 @@ def _apply_new_password_reset(user, new_pw):
 
     user.save(update_fields=update_fields)
 
-@csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
+@csrf_exempt   # CSRF dimatikan untuk endpoint ini
 @require_POST
 def reset_password_confirm(request: HttpRequest) -> JsonResponse:
     """

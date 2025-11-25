@@ -1,6 +1,6 @@
 import os
 from typing import List, Dict, Any, Optional
-from supabase import create_client, Client
+from supabase import create_client 
 from .interfaces import StorageProvider
 
 class SupabaseStorageProvider(StorageProvider):

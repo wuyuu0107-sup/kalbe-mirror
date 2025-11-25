@@ -11,23 +11,15 @@ from django.views.decorators.csrf import csrf_exempt  # ⬅️ TAMBAH INI
 
 from .passwords import is_strong_password  # asumsi sudah ada
 from .utils import generate_otp
+from .views_otp_email import _read_json
 
 # Paksa pakai model dari app 'authentication' (→ tabel authentication_user)
 AuthUser = apps.get_model("authentication", "User")
 assert AuthUser._meta.db_table == "authentication_user", f"Wrong table: {AuthUser._meta.db_table}"
 
-
-def _read_json(request: HttpRequest) -> Dict[str, Any]:
-    if not request.body:
-        return {}
-    try:
-        return json.loads(request.body.decode("utf-8"))
-    except Exception:
-        return {}
-
-
 @csrf_exempt   # ⬅️ CSRF dimatikan untuk endpoint ini
 @require_POST
+# basic view function
 def request_password_reset(request: HttpRequest) -> JsonResponse:
     """
     Phase 1: minta OTP reset password.
@@ -41,7 +33,6 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
     if AuthUser.objects.filter(email=email).exists():
         otp = generate_otp(6)
         cache.set(f"pwdreset:{email}", otp, timeout=10 * 60)  # 10 menit
-        # TODO: kirim OTP via email
     return JsonResponse({"status": "ok"})
 
 def _parse_reset_payload(request):

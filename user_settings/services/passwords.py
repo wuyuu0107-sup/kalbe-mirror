@@ -35,6 +35,9 @@ class UserRepository(Protocol):
     def save_password(self, user: User, encoded_password: str) -> None:
         raise NotImplementedError
 
+    def delete_user(self, user: User) -> None:
+        raise NotImplementedError
+
 
 class DjangoUserRepository:
     """Concrete repository backed by Django's ORM."""
@@ -49,10 +52,21 @@ class DjangoUserRepository:
         user.password = encoded_password
         user.save(update_fields=["password"])
 
+    def delete_user(self, user: User) -> None:
+        user.delete()
+
 
 @dataclass(frozen=True)
 class PasswordChangeResult:
     """Value object describing the result of a password update."""
+
+    success: bool
+    message: str
+
+
+@dataclass(frozen=True)
+class AccountDeletionResult:
+    """Value object describing the result of an account deletion."""
 
     success: bool
     message: str
@@ -82,3 +96,20 @@ class PasswordChangeService:
             self._users.save_password(user, encoded)
 
         return PasswordChangeResult(success=True, message="Password changed successfully")
+
+    def delete_account(
+        self,
+        *,
+        user: User,
+        password: str,
+    ) -> AccountDeletionResult:
+        from django.contrib.auth.hashers import check_password
+        
+        # Verify current password before deletion
+        if not check_password(password, user.password):
+            return AccountDeletionResult(success=False, message="Current password is incorrect")
+
+        with transaction.atomic():
+            self._users.delete_user(user)
+
+        return AccountDeletionResult(success=True, message="Account deleted successfully")

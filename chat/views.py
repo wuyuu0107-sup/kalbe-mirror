@@ -1,5 +1,6 @@
 # chat/views.py
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -121,6 +122,7 @@ def _payload(request) -> dict:
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
+@csrf_exempt
 def sessions(request):
     user_id = _current_user_id(request)
     log.info(f"DEBUG: _current_user_id returned: {user_id}")
@@ -153,6 +155,7 @@ def sessions(request):
 
 @api_view(["PATCH", "DELETE"])
 @permission_classes([AllowAny])
+@csrf_exempt
 def session_detail(request, sid):
     user_id = _current_user_id(request)
     sess = get_object_or_404(ChatSession, pk=sid, user_id=user_id)
@@ -175,6 +178,7 @@ def session_detail(request, sid):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@csrf_exempt
 def get_messages(request, sid):
     """
     Return messages as list of dicts with at least: role, content.
@@ -194,6 +198,7 @@ def get_messages(request, sid):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@csrf_exempt
 def post_message(request, sid):
     user_id = _current_user_id(request)
     sess = get_object_or_404(ChatSession, pk=sid, user_id=user_id)
@@ -220,6 +225,7 @@ def post_message(request, sid):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@csrf_exempt
 def ask(request, sid):
     """
     Append user message, call engine, append assistant, return answer.

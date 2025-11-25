@@ -1,7 +1,7 @@
 models:
   - type: main
-    engine: self_hosted
-    model: dummy-model
+    engine: openai
+    model: gemini-2.0-flash
 
 instructions:
   - type: general

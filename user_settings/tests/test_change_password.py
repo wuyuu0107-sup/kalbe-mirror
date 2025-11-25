@@ -81,7 +81,7 @@ class ChangePasswordTestCase(TestCase):
         
         self.assertEqual(response.status_code, 401)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Authentication required")
+        self.assertEqual(response_data['error'], "Autentikasi diperlukan")
 
     def test_change_password_wrong_current_password(self):
         """Test password change with incorrect current password"""
@@ -99,7 +99,7 @@ class ChangePasswordTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Validation failed")
+        self.assertEqual(response_data['error'], "Validasi gagal")
         self.assertIn('current_password', response_data['validation_errors'])
 
     def test_change_password_weak_password(self):
@@ -129,7 +129,7 @@ class ChangePasswordTestCase(TestCase):
                 
                 self.assertEqual(response.status_code, 400)
                 response_data = json.loads(response.content)
-                self.assertEqual(response_data['error'], "Validation failed")
+                self.assertEqual(response_data['error'], "Validasi gagal")
 
     def test_change_password_mismatched_confirmation(self):
         """Test password change with mismatched password confirmation"""
@@ -147,7 +147,7 @@ class ChangePasswordTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Validation failed")
+        self.assertEqual(response_data['error'], "Validasi gagal")
 
     def test_change_password_same_as_current(self):
         """Test password change with same password as current"""
@@ -165,7 +165,7 @@ class ChangePasswordTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Validation failed")
+        self.assertEqual(response_data['error'], "Validasi gagal")
         self.assertIn('new_password', response_data['validation_errors'])
 
     def test_change_password_missing_fields(self):
@@ -187,7 +187,7 @@ class ChangePasswordTestCase(TestCase):
                 
                 self.assertEqual(response.status_code, 400)
                 response_data = json.loads(response.content)
-                self.assertEqual(response_data['error'], "Missing required fields")
+                self.assertEqual(response_data['error'], "Field yang diperlukan tidak ada")
                 self.assertIn('missing_fields', response_data)
 
     def test_change_password_invalid_json(self):
@@ -212,8 +212,8 @@ class ChangePasswordTestCase(TestCase):
 
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Invalid payload")
-        self.assertIn("must contain valid JSON", response_data['message'])
+        self.assertEqual(response_data['error'], "Payload tidak valid")
+        self.assertIn("harus berisi JSON yang valid", response_data['message'])
 
     def test_change_password_non_object_payload(self):
         """Non-dict JSON payload should be rejected"""
@@ -225,8 +225,8 @@ class ChangePasswordTestCase(TestCase):
 
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Invalid payload")
-        self.assertIn("must be a JSON object", response_data['message'])
+        self.assertEqual(response_data['error'], "Payload tidak valid")
+        self.assertIn("harus berupa objek JSON", response_data['message'])
 
     def test_change_password_service_failure(self):
         """Service failure should return 400 with message"""
@@ -248,7 +248,7 @@ class ChangePasswordTestCase(TestCase):
         mock_change.assert_called_once()
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Password change failed")
+        self.assertEqual(response_data['error'], "Gagal mengubah password")
         self.assertEqual(response_data['message'], failure_result.message)
 
     def test_change_password_get_method_not_allowed(self):
@@ -279,7 +279,7 @@ class ChangePasswordTestCase(TestCase):
         
         self.assertEqual(response.status_code, 401)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Authentication required")
+        self.assertEqual(response_data['error'], "Autentikasi diperlukan")
 
     def test_user_profile_method_not_allowed(self):
         """User profile should reject non-GET methods"""
@@ -288,7 +288,7 @@ class ChangePasswordTestCase(TestCase):
 
         self.assertEqual(response.status_code, 405)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Method not allowed")
+        self.assertEqual(response_data['error'], "Metode tidak diizinkan")
 
     def test_get_authenticated_user_returns_user(self):
         """Helper should return user when session matches"""
@@ -343,7 +343,7 @@ class ChangePasswordTestCase(TestCase):
 
         self.assertEqual(response.status_code, 500)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Internal server error")
+        self.assertEqual(response_data['error'], "Kesalahan server internal")
 
 
 class ChangePasswordSerializerTestCase(TestCase):
@@ -417,7 +417,7 @@ class ChangePasswordSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_new_password()
 
-        self.assertIn("New password is required", ctx.exception.messages)
+        self.assertIn("Password baru diperlukan", ctx.exception.messages)
 
     def test_clean_new_password_returns_valid_password(self):
         """clean_new_password returns the validated password"""
@@ -454,7 +454,7 @@ class ChangePasswordSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_current_password()
 
-        self.assertIn('incorrect', ' '.join(ctx.exception.messages).lower())
+        self.assertIn('salah', ' '.join(ctx.exception.messages).lower())
 
     def test_clean_current_password_returns_value(self):
         """clean_current_password returns original value when valid"""
@@ -476,7 +476,7 @@ class ChangePasswordSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_current_password()
 
-        self.assertIn('required', ' '.join(ctx.exception.messages).lower())
+        self.assertIn('diperlukan', ' '.join(ctx.exception.messages).lower())
 
     def test_validate_data_success(self):
         """validate_data returns True with clean payload"""

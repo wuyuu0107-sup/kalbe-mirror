@@ -373,7 +373,8 @@ class CSVFileRenameView(generics.GenericAPIView):
         dir_path = os.path.dirname(current_path)
         # Build storage name using POSIX style separators regardless of OS so it matches FileField naming
         if dir_path:
-            new_path = f"{dir_path.rstrip('/\\')}/{new_name}"
+            stripped_dir = dir_path.rstrip('/\\')
+            new_path = f"{stripped_dir}/{new_name}"
         else:
             new_path = new_name
 

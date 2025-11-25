@@ -2,7 +2,7 @@
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 import uuid
@@ -18,7 +18,6 @@ from . import service as chat_service
 
 
 DEMO_COOKIE_NAME = "demo_user_id"
-MAX_QUESTION_LEN = 4000
 log = logging.getLogger(__name__)
 
 
@@ -122,7 +121,8 @@ def _payload(request) -> dict:
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated]) #OWASP A01
+@permission_classes([AllowAny])
+@csrf_exempt
 def sessions(request):
     user_id = _current_user_id(request)
     log.info(f"DEBUG: _current_user_id returned: {user_id}")
@@ -258,11 +258,21 @@ def ask(request, sid):
     )
     q = str(q_raw).strip()
 
+    MAX_QUESTION_LEN = 4000
     if len(q) > MAX_QUESTION_LEN:
-        resp = Response({"error": "message too long"}, status=400)
+        log.warning(
+            "Rejecting long question for session %s (user %s): len=%s > MAX_QUESTION_LEN=%s",
+            sess.id,
+            user_id,
+            len(q),
+            MAX_QUESTION_LEN,
+        )
+        resp = Response(
+            {"error": f"Message too long (max {MAX_QUESTION_LEN} characters)"},
+            status=400,
+        )
         _attach_demo_cookie_if_needed(request, resp, user_id)
         return resp
-
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)

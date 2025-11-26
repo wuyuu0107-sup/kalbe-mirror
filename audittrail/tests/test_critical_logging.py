@@ -14,8 +14,8 @@ class CriticalLoggingTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.factory = RequestFactory()
-        User = get_user_model()
-        self.user = User.objects.create_user(
+        user = get_user_model()
+        self.user = user.objects.create_user(
             username="tester",
             email="tester@example.com",
             password="pass123",

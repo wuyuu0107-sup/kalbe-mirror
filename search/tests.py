@@ -5,7 +5,7 @@ from typing import Optional
 
 from .services import SearchService, search_storage_files
 from .interfaces import SearchStrategy, StorageProvider
-from .storage import SupabaseStorageProvider
+from .storage import DatabaseCSVStorageProvider
 # TODO: Uncomment when these modules are created
 # from .commands import SearchCriteria, SimpleSearchCommand, FilteredSearchCommand
 # from .invoker import SearchCommandInvoker
@@ -39,13 +39,9 @@ class StorageSearchTests(TestCase):
 
     def test_service_default_providers(self):
         """Test service creates default providers"""
-        with patch.dict('os.environ', {
-            'SUPABASE_URL': 'http://test.com',
-            'SUPABASE_SERVICE_ROLE_KEY': 'test-key'
-        }):
-            service = SearchService()
-            self.assertIsNotNone(service.storage_provider)
-            self.assertIsNotNone(service.search_strategy)
+        service = SearchService()
+        self.assertIsNotNone(service.storage_provider)
+        self.assertIsNotNone(service.search_strategy)
 
     def test_search_service_with_custom_providers(self):
         """Test service with custom providers"""
@@ -151,18 +147,14 @@ class StorageSearchTests(TestCase):
 
     def test_convenience_function(self):
         """Test the convenience function works same as service"""
-        with patch.dict('os.environ', {
-            'SUPABASE_URL': 'http://test.com',
-            'SUPABASE_SERVICE_ROLE_KEY': 'test-key'
-        }):
-            # Mock the Supabase client
-            mock_files = [{'name': 'test.csv', 'id': '1'}]
-            storage = MockStorageProvider(mock_files)
-            
-            with patch('search.services.SupabaseStorageProvider') as mock_provider:
-                mock_provider.return_value = storage
-                results = search_storage_files("test-bucket", "test")
-                self.assertEqual(len(results), 1)
+        mock_files = [{'name': 'test.csv', 'id': '1'}]
+        storage = MockStorageProvider(mock_files)
+        # Patch SearchService to use our mock storage provider
+        with patch('search.services.SearchService', autospec=True) as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.search_files.return_value = mock_files
+            results = search_storage_files('unused', 'test')
+            self.assertEqual(len(results), 1)
 
 
 class ViewTests(TestCase):
@@ -175,86 +167,72 @@ class ViewTests(TestCase):
         """Test search files view"""
         with patch('search.views.search_storage_files') as mock_search:
             mock_search.return_value = [{'name': 'test.csv'}]
-            
             response = self.client.get('/search/files/', {
-                'bucket': 'test-bucket',
                 'q': 'test'
             })
-            
             self.assertEqual(response.status_code, 200)
             self.assertEqual(len(response.json()['files']), 1)
-    
+
     def test_search_files_view_missing_params(self):
         """Test search files view with missing parameters"""
         response = self.client.get('/search/files/')
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['error'], 'Missing required parameters')
-    
+        self.assertEqual(response.json()['error'], 'Missing required parameter: q (search term)')
+
     def test_search_files_view_error(self):
         """Test search files view error handling"""
         with patch('search.views.search_storage_files') as mock_search:
             mock_search.side_effect = Exception("Search error")
-            
             response = self.client.get('/search/files/', {
-                'bucket': 'test-bucket',
                 'q': 'test'
             })
-            
             self.assertEqual(response.status_code, 500)
             self.assertIn('error', response.json())
 
 
 class StorageProviderTests(TestCase):
-    """Test suite for storage provider"""
-    
-    def setUp(self):
-        self.env_patcher = patch.dict('os.environ', {
-            'SUPABASE_URL': 'http://test.com',
-            'SUPABASE_SERVICE_ROLE_KEY': 'test-key'
-        })
-        self.env_patcher.start()
-        
-        # Create mock response
-        self.mock_response = MagicMock()
-        self.mock_response.status_code = 200
-        self.mock_response.content = b"test content"
-        
-        # Setup client patcher
-        self.client_patcher = patch('supabase.create_client')
-        self.mock_create = self.client_patcher.start()
-        
-        # Setup mock client and storage
-        self.mock_client = MagicMock()
-        self.mock_storage = MagicMock()
-        self.mock_bucket = MagicMock()
-        
-        self.mock_create.return_value = self.mock_client
-        self.mock_client.storage = self.mock_storage
-        self.mock_storage.from_.return_value = self.mock_bucket
-        
-    def tearDown(self):
-        self.env_patcher.stop()
-        self.client_patcher.stop()
+    """Test suite for DatabaseCSVStorageProvider"""
 
-    def test_storage_provider_errors(self):
-        """Test error handling in storage provider"""
-        self.mock_bucket.download.side_effect = Exception("Download error")
-        self.mock_bucket.remove.side_effect = Exception("Delete error")
-        self.mock_bucket.list.side_effect = Exception("List error")
-        
-        provider = SupabaseStorageProvider()
-        
-        with self.assertRaises(Exception) as ctx:
-            provider.get_file("test-bucket", "test.csv")
-        self.assertIn("Error downloading file", str(ctx.exception))
-        
-        with self.assertRaises(Exception) as ctx:
-            provider.delete_file("test-bucket", "test.csv")
-        self.assertIn("Error deleting file", str(ctx.exception))
-        
-        with self.assertRaises(Exception) as ctx:
-            provider.list_files("test-bucket")
-        self.assertIn("Error listing files", str(ctx.exception))
+    @patch('search.storage.CSV')
+    def test_list_files_returns_csvs(self, mock_csv_model):
+        provider = DatabaseCSVStorageProvider()
+        mock_csv1 = MagicMock()
+        mock_csv1.name = 'file1.csv'
+        mock_csv1.id = 1
+        mock_csv1.file.name = 'datasets/csvs/file1.csv'  # This is what your provider uses
+        mock_csv1.created_at = '2025-11-27T00:00:00Z'
+        mock_csv1.record_count = 10
+        mock_csv2 = MagicMock()
+        mock_csv2.name = 'file2.csv'
+        mock_csv2.id = 2
+        mock_csv2.file.name = 'datasets/csvs/file2.csv'  # This is what your provider uses
+        mock_csv2.created_at = '2025-11-27T00:00:01Z'
+        mock_csv2.record_count = 20
+        mock_csv_model.objects.all.return_value = [mock_csv1, mock_csv2]
+        files = provider.list_files('unused')
+        self.assertEqual(len(files), 2)
+        self.assertEqual(files[0]['name'], 'file1.csv')
+        self.assertEqual(files[1]['name'], 'file2.csv')
+
+    @patch('search.storage.CSV')
+    def test_delete_file_removes_csv(self, mock_csv_model):
+        provider = DatabaseCSVStorageProvider()
+        mock_csv_instance = MagicMock()
+        # Your delete_file method filters by file=file_path, so we need to mock that
+        mock_csv_model.objects.filter.return_value.first.return_value = mock_csv_instance
+        mock_csv_instance.delete.return_value = None
+        # The file_path should match what's in the file field
+        result = provider.delete_file('unused', 'datasets/csvs/file1.csv')
+        self.assertTrue(result)
+        # Verify the filter was called with the correct arguments
+        mock_csv_model.objects.filter.assert_called_once_with(file='datasets/csvs/file1.csv')
+
+    @patch('search.storage.CSV')
+    def test_delete_file_returns_false_if_not_found(self, mock_csv_model):
+        provider = DatabaseCSVStorageProvider()
+        mock_csv_model.objects.filter.return_value.first.return_value = None
+        result = provider.delete_file('unused', 'datasets/csvs/file1.csv')
+        self.assertFalse(result)
 
 
 class SearchStrategyTests(TestCase):

@@ -4,6 +4,7 @@ import os
 import psycopg
 from typing import Any, Dict, List, Tuple
 
+READ_ONLY = "read-only only"
 
 class DB:
     """
@@ -26,7 +27,7 @@ class DB:
     def fetch_one(self, sql: str, params: List[Any] | None = None) -> Tuple[Any, ...] | None:
         self._ensure_conn()
         if not sql.strip().lower().startswith("select"):
-            raise ValueError("read-only only")
+            raise ValueError(READ_ONLY)
         with self.conn.cursor() as cur:
             cur.execute(sql, params or [])
             return cur.fetchone()
@@ -34,7 +35,7 @@ class DB:
     def fetch_all(self, sql: str, params: List[Any] | None = None) -> List[Tuple[Any, ...]]:
         self._ensure_conn()
         if not sql.strip().lower().startswith("select"):
-            raise ValueError("read-only only")
+            raise ValueError(READ_ONLY)
         with self.conn.cursor() as cur:
             cur.execute(sql, params or [])
             return cur.fetchall()
@@ -45,7 +46,7 @@ class DB:
         """
         self._ensure_conn()
         if not sql.strip().lower().startswith("select"):
-            raise ValueError("read-only only")
+            raise ValueError(READ_ONLY)
         with self.conn.cursor() as cur:
             cur.execute(sql, params or [])
             rows = cur.fetchall()

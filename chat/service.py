@@ -188,7 +188,7 @@ class SemanticQAService:
     runner: QueryRunner
     formatter: AnswerFormatter
 
-    def answer(self, user_message: str, session_id: str | None = None) -> str:
+    def answer(self, user_message: str) -> str:
 
         # 1) NL -> SQL
         sql = self.sqlgen.generate(user_message)

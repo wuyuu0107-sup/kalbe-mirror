@@ -17,6 +17,8 @@ except Exception:  # pragma: no cover - optional dependency path
 # Import Gemini error types from your llm.py
 from .llm import GeminiError, GeminiBlocked
 
+ERROR_MSG = "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+
 log = logging.getLogger(__name__)
 
 
@@ -185,7 +187,7 @@ def _safe_backend_call(fallback_fn: Callable[[str], str], user_message: str) -> 
 
     except GeminiBlocked as e:
         log.info("Gemini blocked prompt %r: %s", user_message, e)
-        return "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+        return ERROR_MSG
 
     except GeminiError as e:
         log.warning("Gemini could not answer %r: %s", user_message, e)
@@ -234,7 +236,7 @@ def run_with_guardrails(user_message: str, fallback_fn: Callable[[str], str]) ->
 
     # 1) Hard Python guardrail for obvious out-of-scope
     if _is_out_of_scope(text):
-        return "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+        return ERROR_MSG
 
     # 2) Get (possibly patched) rails instance.
     rails = _get_rails()
@@ -257,7 +259,7 @@ def run_with_guardrails(user_message: str, fallback_fn: Callable[[str], str]) ->
     log.debug("Normalized NeMo Guardrails text: %r", gr_text)
 
     # Explicit out-of-scope reply from NeMo config.
-    if gr_text == "Mohon tanyakan pertanyaan yang relevan dengan data klinis.":
+    if gr_text == ERROR_MSG:
         return gr_text
 
     # Marker or blank/no sanitized -> let backend answer.

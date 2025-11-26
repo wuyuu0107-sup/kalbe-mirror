@@ -3,6 +3,10 @@ from typing import List, Dict, Any, Optional
 from supabase import create_client, Client
 from .interfaces import StorageProvider
 
+class SupabaseStorageError(RuntimeError):
+    """Wraps errors coming from Supabase storage operations."""
+    pass
+
 class SupabaseStorageProvider(StorageProvider):
     """Supabase implementation of storage provider"""
     
@@ -20,7 +24,7 @@ class SupabaseStorageProvider(StorageProvider):
             bucket = self.client.storage.from_(bucket_name)
             return bucket.list()
         except Exception as e:
-            raise Exception(f"Error listing files: {str(e)}")
+            raise SupabaseStorageError(f"Error listing files: {e}") from e
 
     def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
         """Get file content from Supabase storage"""
@@ -28,7 +32,7 @@ class SupabaseStorageProvider(StorageProvider):
             bucket = self.client.storage.from_(bucket_name)
             return bucket.download(file_path)
         except Exception as e:
-            raise Exception(f"Error downloading file: {str(e)}")
+            raise SupabaseStorageError(f"Error downloading file: {e}") from e
 
     def delete_file(self, bucket_name: str, file_path: str) -> bool:
         """Delete file from Supabase storage"""
@@ -37,4 +41,4 @@ class SupabaseStorageProvider(StorageProvider):
             bucket.remove([file_path])
             return True  # If no exception was raised, deletion was successful
         except Exception as e:
-            raise Exception(f"Error deleting file: {str(e)}")
+            raise SupabaseStorageError(f"Error deleting file: {e}") from e

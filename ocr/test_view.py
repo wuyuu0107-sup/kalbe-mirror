@@ -158,8 +158,7 @@ class OCRViewsIntegrationTests(TestCase):
                 mock_doc_service = Mock()
                 mock_doc_service.create_document_and_patient.return_value = (mock_doc, mock_pat)
                 mock_doc_cls.return_value = mock_doc_service
-                
-                response = self.client.post("/ocr/", {"pdf": fake_pdf})
+            
                 
                 # Verify Supabase URL was used
                 call_args = mock_doc_service.create_document_and_patient.call_args

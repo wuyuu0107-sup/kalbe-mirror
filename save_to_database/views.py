@@ -11,11 +11,6 @@ from save_to_database.utility.validate_payload import validate_payload
 
 logger = logging.getLogger(__name__)
 
-
-def test_page(request):
-    """Render the CSV conversion test page."""
-    return render(request, 'test_page.html')
-
 # Helper Function
 def csv_to_response(csv_obj):
     return {

@@ -177,7 +177,7 @@ class WithRetriesTests(SimpleTestCase):
         def fn():
             calls["n"] += 1
             if calls["n"] < 2:
-                raise Exception("timeout")  # retryable
+                raise TimeoutError("timeout")  # retryable
             return "ok"
 
         with patch("time.sleep", return_value=None):
@@ -368,10 +368,10 @@ class IntentExtractorFreeTextTests(SimpleTestCase):
 class GetIntentJsonTests(SimpleTestCase):
     @override_settings(GEMINI_API_KEY="dummy")
     @patch("chat.llm.IntentExtractor")
-    def test_get_intent_json_ok(self, MockExtractor):
+    def test_get_intent_json_ok(self, mock_extractor):
         inst = Mock()
         inst.infer_intent.return_value = {"intent": "TOTAL_PATIENTS", "args": {}}
-        MockExtractor.return_value = inst
+        mock_extractor.return_value = inst
 
         out = llm.get_intent_json("q")
         self.assertEqual(out, '{"intent":"TOTAL_PATIENTS","args":{}}')

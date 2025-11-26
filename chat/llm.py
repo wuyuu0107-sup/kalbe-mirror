@@ -95,7 +95,7 @@ def _get_model():
 # ===== Regex & JSON helpers =====
 
 _CODEFENCE = re.compile(r"^\s*```(?:json)?\s*$|^\s*```\s*$", re.I | re.M)
-_JSON_SLOP = re.compile(r"\{[\s\S]*\}", re.S)
+_JSON_SLOP = re.compile(r"\{.*\}", re.S)
 _TRAILING_COMMAS = re.compile(r",\s*([}\]])")
 # Replace any unescaped single quote with double quote
 _SINGLE_QUOTES = re.compile(r"(?<!\\)'")

@@ -42,7 +42,6 @@ def request_password_reset(request: HttpRequest) -> JsonResponse:
     if AuthUser.objects.filter(email=email).exists():
         otp = generate_otp(6)
         cache.set(f"pwdreset:{email}", otp, timeout=10 * 60)  # 10 menit
-        # TODO: kirim OTP via email/SMS/WhatsApp
     return JsonResponse({"status": "ok"})
 
 

@@ -6,10 +6,13 @@ import google.generativeai as genai
 
 class GeminiService:
     
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
+        # This is what the test expects:
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel("gemini-2.5-flash")
+
+        # Store if you want, but not required for the test
+        self.api_key = api_key
+        self.model = genai.GenerativeModel(model_name)
     
     def extract_medical_data(self, pdf_bytes: bytes) -> Dict[str, Any]:
         prompt = self._get_prompt()

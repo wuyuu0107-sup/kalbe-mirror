@@ -7,7 +7,7 @@ class CSV(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     source_json = models.JSONField(blank=True, null=True)
     record_count = models.IntegerField(default=0)
-    notes = models.TextField(blank=True, null=True)
+    notes = models.TextField(blank=True)
     uploaded_url = models.URLField(blank=True, null=True)
 
     def __str__(self):

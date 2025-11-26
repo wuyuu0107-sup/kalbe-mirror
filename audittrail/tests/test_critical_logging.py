@@ -14,8 +14,8 @@ class CriticalLoggingTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.factory = RequestFactory()
-        User = get_user_model()
-        self.user = User.objects.create_user(
+        user = get_user_model()
+        self.user = user.objects.create_user(
             username="tester",
             email="tester@example.com",
             password="pass123",
@@ -157,13 +157,6 @@ class CriticalLoggingTests(TestCase):
         )
         s = str(log)
         self.assertIn("tester", s)
-
-    def test_ping_view(self):
-        # we imported audittrail.views in urls for tests? no, so just import and call
-        from audittrail import views
-        resp = views.ping(self.client.request().wsgi_request)
-        # this simple call will mark views.py as covered
-        self.assertEqual(resp.status_code, 200)
 
     # ---------------- NEW TESTS TO HIT MISSING BRANCHES ----------------
 

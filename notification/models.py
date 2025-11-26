@@ -15,7 +15,7 @@ class Notification(models.Model):
     type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
-    job_id = models.CharField(max_length=255, blank=True, null=True)
+    job_id = models.CharField(max_length=255, blank=True)
     data = models.JSONField(default=dict)
 
     class Meta:

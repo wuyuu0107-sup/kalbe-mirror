@@ -64,14 +64,17 @@ def _human_int(v: Any) -> str:
         except Exception:
             return str(v)
 
-def _human_pct(num: float, den: float) -> str:
+def _human_pct(num: Any, den: Any) -> str:
+    """Return 'X%' while safely handling None, non-numeric, or zero denominators."""
     try:
-        if float(den) == 0:
+        n = float(num or 0)
+        d = float(den or 0)
+        if d == 0:
             return "0%"
-        return f"{(float(num)/float(den))*100:.0f}%"
+        return f"{(n / d) * 100:.0f}%"
     except Exception:
         return "0%"
-
+    
 def _render_table(cols: List[str], rows: List[Tuple[Any, ...]], max_rows: int = 8) -> str:
     # No rows at all
     if not rows:

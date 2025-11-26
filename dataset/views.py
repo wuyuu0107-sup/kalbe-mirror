@@ -121,6 +121,71 @@ def normalize_directory_path(path):
     return normalized.strip('/')
 
 
+def match_existing_directory_case(target_dir: str) -> str:
+    """
+    Given a target directory like 'HELLO/world/track', attempt to match each
+    path segment to existing directories recorded in the DB (case-insensitive)
+    and return a new path where segments that already exist use the stored
+    capitalization. If a segment does not exist at that level, it is kept as-is.
+
+    This inspects `CSV.file` entries which store paths like
+    'datasets/csvs/hello/World/file.csv' and derives folder names from them.
+    """
+    if not target_dir:
+        return ''
+
+    normalized = normalize_directory_path(target_dir)
+    parts = normalized.split('/')
+
+    adjusted_parts = []
+    # start from the datasets/csvs root which is where CSV.file entries live
+    current_prefix = 'datasets/csvs'
+
+    for part in parts:
+        search_prefix = current_prefix + '/'
+        # get candidate file paths under this prefix
+        qs = CSV.objects.filter(file__startswith=search_prefix).values_list('file', flat=True)
+        if not qs.exists():
+            # No existing entries under this prefix, keep remaining parts as-is
+            adjusted_parts.extend(parts[len(adjusted_parts):])
+            break
+
+        # collect immediate child folder names under this prefix
+        child_names = set()
+        sp_len = len(search_prefix)
+        for fp in qs:
+            if len(fp) <= sp_len:
+                continue
+            remainder = fp[sp_len:]
+            if '/' in remainder:
+                child = remainder.split('/', 1)[0]
+                if child:
+                    child_names.add(child)
+
+        if not child_names:
+            # No subfolders under this prefix; keep remaining parts as-is
+            adjusted_parts.extend(parts[len(adjusted_parts):])
+            break
+
+        # Try to find a case-insensitive match among child names
+        match = None
+        target_lower = part.lower()
+        for child in child_names:
+            if child.lower() == target_lower:
+                match = child
+                break
+
+        if match:
+            adjusted_parts.append(match)
+            current_prefix = f"{current_prefix}/{match}"
+        else:
+            # No existing child matches case-insensitively; use provided segment
+            adjusted_parts.append(part)
+            current_prefix = f"{current_prefix}/{part}"
+
+    return '/'.join(adjusted_parts)
+
+
 class CSVFileListCreateView(generics.ListCreateAPIView):
     queryset = CSV.objects.all().order_by("-created_at")
     serializer_class = CSVFileSerializer
@@ -205,12 +270,15 @@ class CSVFileMoveView(generics.GenericAPIView):
 
         target_dir = normalize_directory_path(target_dir)
 
+        # Map target_dir segments to existing capitalization where possible
+        adjusted_target_dir = match_existing_directory_case(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
-        new_path = f"datasets/csvs/{target_dir}/{filename}" if target_dir else f"datasets/csvs/{filename}"
+        new_path = f"datasets/csvs/{adjusted_target_dir}/{filename}" if adjusted_target_dir else f"datasets/csvs/{filename}"
 
         # Don't move if it's the same location
         if obj.file.name == new_path:
@@ -234,8 +302,8 @@ class CSVFileMoveView(generics.GenericAPIView):
         orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
-        # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
+        # Ensure target dir exists (use adjusted capitalization)
+        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', adjusted_target_dir) if adjusted_target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
 
         # Move file
@@ -266,6 +334,9 @@ class FolderMoveView(generics.GenericAPIView):
         source_dir = normalize_directory_path(source_dir)
         target_dir = normalize_directory_path(target_dir)
 
+        # Map target_dir segments to existing capitalization where possible
+        adjusted_target_dir = match_existing_directory_case(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
@@ -277,7 +348,7 @@ class FolderMoveView(generics.GenericAPIView):
 
         # Check for duplicate folder or file in target directory
         source_folder_name = os.path.basename(source_dir.rstrip('/'))
-        new_folder_prefix = f"datasets/csvs/{target_dir}/{source_folder_name}/" if target_dir else f"datasets/csvs/{source_folder_name}/"
+        new_folder_prefix = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}/" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}/"
 
         # Check if a folder with the same name exists in the target directory (case-insensitive).
         # Exclude files that are part of the source directory (the ones being moved) so we don't
@@ -288,7 +359,7 @@ class FolderMoveView(generics.GenericAPIView):
         # Check if a file with the same name exists (exact match only, case-insensitive)
         # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
         # Do NOT match "hello.csv" - that's a different file
-        new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
+        new_file_path = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "Berkas dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -296,15 +367,15 @@ class FolderMoveView(generics.GenericAPIView):
         orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_file_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
-        # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
+        # Ensure target dir exists (use adjusted capitalization)
+        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', adjusted_target_dir) if adjusted_target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
         os.makedirs(full_target_dir, exist_ok=True)
 
         moved_ids = []
         for obj in files_to_move:
             path = obj.file.name
             relative_path = path[len(source_prefix):]
-            new_path = f"datasets/csvs/{target_dir}/{source_folder_name}/{relative_path}" if target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
+            new_path = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}/{relative_path}" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
 
             # Move file
             old_full_path = obj.file.path
@@ -324,7 +395,7 @@ class FolderMoveView(generics.GenericAPIView):
             obj.save()
             moved_ids.append(obj.id)
 
-        return Response({"moved_files": moved_ids, "message": f"Dipindahkan {len(moved_ids)} berkas dari {source_dir} ke {target_dir}."})
+        return Response({"moved_files": moved_ids, "message": f"Dipindahkan {len(moved_ids)} berkas dari {source_dir} ke {adjusted_target_dir}."})
 
 
 class FolderDeleteView(generics.GenericAPIView):

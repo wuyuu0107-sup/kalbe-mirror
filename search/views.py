@@ -2,17 +2,18 @@ from django.http import JsonResponse
 from .services import search_storage_files
 
 def search_files(request):
-    bucket = request.GET.get('bucket')
+    # bucket is ignored for database-backed search
     term = request.GET.get('q')
     ext = request.GET.get('ext')
-    
-    if not bucket or not term:
+
+    if not term:
         return JsonResponse({
-            'error': 'Missing required parameters'
+            'error': 'Missing required parameter: q (search term)'
         }, status=400)
-    
+
     try:
-        results = search_storage_files(bucket, term, ext)
+        # Pass dummy bucket for compatibility
+        results = search_storage_files('unused', term, ext)
         return JsonResponse({'files': results})
     except Exception as e:
         return JsonResponse({

@@ -69,8 +69,7 @@ class GeminiServiceTests(TestCase):
 
     @patch("ocr.services.gemini.genai") 
     def test_service_initialization(self, mock_genai):
-        service = GeminiService(api_key=self.api_key)
-
+        GeminiService(api_key=self.api_key)
         mock_genai.configure.assert_called_once_with(api_key=self.api_key)
         mock_genai.GenerativeModel.assert_called_once_with("gemini-2.5-flash")
 

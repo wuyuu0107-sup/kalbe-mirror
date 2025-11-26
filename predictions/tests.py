@@ -194,8 +194,8 @@ class PredictCsvApiTests(SimpleTestCase):
         return b"SIN,Subject Initials\n14515,YSSA\n9723,RDHO\n"
 
     @patch("predictions.views.SubprocessModelRunner")
-    def test_upload_csv_and_get_json_rows(self, MockRunner):
-        mock_runner = MockRunner.return_value
+    def test_upload_csv_and_get_json_rows(self, mock_runner):
+        mock_runner = mock_runner.return_value
         mock_runner.run.return_value = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
@@ -241,8 +241,8 @@ class PredictCsvApiTests(SimpleTestCase):
         self.assertIn("file", body)
 
     @patch("predictions.views.SubprocessModelRunner")
-    def test_runner_failure_returns_500(self, MockRunner):
-        mock_runner = MockRunner.return_value
+    def test_runner_failure_returns_500(self, mock_runner):
+        mock_runner = mock_runner.return_value
         mock_runner.run.side_effect = Exception("crash in model")
 
         file_obj = io.BytesIO(self._dummy_csv_bytes())

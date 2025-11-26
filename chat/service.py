@@ -188,18 +188,20 @@ class SemanticQAService:
     runner: QueryRunner
     formatter: AnswerFormatter
 
-    def answer(self, user_message: str) -> str:
+    def answer(self, user_message: str, session_id: str | None = None) -> str:
+        """
+        session_id is accepted for backward compatibility with call sites/tests,
+        but is intentionally unused.
+        """
+        _ = session_id  # explicitly mark as intentionally unused
 
-        # 1) NL -> SQL
         sql = self.sqlgen.generate(user_message)
-
-        # 2) Execute
         result = self.runner.query(sql) or {}
-        rows: List[Tuple[Any, ...]] = result.get("rows") or []
-        cols: List[str] = result.get("columns") or []
+        rows = result.get("rows") or []
+        cols = result.get("columns") or []
 
-        # 3) Format
         return self.formatter.format(user_message, cols, rows)
+
 
 
 # =========================

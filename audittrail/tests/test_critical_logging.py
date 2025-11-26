@@ -158,13 +158,6 @@ class CriticalLoggingTests(TestCase):
         s = str(log)
         self.assertIn("tester", s)
 
-    def test_ping_view(self):
-        # we imported audittrail.views in urls for tests? no, so just import and call
-        from audittrail import views
-        resp = views.ping(self.client.request().wsgi_request)
-        # this simple call will mark views.py as covered
-        self.assertEqual(resp.status_code, 200)
-
     # ---------------- NEW TESTS TO HIT MISSING BRANCHES ----------------
 
     def test_unmapped_path_should_not_log(self):

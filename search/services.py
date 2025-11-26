@@ -22,4 +22,5 @@ class SearchService:
 def search_storage_files(bucket_name: str, search_term: str, extension: Optional[str] = None) -> List[Dict[str, Any]]:
     """Convenience function for backwards compatibility with tests"""
     search_service = SearchService()
-    return search_service.search_files(bucket_name, search_term, extension)
+    result = search_service.search_files(bucket_name, search_term, extension)
+    return result or []

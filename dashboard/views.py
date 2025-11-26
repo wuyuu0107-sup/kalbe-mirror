@@ -16,8 +16,6 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
         return  # Disable CSRF
 
-
-# from .nav import try_label_annotation  # uncomment if you added it
 from .nav import SEGMENT_LABELS, looks_like_id
 
 # Services Import

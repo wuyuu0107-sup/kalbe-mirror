@@ -153,8 +153,8 @@ class OCRViewsIntegrationTests(TestCase):
                 mock_doc_service.create_document_and_patient.return_value = (mock_doc, mock_pat)
                 mock_doc_cls.return_value = mock_doc_service
 
-                # 🔥 IMPORTANT: call the actual view
-                response = self.client.post("/ocr/upload/", {"file": fake_pdf})
+               
+                self.client.post("/ocr/upload/", {"file": fake_pdf})
 
                 # Now the mock has been called
                 call_args = mock_doc_service.create_document_and_patient.call_args

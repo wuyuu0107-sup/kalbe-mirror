@@ -10,6 +10,9 @@ from dashboard import views
 # CSRF token endpoint (for SPA/Next.js to fetch a token)
 from accounts.csrf import csrf as csrf_view
 
+def trigger_error(request):
+    raise ZeroDivisionError("Intentional error for Sentry testing")
+
 urlpatterns = [
     path("admin/", admin.site.urls),
 
@@ -40,6 +43,11 @@ urlpatterns = [
     path('', include('django_prometheus.urls')),
     path('api/user-settings/', include('user_settings.urls')),
     path("audit/", include("audittrail.urls")),
+    
+    #sentry monitoring 
+    path('sentry-debug/', trigger_error)
+
+
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

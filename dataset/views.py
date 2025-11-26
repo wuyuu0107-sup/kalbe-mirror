@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from save_to_database.models import CSV
 from .serializers import CSVFileSerializer
 from .permissions import IsAuthenticatedAndVerified
+from .utility.supabase_delete import delete_supabase_file
 
 
 def is_valid_name(name):
@@ -168,6 +169,12 @@ class CSVFileRetrieveDestroyView(generics.RetrieveDestroyAPIView):
                 except Exception:
                     # Ignore storage errors so delete doesn't crash
                     pass
+        # Attempt to delete the uploaded file from Supabase.
+        try:
+            delete_supabase_file(getattr(instance, "uploaded_url", None))
+        except Exception:
+            # Do not let Supabase deletion errors block record deletion
+            pass
         super().perform_destroy(instance)
 
 
@@ -347,6 +354,11 @@ class FolderDeleteView(generics.GenericAPIView):
                     except Exception:
                         # Ignore storage errors so delete doesn't crash
                         pass
+            # Attempt to delete the uploaded file from Supabase.
+            try:
+                delete_supabase_file(getattr(obj, "uploaded_url", None))
+            except Exception:
+                pass
             # Delete the record
             obj_id = obj.id
             obj.delete()

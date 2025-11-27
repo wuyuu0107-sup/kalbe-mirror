@@ -54,7 +54,7 @@ seed:production:
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
-    - export DATABASE_URL=${PRODUCTION_DATABASE_URL}
+    - export DATABASE_URL=${DATABASE_URL}
     - python manage.py migrate --noinput
     - python manage.py loaddata fixtures/prod_patients.json
     - python manage.py shell -c "from patients.models import Patient; print(f'✅ Loaded {Patient.objects.count()} patients')"

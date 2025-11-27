@@ -1,9 +1,11 @@
 from django.urls import path
-from .views import ocr_test_page, health
+from .views import ocr_upload, ocr_endpoint
 
 app_name = "ocr"
 
 urlpatterns = [
-    path("health/", health, name="health"),
-    path("", ocr_test_page, name="ocr_test_page"),
+    path("", ocr_endpoint, name="ocr"),
+    path("upload/", ocr_upload, name="ocr_upload"),
 ]
+
+

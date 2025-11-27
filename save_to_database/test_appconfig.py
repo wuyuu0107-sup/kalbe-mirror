@@ -36,55 +36,51 @@ class AppConfigTests(TestCase):
     def test_ready_method_execution(self):
         """Test that ready method executes without errors."""
         app_config = apps.get_app_config('save_to_database')
-        
-        # Mock the signals import to avoid ImportError
+
+        real_import = __import__
+
         with patch('builtins.__import__') as mock_import:
             def import_side_effect(name, *args, **kwargs):
                 if 'signals' in name:
-                    return MagicMock()  # Return mock signals module
-                else:
-                    # Use the original import function for other modules
-                    return __import__(name, *args, **kwargs)
-            
+                    return MagicMock()
+                return real_import(name, *args, **kwargs) 
             mock_import.side_effect = import_side_effect
-            
-            # This calls the ready() method and covers all lines
-            try:
-                app_config.ready()
-                self.assertTrue(True)
-            except Exception:
-                # Even if there's an exception, the lines were executed
-                pass
+
+            app_config.ready()
+            mock_import.assert_called()
+
+
 
     def test_ready_method_force_execution(self):
         """Force execution of ready method by calling it directly."""
         app_config = apps.get_app_config('save_to_database')
         
-        # Mock sys.modules to include a fake signals module
         mock_signals = MagicMock()
         original_signals = sys.modules.get('save_to_database.signals')
         sys.modules['save_to_database.signals'] = mock_signals
         
         try:
-            # Call ready directly - this executes all lines including the import
-            app_config.ready()
-            self.assertTrue(True)
+            app_config.ready()  # fails test if it raises
+            # Optional real assertion:
+            self.assertIs(sys.modules['save_to_database.signals'], mock_signals)
         finally:
-            # Restore original state
             if original_signals is not None:
                 sys.modules['save_to_database.signals'] = original_signals
             else:
                 sys.modules.pop('save_to_database.signals', None)
 
+
     def test_signals_module_import_directly(self):
         """Test importing signals module directly."""
         try:
-            # This should trigger any imports in the signals module
             import save_to_database.signals
-            self.assertTrue(True)
         except ImportError as e:
             # If signals module doesn't exist, that's expected
             self.assertIn('signals', str(e).lower())
+        else:
+            # If import succeeded, assert the module is in sys.modules
+            self.assertIn('save_to_database.signals', sys.modules)
+
 
     def test_app_config_path_is_set(self):
         """App config should have a valid path."""
@@ -97,8 +93,6 @@ class AppConfigTests(TestCase):
         """Ensure ready method lines are covered by coverage.py."""
         app_config = apps.get_app_config('save_to_database')
         
-        # Mock the signals to avoid ImportError
         with patch.dict(sys.modules, {'save_to_database.signals': MagicMock()}):
-            # Call ready method - this should execute and cover all lines
             app_config.ready()
-            self.assertTrue(True)
+            self.assertIn('save_to_database.signals', sys.modules)

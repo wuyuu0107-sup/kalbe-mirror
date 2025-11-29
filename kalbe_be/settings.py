@@ -97,6 +97,7 @@ INSTALLED_APPS = [
     "predictions",
     "user_settings",
     'audittrail',
+    'patient',
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

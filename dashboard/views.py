@@ -16,6 +16,10 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
         return  # Disable CSRF
 
+# Uncomment when being used
+# from django.contrib.auth.decorators import login_required
+
+# from .nav import try_label_annotation  # uncomment if you added it
 from .nav import SEGMENT_LABELS, looks_like_id
 
 # Services Import

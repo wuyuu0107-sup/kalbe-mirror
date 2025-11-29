@@ -27,8 +27,8 @@ def create_persistent_notification(user, type_, data, job_id=None):
         data=data
     )
 
-def get_notification_title(type_: str, _data: dict | None = None):
-    """Generate notification title based on type."""
+def get_notification_title(type_, data):
+    """Generate notification title based on type and data."""
     titles = {
         'ocr.completed': 'Pemrosesan OCR Selesai',
         'ocr.failed': 'Pemrosesan OCR Gagal',
@@ -36,8 +36,6 @@ def get_notification_title(type_: str, _data: dict | None = None):
         'system': 'Notifikasi Sistem',
     }
     return titles.get(type_, 'Notifikasi')
-
-
 
 def get_notification_message(type_, data):
     """Generate notification message based on type and data."""

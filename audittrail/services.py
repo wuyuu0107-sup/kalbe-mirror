@@ -7,7 +7,7 @@ from .models import ActivityLog
 def log_activity(*, user=None, event_type="", target=None, request=None, metadata=None):
     metadata = metadata or {}
 
-    user_model = get_user_model()
+    UserModel = get_user_model()
 
     # figure out username first
     username = ""
@@ -18,7 +18,7 @@ def log_activity(*, user=None, event_type="", target=None, request=None, metadat
         username = metadata["username"]
 
     # make sure user is the right model; if not, fall back to username-only
-    if user is not None and not isinstance(user, user_model):
+    if user is not None and not isinstance(user, UserModel):
         # keep the name, drop the FK
         if username and "username" not in metadata:
             metadata["username"] = username

@@ -15,6 +15,11 @@ from ocr.utils.normalization import (
 
 
 class OCRTests(TestCase):
+    def test_health_endpoint(self):
+        resp = self.client.get("/ocr/health/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("status", resp.json())
+
     def test_missing_file_returns_error(self):
         # view returns JSON with success False and an error message when pdf or API key missing
         resp = self.client.post("/ocr/", {})

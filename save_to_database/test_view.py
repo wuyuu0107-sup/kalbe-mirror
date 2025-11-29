@@ -17,6 +17,24 @@ class ViewsTestCase(TestCase):
         }
 
 
+class TestPageViewTests(ViewsTestCase):
+    """Test the test_page view."""
+    
+    def test_test_page_renders_successfully(self):
+        """Test page should render with 200 status."""
+        response = self.client.get(reverse('save_to_database:test_page'))
+        self.assertEqual(response.status_code, 200)
+    
+    def test_test_page_uses_correct_template(self):
+        """Test page should use test_page.html template."""
+        response = self.client.get(reverse('save_to_database:test_page'))
+        self.assertTemplateUsed(response, 'test_page.html')
+    
+    def test_test_page_contains_expected_content(self):
+        """Test page should contain expected content."""
+        response = self.client.get(reverse('save_to_database:test_page'))
+        self.assertContains(response, "CSV Conversion Test")
+
 
 class SaveConvertedCsvFunctionTests(ViewsTestCase):
     """Test the save_converted_csv utility function."""

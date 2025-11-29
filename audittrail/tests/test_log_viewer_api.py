@@ -12,13 +12,13 @@ from audittrail.models import ActivityLog
 class LogViewerAPITests(TestCase):
     def setUp(self):
         self.client = Client()
-        user = get_user_model()
+        User = get_user_model()
 
         # unique usernames so we don't collide
         self.viewer_username = f"viewer_{uuid4().hex[:6]}"
         self.other_username = f"user_{uuid4().hex[:6]}"
 
-        self.user = user.objects.create_user(
+        self.user = User.objects.create_user(
             username=self.viewer_username,
             email=f"{self.viewer_username}@example.com",
             password="pass123",

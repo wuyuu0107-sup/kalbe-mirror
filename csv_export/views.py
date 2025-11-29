@@ -15,7 +15,20 @@ def export_csv(request):
     - Strategy can be easily swapped for different export formats
     """
     try:
-        data = json.loads(request.body)
+        body = json.loads(request.body)
+        
+        # Support both old format (direct data) and new format (with filename)
+        if isinstance(body, dict) and 'data' in body:
+            data = body['data']
+            filename = body.get('filename', 'report')
+        else:
+            data = body
+            filename = 'report'
+        
+        # Remove file extension if present
+        if '.' in filename:
+            filename = filename.rsplit('.', 1)[0]
+            
     except json.JSONDecodeError as e:
         return JsonResponse({
             'error': 'Invalid JSON format',
@@ -28,7 +41,7 @@ def export_csv(request):
         }, status=400)
 
     response = HttpResponse(content_type="text/csv")
-    response['Content-Disposition'] = 'attachment; filename="report.csv"'
+    response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
 
     writer = csv.writer(response)
     

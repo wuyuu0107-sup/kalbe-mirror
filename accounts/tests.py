@@ -31,18 +31,23 @@ def extract_otp_from_mail(body: str) -> str:
         raise AssertionError("OTP not found in email body")
     return m.group(1)
 
-# Use an in-memory sqlite DB for these tests only,
-# and locmem email backend so mail.outbox is populated.
-TEST_OVERRIDES = {
-    "EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
-    "DEFAULT_FROM_EMAIL": "test@example.local",
-    "DATABASES": {
+
+TEST_OVERRIDES = dict(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="test@example.local",
+    DATABASES={
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": ":memory:",
         }
     },
-}
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "test-cache",
+        }
+    },
+)
 
 
 def get_auth_user_model():
@@ -56,9 +61,8 @@ def get_auth_user_model():
 class EmailOTPTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        # Create user in the SAME table your views use: authentication_user
-        auth_user = apps.get_model("authentication", "User")
-        auth_user.objects.create(
+        AuthUser = get_auth_user_model()
+        cls.user = AuthUser.objects.create(
             username="alice",
             email="alice@example.com",
             display_name="Alice",

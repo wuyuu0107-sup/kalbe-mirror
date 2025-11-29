@@ -47,6 +47,12 @@ class ViewsEdgeCasesTests(TestCase):
 
 class OCRViewsIntegrationTests(TestCase):
     
+    def test_get_request_renders_template(self):
+
+        response = self.client.get("/ocr/")
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "ocr.html")
     
     @patch('ocr.views.DocumentService')
     @patch('ocr.views.StorageService')
@@ -152,17 +158,13 @@ class OCRViewsIntegrationTests(TestCase):
                 mock_doc_service = Mock()
                 mock_doc_service.create_document_and_patient.return_value = (mock_doc, mock_pat)
                 mock_doc_cls.return_value = mock_doc_service
-
-               
-                self.client.post("/ocr/upload/", {"file": fake_pdf})
-
-                # Now the mock has been called
+                
+                response = self.client.post("/ocr/", {"pdf": fake_pdf})
+                
+                # Verify Supabase URL was used
                 call_args = mock_doc_service.create_document_and_patient.call_args
-                self.assertIsNotNone(call_args)  # sanity check
-
-                pdf_url_arg = call_args[0][1]   # 1st positional arg
+                pdf_url_arg = call_args[0][1]
                 self.assertEqual(pdf_url_arg, "http://supabase.co/test.pdf")
-
     
 @patch('ocr.views.os.getenv')
 def test_upload_falls_back_to_local_url(self, mock_getenv):

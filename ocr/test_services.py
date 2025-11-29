@@ -4,9 +4,6 @@ from ocr.services.document import DocumentService
 from ocr.services.gemini import GeminiService
 from ocr.services.storage import StorageService
 from annotation.models import Document, Patient
-from unittest import TestCase
-from unittest.mock import patch
-
 
 
 class DocumentServiceTests(TestCase):
@@ -61,18 +58,18 @@ class DocumentServiceTests(TestCase):
         self.assertEqual(pat.external_id, "OCR-ADHOC")
 
 
-
-
 class GeminiServiceTests(TestCase):
+    
     def setUp(self):
-        self.api_key = "fake-key"
-
-    @patch("ocr.services.gemini.genai") 
+        self.api_key = "test-api-key"
+    
+    @patch('ocr.services.gemini.genai')
     def test_service_initialization(self, mock_genai):
-        GeminiService(api_key=self.api_key)
+        service = GeminiService(self.api_key)
+        
         mock_genai.configure.assert_called_once_with(api_key=self.api_key)
         mock_genai.GenerativeModel.assert_called_once_with("gemini-2.5-flash")
-
+    
     @patch('ocr.services.gemini.genai')
     def test_extract_returns_parsed_data(self, mock_genai):
         mock_model = Mock()

@@ -192,17 +192,6 @@ class CSVFileListCreateView(generics.ListCreateAPIView):
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticatedAndVerified]
 
-    def create(self, request, *args, **kwargs):
-        # require a file under key 'file'
-        uploaded_file = request.FILES.get("file")
-        if not uploaded_file:
-            return Response({"detail": "Tidak ada berkas yang diberikan di bidang 'file'."}, status=status.HTTP_400_BAD_REQUEST)
-        name = os.path.splitext(uploaded_file.name)[0]
-        instance = CSV.objects.create(name=name, file=uploaded_file, source_json=None)
-        serializer = self.get_serializer(instance, context={"request": request})
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True, context={"request": request})
@@ -237,21 +226,6 @@ class CSVFileRetrieveDestroyView(generics.RetrieveDestroyAPIView):
             # Do not let Supabase deletion errors block record deletion
             pass
         super().perform_destroy(instance)
-
-
-class CSVFileDownloadView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticatedAndVerified]
-
-    def get(self, request, pk):
-        obj = get_object_or_404(CSV, pk=pk)
-        try:
-            file = obj.file.open("rb")
-        except FileNotFoundError:
-            raise Http404("File not found")
-
-        filename = os.path.basename(obj.file.name) if obj.file else "download.csv"
-        response = FileResponse(file, as_attachment=True, filename=filename)
-        return response
 
 
 @method_decorator(csrf_exempt, name='dispatch')

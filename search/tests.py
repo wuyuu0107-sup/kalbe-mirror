@@ -5,17 +5,12 @@ from typing import Optional
 
 from .services import SearchService, search_storage_files
 from .interfaces import SearchStrategy, StorageProvider
-<<<<<<< HEAD
-from .storage import SupabaseStorageProvider, SupabaseStorageError
-from typing import Optional
-=======
 from .storage import DatabaseCSVStorageProvider
 # TODO: Uncomment when these modules are created
 # from .commands import SearchCriteria, SimpleSearchCommand, FilteredSearchCommand
 # from .invoker import SearchCommandInvoker
 # from .models import SearchResult
 
->>>>>>> staging
 
 class MockStorageProvider(StorageProvider):
     """Mock storage provider for testing"""
@@ -131,28 +126,6 @@ class StorageSearchTests(TestCase):
 
         self.assertEqual(len(results), 0)
 
-<<<<<<< HEAD
-    def test_search_files_connection_error(self):
-        """Test handling of connection errors"""
-        class FailingStorageProvider(StorageProvider):
-            def list_files(self, bucket_name: str):
-                raise SupabaseStorageError("Connection error")
-                
-            def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
-                raise SupabaseStorageError("Connection error")
-                
-            def delete_file(self, bucket_name: str, file_path: str) -> bool:
-                raise SupabaseStorageError("Connection error")
-
-        storage = FailingStorageProvider()
-        service = SearchService(storage_provider=storage)
-
-        with self.assertRaises(Exception) as ctx:
-            service.search_files("test-bucket", "test")
-        self.assertIn("Connection error", str(ctx.exception))
-
-=======
->>>>>>> staging
     def test_search_files_with_extension_filter(self):
         """Test searching files with specific extension filter"""
         mock_files = [

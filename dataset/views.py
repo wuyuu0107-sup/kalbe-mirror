@@ -268,25 +268,13 @@ class CSVFileMoveView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
-        cleanup_orphaned_directory(orphaned_folder_path)
-
-        # Ensure target dir exists (use adjusted capitalization)
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', adjusted_target_dir) if adjusted_target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
-        os.makedirs(full_target_dir, exist_ok=True)
-
-        # Move file
-        old_path = obj.file.path
-        new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
-        try:
-            shutil.move(old_path, new_full_path)
-        except Exception as e:
-            return Response({"detail": f"Gagal memindahkan berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Update DB only if move succeeded
+        # We no longer perform local filesystem moves. Only update the stored path.
+        # Supabase (or external storage) is responsible for actual file data.
         obj.file.name = new_path
-        obj.save()
+        try:
+            obj.save()
+        except Exception as e:
+            return Response({"detail": f"Gagal memperbarui path berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         serializer = CSVFileSerializer(obj, context={'request': request})
         return Response(serializer.data)
 
@@ -333,34 +321,12 @@ class FolderMoveView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "Berkas dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_file_path)
-        cleanup_orphaned_directory(orphaned_folder_path)
-
-        # Ensure target dir exists (use adjusted capitalization)
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', adjusted_target_dir) if adjusted_target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
-        os.makedirs(full_target_dir, exist_ok=True)
-
+        # Only update DB paths; do not touch the filesystem.
         moved_ids = []
         for obj in files_to_move:
             path = obj.file.name
             relative_path = path[len(source_prefix):]
             new_path = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}/{relative_path}" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
-
-            # Move file
-            old_full_path = obj.file.path
-            new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
-
-            # Ensure subdirs
-            os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
-            try:
-                shutil.move(old_full_path, new_full_path)
-            except Exception as e:
-                # If move fails, skip this file and continue with others? Or fail the whole operation?
-                # For now, fail the whole operation to maintain consistency
-                return Response({"detail": f"Gagal memindahkan berkas {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Update DB only if move succeeded
             obj.file.name = new_path
             obj.save()
             moved_ids.append(obj.id)
@@ -453,24 +419,12 @@ class CSVFileRenameView(generics.GenericAPIView):
         orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
-        current_full_path = obj.file.path
-        dir_full_path = os.path.dirname(current_full_path)
-        new_full_path = os.path.join(dir_full_path, new_name)
-
-        try:
-            os.rename(current_full_path, new_full_path)
-        except FileNotFoundError:
-            return Response({"detail": "Berkas sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-        except OSError as e:
-            # Handle duplicate file errors at filesystem level
-            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        # Do not rename a local file; just update the DB path
         obj.file.name = new_path
-        obj.save()
+        try:
+            obj.save()
+        except Exception as e:
+            return Response({"detail": f"Gagal memperbarui nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         serializer = CSVFileSerializer(obj, context={'request': request})
         return Response(serializer.data)
 
@@ -527,31 +481,11 @@ class FolderRenameView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clean up orphaned directory if it exists in physical files only
-        cleanup_orphaned_directory(full_target_dir)
-
-        # Check if source directory exists
-        if not os.path.exists(full_source_dir):
-            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            os.rename(full_source_dir, full_target_dir)
-        except FileNotFoundError:
-            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-        except OSError as e:
-            # Handle duplicate directory errors at filesystem level
-            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "Berkas atau folder dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Use normalized source_prefix (parent-aware) when updating DB entries
+        # Do not manipulate the filesystem. Update DB entries to reflect folder rename.
         files_to_update = CSV.objects.filter(file__startswith=source_prefix)
         updated_ids = []
         for obj in files_to_update:
             old_path = obj.file.name
-            # Replace only the source_prefix with the new folder prefix that preserves parent
             new_path = old_path.replace(source_prefix, new_folder_prefix, 1)
             obj.file.name = new_path
             obj.save()

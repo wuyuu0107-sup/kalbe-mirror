@@ -316,6 +316,47 @@ class PredictCsvApiTests(TestCase):
         self.assertIn("detail", body)
         self.assertIn("crash in model", body["detail"])
 
+    @patch("predictions.views.PredictionResult.objects.bulk_create")
+    @patch("predictions.views.SubprocessModelRunner")
+    def test_no_rows_means_no_bulk_create(self, MockRunner, mock_bulk_create):
+        mock_runner = MockRunner.return_value
+        mock_runner.run.return_value = []  # no predictions
+
+        file_obj = io.BytesIO(self._dummy_csv_bytes())
+        file_obj.name = "patients.csv"
+
+        resp = self.client.post(
+            self.url,
+            data={"file": file_obj},
+            format="multipart",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = json.loads(resp.content)
+        self.assertEqual(body["rows"], [])
+
+        mock_bulk_create.assert_not_called()
+
+    @patch("predictions.views.PredictionResult.objects.bulk_create")
+    @patch("predictions.views.SubprocessModelRunner")
+    def test_runner_failure_does_not_save_anything(self, MockRunner, mock_bulk_create):
+        mock_runner = MockRunner.return_value
+        mock_runner.run.side_effect = Exception("crash in model")
+
+        file_obj = io.BytesIO(self._dummy_csv_bytes())
+        file_obj.name = "patients.csv"
+
+        resp = self.client.post(
+            self.url,
+            data={"file": file_obj},
+            format="multipart",
+        )
+
+        self.assertEqual(resp.status_code, 500)
+        body = json.loads(resp.content)
+        self.assertIn("detail", body)
+        self.assertIn("crash in model", body["detail"])
+
         # should never attempt to write to DB on failure
         mock_bulk_create.assert_not_called()
 

@@ -19,7 +19,35 @@ class SearchService:
         # Apply search strategy
         return self.search_strategy.search(files, search_term, extension)
 
-def search_storage_files(bucket_name: str, search_term: str, extension: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Convenience function for backwards compatibility with tests"""
+def search_storage_files(
+    bucket_name: str,
+    search_term: str,
+    extension: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Convenience function for backwards compatibility with tests.
+
+    Guarantees:
+    - Never returns None
+    - Never returns a non-list
+    - Never returns a list containing non-dict items
+    """
+
     search_service = SearchService()
-    return search_service.search_files(bucket_name, search_term, extension)
+    result = search_service.search_files(bucket_name, search_term, extension)
+
+    # Normalize None → []
+    if result is None:
+        return []
+
+    # Normalize non-list → []
+    if not isinstance(result, list):
+        return []
+
+    # Normalize lists containing invalid items
+    safe_list: List[Dict[str, Any]] = []
+    for item in result:
+        if isinstance(item, dict):
+            safe_list.append(item)
+
+    return safe_list
+

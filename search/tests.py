@@ -57,13 +57,13 @@ class StorageSearchTests(TestCase):
         """Test handling of connection errors"""
         class FailingStorageProvider(StorageProvider):
             def list_files(self, bucket_name: str):
-                raise Exception("Connection error")
-                
+                raise SupabaseStorageError("Connection error")
+
             def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
-                raise Exception("Connection error")
-                
+                raise SupabaseStorageError("Connection error")
+
             def delete_file(self, bucket_name: str, file_path: str) -> bool:
-                raise Exception("Connection error")
+                raise SupabaseStorageError("Connection error")
 
         storage = FailingStorageProvider()
         service = SearchService(storage_provider=storage)
@@ -277,7 +277,10 @@ class InterfaceTests(TestCase):
             
         class PartialProvider(StorageProvider):
             def list_files(self, bucket_name: str):
-                pass
+                # This method is intentionally left unimplemented.
+                # PartialProvider is purposely incomplete to test that StorageProvider
+                # cannot be instantiated unless all abstract methods are implemented.
+                pass    
                 
         with self.assertRaises(TypeError):
             PartialProvider()

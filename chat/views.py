@@ -79,45 +79,95 @@ def _first_words(s: str, n: int = 6) -> str:
     return (t[:116] + "…") if len(t) > 117 else t
 
 
+import json
+from typing import Any, Dict
+
+
+def _flatten_dict(d: Any) -> Dict[str, Any]:
+    """Flatten list values to their first element."""
+    if not isinstance(d, dict):
+        return {}
+
+    out: Dict[str, Any] = {}
+    for k, v in d.items():
+        if isinstance(v, list) and v:
+            out[k] = v[0]
+        else:
+            out[k] = v
+    return out
+
+
+def _from_drf_data(request) -> Dict[str, Any]:
+    data = getattr(request, "data", None)
+    if not data:
+        return {}
+    try:
+        return _flatten_dict(dict(data))
+    except Exception:
+        return {}
+
+
+def _from_json_body(request) -> Dict[str, Any]:
+    try:
+        body = getattr(request, "body", b"")
+        raw = body.decode() if body else ""
+    except Exception:
+        return {}
+
+    if not raw:
+        return {}
+
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    return _flatten_dict(data)
+
+
+def _from_mapping_attr(request, attr_name: str) -> Dict[str, Any]:
+    if not hasattr(request, attr_name):
+        return {}
+
+    mapping = getattr(request, attr_name)
+    if not mapping:
+        return {}
+
+    # Try .dict() first (QueryDict), then plain dict()
+    for conv in ("dict",):
+        try:
+            data = getattr(mapping, conv)()
+            return _flatten_dict(data)
+        except Exception:
+            continue
+
+    try:
+        return _flatten_dict(dict(mapping))
+    except Exception:
+        return {}
+
+
 def _payload(request) -> dict:
     """
     Be liberal in what we accept: JSON body, DRF-parsed data, form, or query.
     Also flatten list values (e.g. QueryDict or DRF parsers) to first element.
     """
-    def _flatten(d: dict) -> dict:
-        out = {}
-        for k, v in (d or {}).items():
-            if isinstance(v, list) and v:
-                out[k] = v[0]
-            else:
-                out[k] = v
-        return out
+    loaders = (
+        _from_drf_data,
+        _from_json_body,
+        lambda r: _from_mapping_attr(r, "POST"),
+        lambda r: _from_mapping_attr(r, "GET"),
+    )
 
-    # DRF's request.data first
-    if getattr(request, "data", None):
-        try:
-            return _flatten(dict(request.data))
-        except Exception:
-            pass
-
-    # Raw JSON body
-    try:
-        raw = request.body.decode() if request.body else ""
-        if raw:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                return _flatten(data)
-    except Exception:
-        pass
-
-    # Form / query fallbacks
-    if hasattr(request, "POST") and request.POST:
-        return _flatten(request.POST.dict())
-    if hasattr(request, "GET") and request.GET:
-        return _flatten(request.GET.dict())
+    for loader in loaders:
+        data = loader(request)
+        if data:
+            return data
 
     return {}
-
 
 
 @api_view(["GET", "POST"])

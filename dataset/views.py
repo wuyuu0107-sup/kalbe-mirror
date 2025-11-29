@@ -395,7 +395,7 @@ class CSVFileRenameView(generics.GenericAPIView):
             stripped_dir = dir_path.rstrip('/\\')
             new_path = f"{stripped_dir}/{new_name}"
         else:
-            new_path = new_name
+            new_path = f"datasets/csvs/{new_name}"
 
         # Don't rename if it's the same name
         if current_path == new_path:

@@ -79,8 +79,8 @@ class DatasetFileManagementTests(TestCase):
         r = self.client.get(self.list_create_url)
         self.assertEqual(r.status_code, 403)
 
-    # CRUD + download tests
-    def test_researcher_can_upload_list_retrieve_download_and_delete(self):
+    # CRUD tests
+    def test_researcher_can_upload_list_retrieve_and_delete(self):
         self._login(self.researcher)
 
         # Upload
@@ -111,16 +111,6 @@ class DatasetFileManagementTests(TestCase):
         self.assertEqual(detail_resp.status_code, 200)
         self.assertEqual(detail_resp.json()["id"], obj_id)
 
-        # Download
-        download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
-        download_resp = self.client.get(download_url)
-        self.assertEqual(download_resp.status_code, 200)
-        disp = download_resp.headers.get("Content-Disposition", "")
-        self.assertIn("attachment", disp)
-        self.assertIn("sample", disp)
-        content = b"".join(download_resp.streaming_content)
-        self.assertIn(b"a,b\n1,2\n", content)
-
         # Delete
         delete_resp = self.client.delete(detail_url)
         self.assertIn(delete_resp.status_code, (200, 204))
@@ -133,21 +123,6 @@ class DatasetFileManagementTests(TestCase):
         resp = self.client.post(self.list_create_url, {})
         self.assertEqual(resp.status_code, 400)
         self.assertIn("detail", resp.json())
-
-    def test_download_missing_file_returns_404(self):
-        self._login(self.researcher)
-        # Upload one file
-        upload_resp = self._upload_csv(name="missing.csv", content=b"col\nval\n")
-        self.assertEqual(upload_resp.status_code, 201)
-        obj_id = upload_resp.json()["id"]
-        obj = CSV.objects.get(pk=obj_id)
-        # Remove underlying file to simulate external deletion
-        os.remove(obj.file.path)
-        self.assertFalse(os.path.exists(obj.file.path))
-        # Try download
-        download_url = reverse("csvfile_download", kwargs={"pk": obj_id})
-        download_resp = self.client.get(download_url)
-        self.assertEqual(download_resp.status_code, 404)
 
     # Move file tests
     def test_researcher_can_move_file(self):

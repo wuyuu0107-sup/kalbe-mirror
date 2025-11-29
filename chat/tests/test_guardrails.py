@@ -134,13 +134,20 @@ class EnsureSelectOnlyTests(TestCase):
             sqlgen._ensure_select_only(bad)
 
     def test_salvages_select_from_multiline_output(self):
-        mixed = """Here is your query:
-        SELECT * FROM patients;
-        Thanks!
+        mixed = """
+        Here's your query:
+        SELECT id, name
+        FROM users
+        WHERE is_active = TRUE;
+        
+        -- Extra explanation:
+        This query returns all active users;
         """
-        out = sqlgen._ensure_select_only(mixed)
-        self.assertEqual(out, "SELECT * FROM patients;")
 
+        with self.assertRaises(ValueError) as ctx:
+            sqlgen._ensure_select_only(mixed)
+
+        self.assertEqual(str(ctx.exception), "Multiple SQL statements not allowed.")
 # chat/tests/test_guardrails_full.py
 
 from django.test import SimpleTestCase, override_settings

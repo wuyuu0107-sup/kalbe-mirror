@@ -1,44 +1,53 @@
-import os
+
 from typing import List, Dict, Any, Optional
-from supabase import create_client, Client
 from .interfaces import StorageProvider
+from save_to_database.models import CSV
+import os
+import requests
 
-class SupabaseStorageError(RuntimeError):
-    """Wraps errors coming from Supabase storage operations."""
-    pass
-
-class SupabaseStorageProvider(StorageProvider):
-    """Supabase implementation of storage provider"""
-    
-    def __init__(self):
-        """Initialize Supabase client"""
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        if not url or not key:
-            raise ValueError("Supabase configuration missing")
-        self.client = create_client(url, key)
+class DatabaseCSVStorageProvider(StorageProvider):
+    """Storage provider that lists CSVs from the database."""
 
     def list_files(self, bucket_name: str) -> List[Dict[str, Any]]:
-        """List all files in a Supabase storage bucket"""
-        try:
-            bucket = self.client.storage.from_(bucket_name)
-            return bucket.list()
-        except Exception as e:
-            raise SupabaseStorageError(f"Error listing files: {e}") from e
+        """
+        List all CSV files in the database. Ignores bucket_name (for compatibility).
+        Returns a list of dicts with at least 'name' and 'id'.
+        """
+        files = CSV.objects.all()
+        return [
+            {
+                'name': os.path.basename(csv.file.name) if csv.file else None,
+                'id': csv.id,
+                'file_path': csv.file.name,
+                'created_at': csv.created_at,
+                'record_count': csv.record_count,
+            }
+            for csv in files
+        ]
 
     def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
-        """Get file content from Supabase storage"""
+        """
+        Get file content from the Supabase public URL (uploaded_url).
+        """
         try:
-            bucket = self.client.storage.from_(bucket_name)
-            return bucket.download(file_path)
+            csv = CSV.objects.filter(file=file_path).first()
+            if csv and csv.uploaded_url:
+                response = requests.get(csv.uploaded_url)
+                response.raise_for_status()
+                return response.content
+            return None
         except Exception as e:
-            raise SupabaseStorageError(f"Error downloading file: {e}") from e
+            raise Exception(f"Error reading CSV file from Supabase URL: {str(e)}")
 
     def delete_file(self, bucket_name: str, file_path: str) -> bool:
-        """Delete file from Supabase storage"""
+        """
+        Delete a CSV file from the database and storage.
+        """
         try:
-            bucket = self.client.storage.from_(bucket_name)
-            bucket.remove([file_path])
-            return True  # If no exception was raised, deletion was successful
+            csv = CSV.objects.filter(file=file_path).first()
+            if csv:
+                csv.delete()
+                return True
+            return False
         except Exception as e:
-            raise SupabaseStorageError(f"Error deleting file: {e}") from e
+            raise Exception(f"Error deleting CSV file: {str(e)}")

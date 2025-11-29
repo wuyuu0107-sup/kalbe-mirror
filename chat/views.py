@@ -308,6 +308,21 @@ def ask(request, sid):
     )
     q = str(q_raw).strip()
 
+    MAX_QUESTION_LEN = 4000
+    if len(q) > MAX_QUESTION_LEN:
+        log.warning(
+            "Rejecting long question for session %s (user %s): len=%s > MAX_QUESTION_LEN=%s",
+            sess.id,
+            user_id,
+            len(q),
+            MAX_QUESTION_LEN,
+        )
+        resp = Response(
+            {"error": f"Message too long (max {MAX_QUESTION_LEN} characters)"},
+            status=400,
+        )
+        _attach_demo_cookie_if_needed(request, resp, user_id)
+        return resp
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)

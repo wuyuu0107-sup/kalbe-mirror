@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional
 from .interfaces import StorageProvider, SearchStrategy
-from .storage import SupabaseStorageProvider
+from .storage import DatabaseCSVStorageProvider
 from .strategies import NameBasedSearchStrategy
 
 class SearchService:
@@ -8,7 +8,7 @@ class SearchService:
     
     def __init__(self, storage_provider: StorageProvider = None, search_strategy: SearchStrategy = None):
         """Initialize with optional storage provider and search strategy"""
-        self.storage_provider = storage_provider or SupabaseStorageProvider()
+        self.storage_provider = storage_provider or DatabaseCSVStorageProvider()
         self.search_strategy = search_strategy or NameBasedSearchStrategy()
 
     def search_files(self, bucket_name: str, search_term: str, extension: Optional[str] = None) -> List[Dict[str, Any]]:

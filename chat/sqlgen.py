@@ -87,6 +87,11 @@ def _schema_hint_from_allowed(allowed: Dict[str, Iterable[str]]) -> str:
     return "; ".join(parts)
 
 def _ensure_select_only(sql: str) -> str:
+    sql = sql.strip() #
+    if ";" in sql:
+        # Allow only a *single* trailing semicolon (OWASP A03)
+        if sql.count(";") > 1 or not sql.endswith(";"):
+            raise ValueError("Multiple SQL statements not allowed.")
     if DML_DDL_BAD.search(sql):
         raise ValueError("Forbidden SQL detected (DML/DDL).")
     if not SAFE_SELECT.match(sql.strip()):

@@ -195,37 +195,29 @@ class PredictCsvApiTests(TestCase):
 
     @patch("predictions.views.PredictionResult.objects.bulk_create")
     @patch("predictions.views.SubprocessModelRunner")
-    def test_upload_csv_and_get_json_rows(self, mock_runner):
-        mock_runner = mock_runner.return_value
-        mock_runner.run.return_value = [
+    def test_upload_csv_and_get_json_rows(self, mock_runner, mock_bulk_create):
+        rows = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
         ]
-        mock_runner = MockRunner.return_value
+
+        mock_runner = mock_runner.return_value
         mock_runner.run.return_value = rows
 
         file_obj = io.BytesIO(self._dummy_csv_bytes())
         file_obj.name = "patients.csv"
 
-        # Act
-        resp = self.client.post(
-            self.url,
-            data={"file": file_obj},
-            format="multipart",
-        )
+        resp = self.client.post(self.url, data={"file": file_obj}, format="multipart")
 
-        # Assert: HTTP response still OK and rows returned
         self.assertEqual(resp.status_code, 200)
         body = json.loads(resp.content)
         self.assertIn("rows", body)
         self.assertEqual(len(body["rows"]), 2)
 
-        # Assert: bulk_create called once with correct number of objects
         mock_bulk_create.assert_called_once()
         created_objs = mock_bulk_create.call_args[0][0]
         self.assertEqual(len(created_objs), 2)
 
-        # Check that first object has the correct mapped fields
         first = created_objs[0]
         self.assertEqual(first.sin, "14515")
         self.assertEqual(first.subject_initials, "YSSA")

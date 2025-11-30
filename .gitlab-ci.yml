@@ -2,6 +2,7 @@ image: python:3.12
 
 stages:
   - test
+  - seed
   - deploy
 
 variables:
@@ -46,6 +47,22 @@ test:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
+
+seed:production:
+  stage: seed
+  image: python:3.12
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    - export DATABASE_URL=${DATABASE_URL}
+    - python manage.py migrate --noinput
+    - python manage.py loaddata fixtures/prod_patients.json
+    - python manage.py shell -c "from patients.models import Patient; print(f'✅ Loaded {Patient.objects.count()} patients')"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  when: manual
+  environment:
+    name: production
 
 deploy:
   stage: deploy

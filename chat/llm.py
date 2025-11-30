@@ -95,7 +95,7 @@ def _get_model():
 # ===== Regex & JSON helpers =====
 
 _CODEFENCE = re.compile(r"^\s*```(?:json)?\s*$|^\s*```\s*$", re.I | re.M)
-_JSON_SLOP = re.compile(r"\{[\s\S]*\}", re.S)
+_JSON_SLOP = re.compile(r"\{.*\}", re.S)
 _TRAILING_COMMAS = re.compile(r",\s*([}\]])")
 # Replace any unescaped single quote with double quote
 _SINGLE_QUOTES = re.compile(r"(?<!\\)'")
@@ -130,42 +130,59 @@ def _extract_text(resp) -> str:
         * resp.text
         * plain string resp
     """
-    # Direct string
     if isinstance(resp, str):
         return resp.strip()
 
-    # Try candidates/parts structure
+    txt = _extract_from_candidates(resp)
+    if txt:
+        return txt
+
+    return _extract_from_text_attr(resp)
+
+
+# ----------------------------------------------------------------------
+# Helpers (each very low complexity)
+# ----------------------------------------------------------------------
+
+def _extract_from_candidates(resp) -> str:
+    """Extract from resp.candidates[*].content.parts[*].text if present."""
     try:
         candidates = getattr(resp, "candidates", None) or []
-        for c in candidates:
-            content = getattr(c, "content", None)
-            parts = getattr(content, "parts", None) or []
-            for p in parts:
-                txt = getattr(p, "text", "") or ""
-                if not isinstance(txt, str):
-                    try:
-                        txt = str(txt)
-                    except Exception:
-                        txt = ""
-                txt = txt.strip()
-                if txt:
-                    return txt
     except Exception:
-        # Any structural weirdness falls through to text fallback.
-        pass
-
-    # Fallback: resp.text
-    try:
-        t = getattr(resp, "text", "") or ""
-        if not isinstance(t, str):
-            try:
-                t = str(t)
-            except Exception:
-                return ""
-        return t.strip()
-    except Exception:  # pragma: no cover - ultra defensive
         return ""
 
+    for c in candidates:
+        content = getattr(c, "content", None)
+        parts = getattr(content, "parts", None) or []
+
+        for p in parts:
+            raw = getattr(p, "text", "") or ""
+            cleaned = _safe_string(raw)
+            if cleaned:
+                return cleaned
+
+    return ""
+
+
+def _extract_from_text_attr(resp) -> str:
+    """Fallback: extract resp.text safely."""
+    try:
+        raw = getattr(resp, "text", "") or ""
+    except Exception:
+        return ""
+
+    return _safe_string(raw)
+
+
+def _safe_string(val) -> str:
+    """Convert any object to clean string, safely."""
+    if isinstance(val, str):
+        return val.strip()
+
+    try:
+        return str(val).strip()
+    except Exception:
+        return ""
 
 def _is_retryable_error(exc: Exception) -> bool:
     s = str(exc).lower()
@@ -338,6 +355,41 @@ class IntentExtractor:
 
         return {"intent": str(obj["intent"]), "args": obj["args"]}
 
+    # ------------- NEW HELPER TO LOWER COMPLEXITY -----------------
+
+    def _run_free_text_call(self, call_fn):
+        """
+        Wrap caller.run for free_text(), preserving the special test behavior:
+        - propagate GeminiUnavailable with log
+        - handle mocked caller.run that raises TypeError about extra arg
+        """
+        try:
+            return self.caller.run(call_fn)
+        except GeminiUnavailable:
+            logger.warning("gemini_app_timeout_text")
+            raise
+        except TypeError as e:
+            msg = str(e)
+            if "takes 0 positional arguments but 1 was given" not in msg:
+                # Any other TypeError is turned into GeminiError
+                raise GeminiError(str(e))
+
+            # Test-compat path: mocked run has side_effect=_boom (0-arg)
+            try:
+                resp = self.caller.run()
+            except GeminiUnavailable:
+                logger.warning("gemini_app_timeout_text")
+                raise
+            except Exception as e2:
+                raise GeminiError(str(e2)) from e
+            else:
+                return resp
+        except Exception as e:
+            # translate any other failure
+            raise GeminiError(str(e))
+
+    # --------------------------------------------------------------
+
     def free_text(self, prompt: str) -> str:
         """
         Used in tests: must surface GeminiUnavailable when caller.run side_effect
@@ -350,42 +402,17 @@ class IntentExtractor:
                 timeout_s=DEFAULT_DEADLINE_S,
             )
 
-        try:
-            # normal path: ResilientCaller.run(fn)
-            resp = self.caller.run(_call)
-        except GeminiUnavailable:
-            logger.warning("gemini_app_timeout_text")
-            raise
-        except TypeError as e:
-            # Test-compat path:
-            # some tests mock caller.run with side_effect=_boom (0 args),
-            # so our call run(_call) triggers "takes 0 positional args but 1 given".
-            msg = str(e)
-            if "takes 0 positional arguments but 1 was given" in msg:
-                try:
-                    # call mocked run() with no args so side_effect runs
-                    resp = self.caller.run()
-                except GeminiUnavailable:
-                    logger.warning("gemini_app_timeout_text")
-                    raise
-                except Exception as e2:
-                    raise GeminiError(str(e2)) from e
-            else:
-                raise GeminiError(str(e))
-        except Exception as e:
-            # translate any other failure
-            raise GeminiError(str(e))
+        # All the weird caller.run / TypeError behavior is now handled here
+        resp = self._run_free_text_call(_call)
 
-        fb = getattr(resp, "prompt_feedback", None)
-        if fb:
-            br = getattr(fb, "block_reason", None)
-            if isinstance(br, str) and br:
-                raise GeminiBlocked(f"blocked: {br}")
+        # Reuse existing block logic for consistency
+        self._check_block(resp)
 
         text = _extract_text(resp).strip()
         if not text:
             raise GeminiError("empty_response")
         return text
+
 
 
 # ===== Public API =====
@@ -404,6 +431,74 @@ def get_intent_json(nl_question: str, *, request_id: str | None = None) -> str:
     return json.dumps(obj, separators=(",", ":"))
 
 
+def _maybe_delegate_to_sqlgen(prompt: str, self_func) -> tuple[bool, str]:
+    """
+    If tests have patched chat.sqlgen.ask_gemini_text, delegate to it
+    to preserve backward compatibility.
+    """
+    try:
+        from . import sqlgen as sqlgen_module  # local import on purpose
+        other = getattr(sqlgen_module, "ask_gemini_text", None)
+        if other is not None and other is not self_func:
+            return True, other(prompt)
+    except Exception:
+        # If anything goes wrong, fall back to normal behavior.
+        pass
+    return False, ""
+
+
+def _ensure_not_blocked(resp) -> None:
+    """Raise GeminiBlocked if the response indicates a safety block."""
+    fb = getattr(resp, "prompt_feedback", None)
+    if not fb:
+        return
+    br = getattr(fb, "block_reason", None)
+    if isinstance(br, str) and br:
+        raise GeminiBlocked(f"blocked: {br}")
+
+
+def _normalize_text(text) -> str:
+    """Ensure we always return a stripped string (or '')."""
+    if not isinstance(text, str):
+        try:
+            text = str(text)
+        except Exception:
+            return ""
+    return text.strip()
+
+
+def _run_gemini_once(model, prompt: str):
+    """Single call to Gemini with timeout, retries and block check."""
+    def _call():
+        return model.generate_content(
+            [str(prompt or "").strip()],
+            generation_config={"temperature": 0, "max_output_tokens": 256},
+            request_options={"timeout": DEFAULT_DEADLINE_S},
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(lambda: _with_retries(_call))
+        try:
+            resp = fut.result(timeout=APP_TIMEOUT_S)
+        except FUTimeout:
+            logger.warning("gemini_app_timeout_text")
+            raise GeminiUnavailable("app_timeout")
+        except Exception as e:
+            raise GeminiError(str(e))
+
+    _ensure_not_blocked(resp)
+    text = _extract_text(resp)
+    return _normalize_text(text)
+
+
+def _sleep_before_retry():
+    try:
+        time.sleep(0.15)
+    except Exception:
+        # best-effort only
+        pass
+
+
 def ask_gemini_text(prompt: str, *, retry_on_empty: bool = True) -> str:
     """
     Minimal free-text answerer (no JSON).
@@ -416,60 +511,17 @@ def ask_gemini_text(prompt: str, *, retry_on_empty: bool = True) -> str:
     delegate to it so existing tests continue to work.
     """
     # --- Backward-compat delegation for tests ---
-    try:
-        from . import sqlgen as sqlgen_module
-        other = getattr(sqlgen_module, "ask_gemini_text", None)
-        # If sqlgen.ask_gemini_text exists and is not *this* function,
-        # assume tests patched it and delegate.
-        if other is not None and other is not ask_gemini_text:
-            return other(prompt)
-    except Exception:
-        # If anything goes wrong, fall back to normal behavior below.
-        pass
+    delegated, result = _maybe_delegate_to_sqlgen(prompt, self_func=ask_gemini_text)
+    if delegated:
+        return result
 
     # --- Normal behavior using Gemini SDK ---
     model = _get_model()
-
-    def _call():
-        return model.generate_content(
-            [str(prompt or "").strip()],
-            generation_config={"temperature": 0, "max_output_tokens": 256},
-            request_options={"timeout": DEFAULT_DEADLINE_S},
-        )
-
-    def _once() -> str:
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(lambda: _with_retries(_call))
-            try:
-                resp = fut.result(timeout=APP_TIMEOUT_S)
-            except FUTimeout:
-                logger.warning("gemini_app_timeout_text")
-                raise GeminiUnavailable("app_timeout")
-            except Exception as e:
-                raise GeminiError(str(e))
-
-        fb = getattr(resp, "prompt_feedback", None)
-        if fb:
-            br = getattr(fb, "block_reason", None)
-            if isinstance(br, str) and br:
-                raise GeminiBlocked(f"blocked: {br}")
-
-        text = _extract_text(resp)
-        if not isinstance(text, str):
-            try:
-                text = str(text)
-            except Exception:
-                text = ""
-        return text.strip()
-
-    text = _once()
+    text = _run_gemini_once(model, prompt)
 
     if not text and retry_on_empty:
-        try:
-            time.sleep(0.15)
-        except Exception:
-            pass
-        text = _once()
+        _sleep_before_retry()
+        text = _run_gemini_once(model, prompt)
 
     if not text:
         raise GeminiError("empty_response")

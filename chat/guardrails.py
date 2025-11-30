@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Callable, Any
+from typing import Callable, Any, Dict, List
 
 from django.conf import settings
 
@@ -16,6 +16,8 @@ except Exception:  # pragma: no cover - optional dependency path
 
 # Import Gemini error types from your llm.py
 from .llm import GeminiError, GeminiBlocked
+
+ERROR_MSG = "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
 
 log = logging.getLogger(__name__)
 
@@ -121,53 +123,55 @@ def _is_out_of_scope(msg: str) -> bool:
 def _extract_text(result: Any) -> str:
     """
     Normalize NeMo Guardrails output into a plain string.
-
     Rules (aligned with tests):
     - If result has a clear assistant content -> return it.
     - If result shape is unknown / no sanitized text -> return "" so we fallback.
     """
-
     if result is None:
         return ""
 
-    # Direct string
     if isinstance(result, str):
         return result.strip()
 
-    # Dict: look for known fields only
     if isinstance(result, dict):
-        # 1) Direct "content"
-        if "content" in result:
-            return (result.get("content") or "").strip()
+        return _extract_text_from_dict(result)
 
-        # 2) OpenAI-style messages: [{"role": "assistant", "content": "..."}]
-        messages = result.get("messages")
-        if isinstance(messages, list):
-            for msg in reversed(messages):
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("role") == "assistant"
-                    and msg.get("content")
-                ):
-                    return (msg.get("content") or "").strip()
-
-        # Any other dict shape = no sanitized response
-        return ""
-
-    # List of message dicts (just in case)
     if isinstance(result, list):
-        for msg in reversed(result):
-            if (
-                isinstance(msg, dict)
-                and msg.get("role") == "assistant"
-                and msg.get("content")
-            ):
-                return (msg.get("content") or "").strip()
-        # If no assistant messages found, fall through to final "" below.
+        return _extract_text_from_messages(result)
 
-    # Fallback for other types, or list with no assistant content:
+    # Fallback for other types
     return ""
 
+
+def _extract_text_from_dict(data: Dict[str, Any]) -> str:
+    """Handle dict-shaped results."""
+    # 1) Direct "content"
+    if "content" in data:
+        return (data.get("content") or "").strip()
+
+    # 2) OpenAI-style messages: {"messages": [{"role": "assistant", "content": "..."}]}
+    messages = data.get("messages")
+    if isinstance(messages, list):
+        return _extract_text_from_messages(messages)
+
+    # Any other dict shape = no sanitized response
+    return ""
+
+
+def _extract_text_from_messages(messages: List[Any]) -> str:
+    """Find the last assistant message with non-empty content."""
+    for msg in reversed(messages):
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("role") != "assistant":
+            continue
+
+        content = msg.get("content")
+        if content:
+            return (content or "").strip()
+
+    # If no assistant messages found
+    return ""
 
 # ---------------- Safe backend wrapper ----------------
 
@@ -185,7 +189,7 @@ def _safe_backend_call(fallback_fn: Callable[[str], str], user_message: str) -> 
 
     except GeminiBlocked as e:
         log.info("Gemini blocked prompt %r: %s", user_message, e)
-        return "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+        return ERROR_MSG
 
     except GeminiError as e:
         log.warning("Gemini could not answer %r: %s", user_message, e)
@@ -234,7 +238,7 @@ def run_with_guardrails(user_message: str, fallback_fn: Callable[[str], str]) ->
 
     # 1) Hard Python guardrail for obvious out-of-scope
     if _is_out_of_scope(text):
-        return "Mohon tanyakan pertanyaan yang relevan dengan data klinis."
+        return ERROR_MSG
 
     # 2) Get (possibly patched) rails instance.
     rails = _get_rails()
@@ -257,7 +261,7 @@ def run_with_guardrails(user_message: str, fallback_fn: Callable[[str], str]) ->
     log.debug("Normalized NeMo Guardrails text: %r", gr_text)
 
     # Explicit out-of-scope reply from NeMo config.
-    if gr_text == "Mohon tanyakan pertanyaan yang relevan dengan data klinis.":
+    if gr_text == ERROR_MSG:
         return gr_text
 
     # Marker or blank/no sanitized -> let backend answer.

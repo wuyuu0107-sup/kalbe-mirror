@@ -1,6 +1,7 @@
 # accounts/tests.py
 import json
 import re
+from unittest.mock import patch
 
 from django.test import (
     TestCase,
@@ -341,14 +342,31 @@ class CacheStoreStubTests(TestCase):
     def setUp(self):
         cache.clear()
 
-    def test_cache_store_stub(self):
-        # cukup panggil semua fungsi sekali
+    def test_set_rate_returns_false_once_limit_exceeded(self):
+        email = "ratetest@example.com"
+        # limit=2 supaya cepat kena blok
+        self.assertTrue(cs.set_rate(email, window=15, limit=2))
+        self.assertTrue(cs.set_rate(email, window=15, limit=2))
+        self.assertFalse(cs.set_rate(email, window=15, limit=2))
+        self.assertFalse(cs.set_rate(email, window=15, limit=2))
+
+    @patch("accounts.services.cache_store.time.time", return_value=1234567890)
+    def test_store_and_get_otp_round_trip(self, _mocked_time):
         email = "storetest@example.com"
-        cs.store_otp(email, "123456", ttl=10)
-        _ = cs.get_otp(email)
+        cs.store_otp(email, "654321", ttl=20)
+        cached = cache.get("pr_otp:storetest@example.com")
+        self.assertEqual(cached, {"otp": "654321", "ts": 1234567890})
+        self.assertEqual(cs.get_otp(email), "654321")
+
+    def test_get_otp_missing_returns_none(self):
+        self.assertIsNone(cs.get_otp("missing@example.com"))
+
+    def test_delete_otp_removes_cache_entry(self):
+        email = "delete@example.com"
+        cs.store_otp(email, "000000", ttl=5)
+        self.assertIsNotNone(cache.get("pr_otp:delete@example.com"))
         cs.delete_otp(email)
-        # kalau sampai sini tanpa exception → ok
-        self.assertTrue(True)
+        self.assertIsNone(cache.get("pr_otp:delete@example.com"))
 
 
 # ============================================================

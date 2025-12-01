@@ -4,7 +4,6 @@ from django.core.validators import MinLengthValidator
 from django.utils import timezone
 from datetime import timedelta
 
-
 class User(models.Model):
     user_id = models.UUIDField(
         primary_key=True,

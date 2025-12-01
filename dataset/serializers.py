@@ -21,8 +21,9 @@ class CSVFileSerializer(serializers.ModelSerializer):
             "size",
             "directory",
             "uploaded_at",
+            "uploaded_url",
         ]
-        read_only_fields = ["file_url", "filename", "size", "directory", "uploaded_at", "id"]
+        read_only_fields = ["file_url", "filename", "size", "directory", "uploaded_at", "uploaded_url", "id"]
 
     def get_file_path(self, obj):
         # Return the file field as file_path for compatibility

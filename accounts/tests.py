@@ -31,16 +31,26 @@ def extract_otp_from_mail(body: str) -> str:
         raise AssertionError("OTP not found in email body")
     return m.group(1)
 
+<<<<<<< HEAD
 
 TEST_OVERRIDES = dict(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     DEFAULT_FROM_EMAIL="test@example.local",
     DATABASES={
+=======
+# Use an in-memory sqlite DB for these tests only,
+# and locmem email backend so mail.outbox is populated.
+TEST_OVERRIDES = {
+    "EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
+    "DEFAULT_FROM_EMAIL": "test@example.local",
+    "DATABASES": {
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": ":memory:",
         }
     },
+<<<<<<< HEAD
     CACHES={
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -48,6 +58,9 @@ TEST_OVERRIDES = dict(
         }
     },
 )
+=======
+}
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
 
 
 def get_auth_user_model():
@@ -61,8 +74,14 @@ def get_auth_user_model():
 class EmailOTPTests(TestCase):
     @classmethod
     def setUpTestData(cls):
+<<<<<<< HEAD
         AuthUser = get_auth_user_model()
         cls.user = AuthUser.objects.create(
+=======
+        # Create user in the SAME table your views use: authentication_user
+        auth_user = apps.get_model("authentication", "User")
+        auth_user.objects.create(
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
             username="alice",
             email="alice@example.com",
             display_name="Alice",
@@ -118,6 +137,82 @@ class EmailOTPTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("error", res.json())
 
+<<<<<<< HEAD
+=======
+    def test_request_missing_email_returns_error(self):
+        res = self.c.post(
+            reverse("password-reset-otp-request"),
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json().get("error"), "email is required")
+
+    def test_request_rate_limit_blocks_on_sixth_attempt(self):
+        payload = json.dumps({"email": "alice@example.com"})
+        for _ in range(5):
+            res = self.c.post(
+                reverse("password-reset-otp-request"),
+                data=payload,
+                content_type="application/json",
+            )
+            self.assertEqual(res.status_code, 200)
+
+        res = self.c.post(
+            reverse("password-reset-otp-request"),
+            data=payload,
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 429)
+        self.assertEqual(res.json().get("error"), "too_many_requests")
+
+    def test_confirm_invalid_email(self):
+        res = self.c.post(
+            reverse("password-reset-otp-confirm"),
+            data=json.dumps(
+                {"email": "ghost@example.com", "otp": "123456", "password": "Abcdef12"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json().get("error"), "invalid email")
+
+    def test_confirm_invalid_otp(self):
+        cs.store_otp("alice@example.com", "999999", ttl=600)
+        res = self.c.post(
+            reverse("password-reset-otp-confirm"),
+            data=json.dumps(
+                {"email": "alice@example.com", "otp": "000000", "password": "StrongPass1"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json().get("error"), "invalid or expired otp")
+
+    def test_confirm_success_updates_password_and_clears_cache(self):
+        res = self.c.post(
+            reverse("password-reset-otp-request"),
+            data=json.dumps({"email": "alice@example.com"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        otp = extract_otp_from_mail(mail.outbox[-1].body)
+
+        res = self.c.post(
+            reverse("password-reset-otp-confirm"),
+            data=json.dumps(
+                {"email": "alice@example.com", "otp": otp, "password": "StrongPass1"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json().get("status"), "success")
+
+        user = get_auth_user_model().objects.get(email="alice@example.com")
+        self.assertTrue(user.password.startswith("pbkdf2_"))
+        self.assertIsNone(cs.get_otp("alice@example.com"))
+
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
 
 # ============================================================
 # 2. STUB untuk views.py (basic password reset)
@@ -168,6 +263,101 @@ class BasicPasswordResetViewsStubTests(TestCase):
         self.assertIn(resp.status_code, (200, 400))
 
 
+<<<<<<< HEAD
+=======
+@override_settings(**TEST_OVERRIDES)
+class PasswordResetViewsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        AuthUser = get_auth_user_model()
+        cls.user = AuthUser.objects.create(
+            username="bob",
+            email="bob@example.com",
+            display_name="Bob",
+            password="hunter22",
+            roles=[],
+            is_verified=True,
+        )
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        cache.clear()
+
+    def _post_json(self, view_func, payload):
+        request = self.factory.post(
+            "/dummy/",
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        return view_func(request)
+
+    def _json(self, resp):
+        return json.loads(resp.content.decode("utf-8"))
+
+    def test_read_json_handles_invalid_payload(self):
+        class DummyRequest:
+            def __init__(self, payload):
+                self.body = payload
+
+        self.assertEqual(basic_views._read_json(DummyRequest(b"")), {})
+        self.assertEqual(basic_views._read_json(DummyRequest(b"not-json")), {})
+        self.assertEqual(
+            basic_views._read_json(DummyRequest(b'{"email": "bob@example.com"}')),
+            {"email": "bob@example.com"},
+        )
+
+    def test_request_password_reset_existing_user_sets_cache(self):
+        resp = self._post_json(
+            basic_views.request_password_reset, {"email": "bob@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        otp = cache.get("pwdreset:bob@example.com")
+        self.assertIsNotNone(otp)
+        self.assertEqual(len(otp), 6)
+
+    def test_request_password_reset_missing_email(self):
+        resp = self._post_json(basic_views.request_password_reset, {"email": ""})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(self._json(resp).get("error"), "email is required")
+
+    def test_reset_password_confirm_missing_fields(self):
+        resp = self._post_json(
+            basic_views.reset_password_confirm, {"email": "", "otp": "", "password": ""}
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(self._json(resp).get("error"), "missing fields")
+
+    def test_reset_password_confirm_invalid_otp_returns_ok(self):
+        resp = self._post_json(
+            basic_views.reset_password_confirm,
+            {"email": "bob@example.com", "otp": "000000", "password": "StrongPass"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._json(resp).get("status"), "ok")
+
+    def test_reset_password_confirm_unknown_user_keeps_cache(self):
+        cache.set("pwdreset:nope@example.com", "111111", timeout=600)
+        resp = self._post_json(
+            basic_views.reset_password_confirm,
+            {"email": "nope@example.com", "otp": "111111", "password": "StrongPass"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._json(resp).get("status"), "ok")
+        self.assertEqual(cache.get("pwdreset:nope@example.com"), "111111")
+
+    def test_reset_password_confirm_success_updates_password_and_clears_cache(self):
+        cache.set("pwdreset:bob@example.com", "222222", timeout=600)
+        resp = self._post_json(
+            basic_views.reset_password_confirm,
+            {"email": "bob@example.com", "otp": "222222", "password": "StrongPass"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self._json(resp).get("status"), "ok")
+        user = get_auth_user_model().objects.get(email="bob@example.com")
+        self.assertEqual(user.password, "StrongPass")
+        self.assertIsNone(cache.get("pwdreset:bob@example.com"))
+
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
 # ============================================================
 # 3. STUB untuk cache_store service
 # ============================================================
@@ -413,4 +603,7 @@ class ViewsHighCoverageTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json().get("status"), "success")
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72

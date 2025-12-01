@@ -72,7 +72,7 @@ class DeleteAccountTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Validation failed")
+        self.assertEqual(response_data['error'], "Validasi gagal")
         self.assertIn('current_password', response_data['validation_errors'])
         
         # Verify user was NOT deleted from database
@@ -95,7 +95,7 @@ class DeleteAccountTestCase(TestCase):
         
         self.assertEqual(response.status_code, 401)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Authentication required")
+        self.assertEqual(response_data['error'], "Autentikasi diperlukan")
 
     def test_delete_account_missing_password(self):
         """Test account deletion without providing password"""
@@ -109,7 +109,7 @@ class DeleteAccountTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Missing required field")
+        self.assertEqual(response_data['error'], "Field yang diperlukan tidak ada")
 
     def test_delete_account_service_failure(self):
         """Service failure should return 400 with message"""
@@ -129,7 +129,7 @@ class DeleteAccountTestCase(TestCase):
         mock_delete.assert_called_once()
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Account deletion failed")
+        self.assertEqual(response_data['error'], "Gagal menghapus akun")
         self.assertEqual(response_data['message'], failure_result.message)
 
     def test_delete_account_invalid_json_none_data(self):
@@ -144,8 +144,8 @@ class DeleteAccountTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Invalid payload")
-        self.assertEqual(response_data['message'], "Request body must contain valid JSON")
+        self.assertEqual(response_data['error'], "Payload tidak valid")
+        self.assertEqual(response_data['message'], "Request body harus berisi JSON yang valid")
 
     def test_delete_account_non_dict_data(self):
         """Test delete account with non-dict data (like array or string)"""
@@ -159,8 +159,8 @@ class DeleteAccountTestCase(TestCase):
         
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Invalid payload")
-        self.assertEqual(response_data['message'], "Request body must be a JSON object")
+        self.assertEqual(response_data['error'], "Payload tidak valid")
+        self.assertEqual(response_data['message'], "Request body harus berupa objek JSON")
 
     def test_delete_account_parse_json_error(self):
         """Test delete account when parse_json_body returns error response"""
@@ -192,8 +192,8 @@ class DeleteAccountTestCase(TestCase):
 
         self.assertEqual(response.status_code, 500)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], "Internal server error")
-        self.assertEqual(response_data['message'], "An unexpected error occurred. Please try again later.")
+        self.assertEqual(response_data['error'], "Kesalahan server internal")
+        self.assertEqual(response_data['message'], "Terjadi kesalahan yang tidak terduga. Silakan coba lagi nanti.")
 
     def test_delete_account_wrong_password_service_layer(self):
         """Test service layer returns failure for wrong password"""
@@ -306,7 +306,7 @@ class DeleteAccountSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_current_password()
         
-        self.assertIn('Current password is required', str(ctx.exception))
+        self.assertIn('Password lama diperlukan', str(ctx.exception))
 
     def test_serializer_none_current_password(self):
         """Test serializer clean_current_password with None password"""
@@ -317,7 +317,7 @@ class DeleteAccountSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_current_password()
         
-        self.assertIn('Current password is required', str(ctx.exception))
+        self.assertIn('Password lama diperlukan', str(ctx.exception))
 
     def test_serializer_password_check_path_with_user(self):
         """Test the password check path when user exists"""
@@ -339,7 +339,7 @@ class DeleteAccountSerializerTestCase(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.clean_current_password()
         
-        self.assertIn('Current password is incorrect', str(ctx.exception))
+        self.assertIn('Password lama salah', str(ctx.exception))
 
     def test_serializer_validate_data_success(self):
         """Test DeleteAccountSerializer validate_data method for success case"""

@@ -94,10 +94,10 @@ INSTALLED_APPS = [
     "chat",
     "notification",
     'search',
+    'patient',
     "predictions",
     "user_settings",
     'audittrail',
-    'patient',
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -188,6 +188,13 @@ else:
 LANGUAGE_CODE = "en-us"
 USE_I18N = True
 
+# Password Hashers - Use faster hasher for profiling/testing
+# WARNING: MD5PasswordHasher is NOT secure for production!
+# Only use for profiling/testing environments
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.MD5PasswordHasher',  # Fast for testing (~0.001s)
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Default (~0.75s)
+]
 
 STATIC_URL = "/static/"
 # Dev: For static files

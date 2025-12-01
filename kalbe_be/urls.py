@@ -44,7 +44,7 @@ urlpatterns = [
     path('api/user-settings/', include('user_settings.urls')),
     path("audit/", include("audittrail.urls")),
     #sentry monitoring 
-    path('sentry-debug/', trigger_error)
+    path('sentry-debug/', trigger_error),
 
     path('patient/', include('patient.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

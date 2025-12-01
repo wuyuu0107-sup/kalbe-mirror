@@ -1,7 +1,8 @@
-models:
-  - type: main
-    engine: self_hosted
-    model: dummy-model
+engine: openai
+model: gemini-2.0-flash
+parameters:
+  openai_base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+
 
 instructions:
   - type: general

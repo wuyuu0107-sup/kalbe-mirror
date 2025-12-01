@@ -1,5 +1,9 @@
 from django.urls import path
+<<<<<<< HEAD
+from .views import CSVFileListCreateView, CSVFileRetrieveDestroyView, CSVFileDownloadView, CSVFileMoveView, FolderMoveView, FolderDeleteView, CSVFileRenameView, FolderRenameView
+=======
 from .views import CSVFileListCreateView, CSVFileRetrieveDestroyView, CSVFileMoveView, FolderMoveView, FolderDeleteView, CSVFileRenameView, FolderRenameView
+>>>>>>> b92cae0a7ab2ee95c129c84afad7dc9c849b35c6
 
 urlpatterns = [
     path("files/", CSVFileListCreateView.as_view(), name="csvfile_list_create"),

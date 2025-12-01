@@ -90,6 +90,45 @@ def send_welcome_email(user):
         return False
 
 
+@csrf_exempt
+@require_POST
+def login(request):
+    start = time.time()  # start profiling
+
+    data, error_response = parse_json_body(request)
+    if error_response:
+        return error_response
+
+    form = LoginForm(data)
+    if not form.is_valid():
+        return JsonResponse({"error": "Username and password are required"}, status=400)
+
+    username = form.cleaned_data['username']
+    user = get_user_or_none(username)
+    if not user:
+        return JsonResponse({"error": "Invalid credentials"}, status=401)
+
+    if user.is_account_locked():
+        return JsonResponse({
+            "error": "Account is temporarily locked due to too many failed attempts"
+        }, status=423)
+
+    if not form.authenticate():
+        return handle_failed_login(user)
+
+    if not user.is_verified:
+        return JsonResponse({"error": "Please verify your email before logging in."}, status=403)
+
+    user.reset_failed_login_attempts()
+    set_user_session(request, user)
+
+    # profiling result
+    latency_ms = (time.time() - start) * 1000
+    user.auth_latency_ms = latency_ms
+    user.save(update_fields=["auth_latency_ms", "last_accessed"])
+
+    return JsonResponse(build_success_response(user), status=200)
+
 @csrf_exempt  
 @require_POST
 def logout(request):

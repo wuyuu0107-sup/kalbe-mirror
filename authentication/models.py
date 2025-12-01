@@ -31,6 +31,7 @@ class User(models.Model):
         default=list
     )
 
+    auth_latency_ms = models.FloatField(null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     verification_token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     otp_code = models.CharField(max_length=6, blank=True, default='')

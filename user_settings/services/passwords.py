@@ -9,6 +9,12 @@ from django.db import transaction
 
 from authentication.models import User
 
+import sys
+import os
+# Add parent directory to path to import monitoring module
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from monitoring import track_service_operation
+
 
 class PasswordEncoder(Protocol):
     """Abstraction for password hashing."""
@@ -84,6 +90,7 @@ class PasswordChangeService:
         self._users = user_repository
         self._encoder = password_encoder
 
+    @track_service_operation("password_change")
     def change_password(
         self,
         *,
@@ -97,6 +104,7 @@ class PasswordChangeService:
 
         return PasswordChangeResult(success=True, message="Password changed successfully")
 
+    @track_service_operation("account_deletion")
     def delete_account(
         self,
         *,

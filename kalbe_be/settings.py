@@ -188,12 +188,13 @@ else:
 LANGUAGE_CODE = "en-us"
 USE_I18N = True
 
-# Password Hashers - Use faster hasher for profiling/testing
-# WARNING: MD5PasswordHasher is NOT secure for production!
-# Only use for profiling/testing environments
+# Password Hashers Configuration
+# Use secure hashers for production
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.MD5PasswordHasher',  # Fast for testing (~0.001s)
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Default (~0.75s)
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',  # Default secure hasher
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
 ]
 
 STATIC_URL = "/static/"

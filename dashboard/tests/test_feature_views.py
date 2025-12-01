@@ -85,3 +85,45 @@ class CsrfExemptSessionAuthenticationTests(TestCase):
             self.auth.enforce_csrf(request)
         except Exception as e:
             self.fail(f"enforce_csrf() raised {e} unexpectedly")
+
+class RecentEndpointsMockAndStubTests(TestCase):
+    class StubDate:
+        def isoformat(self):
+            return "2024-12-31T12:00:00"
+        
+    def setUp(self):
+        self.client = Client()
+        self.factory = RequestFactory()
+        self.user = User.objects.create(
+            username="bob",
+            password="pass",
+            display_name="Bob",
+            email="bob@example.com",
+            is_verified=True,
+        )
+        
+    @patch("dashboard.views.get_recent_files")
+    def test_recent_files_json_calls_service_with_mock(self, mock_recent_files):
+        mock_recent_files.return_value = []
+
+        res = self.client.get("/dashboard/recent-files-json/2/")
+
+        mock_recent_files.assert_called_once_with(2)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), [])
+
+    @patch("dashboard.views.get_recent_features")
+    def test_recent_features_json_uses_stub_value(self, mock_recent_features):
+        session = self.client.session
+        session["user_id"] = str(self.user.user_id)
+        session.save()
+
+        stub_date = self.StubDate()
+        mock_recent_features.return_value = [
+            {"name": "Feature A", "last_used_at": stub_date}
+        ]
+
+        res = self.client.get("/dashboard/recent-features-json/")
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()[0]["last_used_at"], "2024-12-31T12:00:00")

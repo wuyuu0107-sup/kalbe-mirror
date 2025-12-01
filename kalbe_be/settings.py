@@ -97,6 +97,7 @@ INSTALLED_APPS = [
     "predictions",
     "user_settings",
     'audittrail',
+    'patient',
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -231,4 +232,16 @@ USE_GEMINI     = config("USE_GEMINI", cast=bool, default=True)
 ML_RUNNER_PY = os.getenv(
     "ML_RUNNER_PY",
     str(BASE_DIR / "predictions" / "run_model.py")
+)
+
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://9bbadeb80216a400eaea1342e921893a@o4510430798938112.ingest.us.sentry.io/4510430803591168",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
 )

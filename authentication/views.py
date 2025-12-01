@@ -10,6 +10,7 @@ from django.utils import timezone
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
 from authentication.helpers import parse_json_body, get_user_or_none, handle_failed_login, set_user_session, build_success_response
+from authentication.helpers_profiling import LoginTimer
 
 import time
 import json
@@ -93,7 +94,8 @@ def send_welcome_email(user):
 @csrf_exempt
 @require_POST
 def login(request):
-    start = time.time()  # start profiling
+    timer = LoginTimer()
+    timer.begin()
 
     data, error_response = parse_json_body(request)
     if error_response:
@@ -109,9 +111,7 @@ def login(request):
         return JsonResponse({"error": "Invalid credentials"}, status=401)
 
     if user.is_account_locked():
-        return JsonResponse({
-            "error": "Account is temporarily locked due to too many failed attempts"
-        }, status=423)
+        return JsonResponse({"error": "Account is temporarily locked due to too many failed attempts"}, status=423)
 
     if not form.authenticate():
         return handle_failed_login(user)
@@ -122,9 +122,7 @@ def login(request):
     user.reset_failed_login_attempts()
     set_user_session(request, user)
 
-    # profiling result
-    latency_ms = (time.time() - start) * 1000
-    user.auth_latency_ms = latency_ms
+    user.auth_latency_ms = timer.end()
     user.save(update_fields=["auth_latency_ms", "last_accessed"])
 
     return JsonResponse(build_success_response(user), status=200)

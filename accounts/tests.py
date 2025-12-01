@@ -20,7 +20,7 @@ from accounts import csrf as csrf_view
 from accounts.tokens import password_reset_token
 from accounts.services import cache_store as cs
 from accounts import views as basic_views
-from accounts import views_otp_email as otp_views  # biar ke-import untuk coverage
+
 
 
 # -----------------------

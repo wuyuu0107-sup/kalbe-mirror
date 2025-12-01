@@ -90,13 +90,13 @@ class PatientModelTest(TestCase):
         patient = Patient.objects.create(**data)
         self.assertEqual(patient.subject_initials, '')
 
-    def test_missing_gender_saves_as_empty_string(self):
-        """Test that missing gender saves as empty string"""
+    def test_missing_gender_saves_as_null(self):
+        """Test that missing gender saves as null"""
         data = self.valid_data.copy()
         del data['gender']
         
         patient = Patient.objects.create(**data)
-        self.assertEqual(patient.gender, '')
+        self.assertIsNone(patient.gender)
     
     def test_subject_initials_max_length(self):
         """Test subject_initials respects max_length of 10"""

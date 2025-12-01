@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from save_to_database.models import CSV
 from .serializers import CSVFileSerializer
 from .permissions import IsAuthenticatedAndVerified
+from .utility.supabase_delete import delete_supabase_file
 
 
 def is_valid_name(name):
@@ -120,29 +121,79 @@ def normalize_directory_path(path):
     return normalized.strip('/')
 
 
+def match_existing_directory_case(target_dir: str) -> str:
+    """
+    Given a target directory like 'HELLO/world/track', attempt to match each
+    path segment to existing directories recorded in the DB (case-insensitive)
+    and return a new path where segments that already exist use the stored
+    capitalization. If a segment does not exist at that level, it is kept as-is.
+
+    This inspects `CSV.file` entries which store paths like
+    'datasets/csvs/hello/World/file.csv' and derives folder names from them.
+    """
+    if not target_dir:
+        return ''
+
+    normalized = normalize_directory_path(target_dir)
+    parts = normalized.split('/')
+
+    adjusted_parts = []
+    # start from the datasets/csvs root which is where CSV.file entries live
+    current_prefix = 'datasets/csvs'
+
+    for part in parts:
+        search_prefix = current_prefix + '/'
+        # get candidate file paths under this prefix
+        qs = CSV.objects.filter(file__startswith=search_prefix).values_list('file', flat=True)
+        if not qs.exists():
+            # No existing entries under this prefix, keep remaining parts as-is
+            adjusted_parts.extend(parts[len(adjusted_parts):])
+            break
+
+        # collect immediate child folder names under this prefix
+        child_names = set()
+        sp_len = len(search_prefix)
+        for fp in qs:
+            if len(fp) <= sp_len:
+                continue
+            remainder = fp[sp_len:]
+            if '/' in remainder:
+                child = remainder.split('/', 1)[0]
+                if child:
+                    child_names.add(child)
+
+        if not child_names:
+            # No subfolders under this prefix; keep remaining parts as-is
+            adjusted_parts.extend(parts[len(adjusted_parts):])
+            break
+
+        # Try to find a case-insensitive match among child names
+        match = None
+        target_lower = part.lower()
+        for child in child_names:
+            if child.lower() == target_lower:
+                match = child
+                break
+
+        if match:
+            adjusted_parts.append(match)
+            current_prefix = f"{current_prefix}/{match}"
+        else:
+            # No existing child matches case-insensitively; use provided segment
+            adjusted_parts.append(part)
+            current_prefix = f"{current_prefix}/{part}"
+
+    return '/'.join(adjusted_parts)
+
+
 class CSVFileListCreateView(generics.ListCreateAPIView):
     queryset = CSV.objects.all().order_by("-created_at")
     serializer_class = CSVFileSerializer
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticatedAndVerified]
 
-    def create(self, request, *args, **kwargs):
-        # require a file under key 'file'
-        uploaded_file = request.FILES.get("file")
-        if not uploaded_file:
-            return Response({"detail": "Tidak ada berkas yang diberikan di bidang 'file'."}, status=status.HTTP_400_BAD_REQUEST)
-        name = os.path.splitext(uploaded_file.name)[0]
-        instance = CSV.objects.create(name=name, file=uploaded_file, source_json=None)
-        serializer = self.get_serializer(instance, context={"request": request})
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True, context={"request": request})
-            return self.get_paginated_response(serializer.data)
+        queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -168,22 +219,13 @@ class CSVFileRetrieveDestroyView(generics.RetrieveDestroyAPIView):
                 except Exception:
                     # Ignore storage errors so delete doesn't crash
                     pass
-        super().perform_destroy(instance)
-
-
-class CSVFileDownloadView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticatedAndVerified]
-
-    def get(self, request, pk):
-        obj = get_object_or_404(CSV, pk=pk)
+        # Attempt to delete the uploaded file from Supabase.
         try:
-            file = obj.file.open("rb")
-        except FileNotFoundError:
-            raise Http404("File not found")
-
-        filename = os.path.basename(obj.file.name) if obj.file else "download.csv"
-        response = FileResponse(file, as_attachment=True, filename=filename)
-        return response
+            delete_supabase_file(getattr(instance, "uploaded_url", None))
+        except Exception:
+            # Do not let Supabase deletion errors block record deletion
+            pass
+        super().perform_destroy(instance)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -198,12 +240,15 @@ class CSVFileMoveView(generics.GenericAPIView):
 
         target_dir = normalize_directory_path(target_dir)
 
+        # Map target_dir segments to existing capitalization where possible
+        adjusted_target_dir = match_existing_directory_case(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
 
         filename = os.path.basename(obj.file.name) if obj.file else "file.csv"
-        new_path = f"datasets/csvs/{target_dir}/{filename}" if target_dir else f"datasets/csvs/{filename}"
+        new_path = f"datasets/csvs/{adjusted_target_dir}/{filename}" if adjusted_target_dir else f"datasets/csvs/{filename}"
 
         # Don't move if it's the same location
         if obj.file.name == new_path:
@@ -223,25 +268,13 @@ class CSVFileMoveView(generics.GenericAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
-        cleanup_orphaned_directory(orphaned_folder_path)
-
-        # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
-        os.makedirs(full_target_dir, exist_ok=True)
-
-        # Move file
-        old_path = obj.file.path
-        new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
-        try:
-            shutil.move(old_path, new_full_path)
-        except Exception as e:
-            return Response({"detail": f"Gagal memindahkan berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Update DB only if move succeeded
+        # We no longer perform local filesystem moves. Only update the stored path.
+        # Supabase (or external storage) is responsible for actual file data.
         obj.file.name = new_path
-        obj.save()
+        try:
+            obj.save()
+        except Exception as e:
+            return Response({"detail": f"Gagal memperbarui path berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         serializer = CSVFileSerializer(obj, context={'request': request})
         return Response(serializer.data)
 
@@ -259,6 +292,9 @@ class FolderMoveView(generics.GenericAPIView):
         source_dir = normalize_directory_path(source_dir)
         target_dir = normalize_directory_path(target_dir)
 
+        # Map target_dir segments to existing capitalization where possible
+        adjusted_target_dir = match_existing_directory_case(target_dir)
+
         # Validate target_dir
         if not is_valid_path(target_dir):
             return Response({"detail": "target_dir tidak valid."}, status=status.HTTP_400_BAD_REQUEST)
@@ -270,7 +306,7 @@ class FolderMoveView(generics.GenericAPIView):
 
         # Check for duplicate folder or file in target directory
         source_folder_name = os.path.basename(source_dir.rstrip('/'))
-        new_folder_prefix = f"datasets/csvs/{target_dir}/{source_folder_name}/" if target_dir else f"datasets/csvs/{source_folder_name}/"
+        new_folder_prefix = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}/" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}/"
 
         # Check if a folder with the same name exists in the target directory (case-insensitive).
         # Exclude files that are part of the source directory (the ones being moved) so we don't
@@ -281,43 +317,21 @@ class FolderMoveView(generics.GenericAPIView):
         # Check if a file with the same name exists (exact match only, case-insensitive)
         # For a folder named "hello", check if file "datasets/csvs/.../hello" exists (without extension)
         # Do NOT match "hello.csv" - that's a different file
-        new_file_path = f"datasets/csvs/{target_dir}/{source_folder_name}" if target_dir else f"datasets/csvs/{source_folder_name}"
+        new_file_path = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}"
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "Berkas dengan nama ini sudah ada di direktori tujuan."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clean up orphaned directory if it exists in physical files only
-        orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_file_path)
-        cleanup_orphaned_directory(orphaned_folder_path)
-
-        # Ensure target dir exists
-        full_target_dir = os.path.join(settings.MEDIA_ROOT, 'datasets/csvs', target_dir) if target_dir else os.path.join(settings.MEDIA_ROOT, 'datasets/csvs')
-        os.makedirs(full_target_dir, exist_ok=True)
-
+        # Only update DB paths; do not touch the filesystem.
         moved_ids = []
         for obj in files_to_move:
             path = obj.file.name
             relative_path = path[len(source_prefix):]
-            new_path = f"datasets/csvs/{target_dir}/{source_folder_name}/{relative_path}" if target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
-
-            # Move file
-            old_full_path = obj.file.path
-            new_full_path = os.path.join(settings.MEDIA_ROOT, new_path)
-
-            # Ensure subdirs
-            os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
-            try:
-                shutil.move(old_full_path, new_full_path)
-            except Exception as e:
-                # If move fails, skip this file and continue with others? Or fail the whole operation?
-                # For now, fail the whole operation to maintain consistency
-                return Response({"detail": f"Gagal memindahkan berkas {path}: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Update DB only if move succeeded
+            new_path = f"datasets/csvs/{adjusted_target_dir}/{source_folder_name}/{relative_path}" if adjusted_target_dir else f"datasets/csvs/{source_folder_name}/{relative_path}"
             obj.file.name = new_path
             obj.save()
             moved_ids.append(obj.id)
 
-        return Response({"moved_files": moved_ids, "message": f"Dipindahkan {len(moved_ids)} berkas dari {source_dir} ke {target_dir}."})
+        return Response({"moved_files": moved_ids, "message": f"Dipindahkan {len(moved_ids)} berkas dari {source_dir} ke {adjusted_target_dir}."})
 
 
 class FolderDeleteView(generics.GenericAPIView):
@@ -347,6 +361,11 @@ class FolderDeleteView(generics.GenericAPIView):
                     except Exception:
                         # Ignore storage errors so delete doesn't crash
                         pass
+            # Attempt to delete the uploaded file from Supabase.
+            try:
+                delete_supabase_file(getattr(obj, "uploaded_url", None))
+            except Exception:
+                pass
             # Delete the record
             obj_id = obj.id
             obj.delete()
@@ -373,9 +392,10 @@ class CSVFileRenameView(generics.GenericAPIView):
         dir_path = os.path.dirname(current_path)
         # Build storage name using POSIX style separators regardless of OS so it matches FileField naming
         if dir_path:
-            new_path = f"{dir_path.rstrip('/\\')}/{new_name}"
+            stripped_dir = dir_path.rstrip('/\\')
+            new_path = f"{stripped_dir}/{new_name}"
         else:
-            new_path = new_name
+            new_path = f"datasets/csvs/{new_name}"
 
         # Don't rename if it's the same name
         if current_path == new_path:
@@ -399,24 +419,12 @@ class CSVFileRenameView(generics.GenericAPIView):
         orphaned_folder_path = os.path.join(settings.MEDIA_ROOT, new_path)
         cleanup_orphaned_directory(orphaned_folder_path)
 
-        current_full_path = obj.file.path
-        dir_full_path = os.path.dirname(current_full_path)
-        new_full_path = os.path.join(dir_full_path, new_name)
-
-        try:
-            os.rename(current_full_path, new_full_path)
-        except FileNotFoundError:
-            return Response({"detail": "Berkas sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-        except OSError as e:
-            # Handle duplicate file errors at filesystem level
-            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            return Response({"detail": f"Gagal mengubah nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        # Do not rename a local file; just update the DB path
         obj.file.name = new_path
-        obj.save()
+        try:
+            obj.save()
+        except Exception as e:
+            return Response({"detail": f"Gagal memperbarui nama berkas: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         serializer = CSVFileSerializer(obj, context={'request': request})
         return Response(serializer.data)
 
@@ -473,31 +481,11 @@ class FolderRenameView(generics.GenericAPIView):
         if CSV.objects.annotate(lower_file=Lower('file')).filter(lower_file__exact=new_file_path.lower()).exists():
             return Response({"detail": "Berkas dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clean up orphaned directory if it exists in physical files only
-        cleanup_orphaned_directory(full_target_dir)
-
-        # Check if source directory exists
-        if not os.path.exists(full_source_dir):
-            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-
-        try:
-            os.rename(full_source_dir, full_target_dir)
-        except FileNotFoundError:
-            return Response({"detail": "Direktori sumber tidak ditemukan."}, status=status.HTTP_404_NOT_FOUND)
-        except OSError as e:
-            # Handle duplicate directory errors at filesystem level
-            if "file already exists" in str(e).lower() or "already exist" in str(e).lower():
-                return Response({"detail": "Berkas atau folder dengan nama ini sudah ada di direktori."}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            return Response({"detail": f"Gagal mengubah nama folder: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Use normalized source_prefix (parent-aware) when updating DB entries
+        # Do not manipulate the filesystem. Update DB entries to reflect folder rename.
         files_to_update = CSV.objects.filter(file__startswith=source_prefix)
         updated_ids = []
         for obj in files_to_update:
             old_path = obj.file.name
-            # Replace only the source_prefix with the new folder prefix that preserves parent
             new_path = old_path.replace(source_prefix, new_folder_prefix, 1)
             obj.file.name = new_path
             obj.save()

@@ -145,3 +145,23 @@ class NotificationViewsTestCase(TestCase):
         url = reverse('mark-notification-read', kwargs={'notification_id': other_notification.id})
         response = self.client.post(url)
         self.assertEqual(response.status_code, 404)
+
+    def test_mark_notification_read_unauthenticated(self):
+        """Ensure unauthenticated users cannot mark notifications read."""
+        url = reverse('mark-notification-read', kwargs={'notification_id': self.notification1.id})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 401)
+
+    def test_mark_all_notifications_read_unauthenticated(self):
+        """Ensure unauthenticated users cannot mark all notifications read."""
+        url = reverse('mark-all-read')
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 401)
+
+    def test_notification_count_unauthenticated(self):
+        """Ensure unauthenticated users cannot fetch notification counts."""
+        url = reverse('notification-count')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 401)
+    
+    

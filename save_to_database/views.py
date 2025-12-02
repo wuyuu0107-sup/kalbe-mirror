@@ -4,6 +4,7 @@ from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
+from django_ratelimit.decorators import ratelimit
 from .models import CSV
 from save_to_database.utility.json_to_csv_bytes import json_to_csv_bytes
 from save_to_database.utility.validate_payload import validate_payload
@@ -61,9 +62,18 @@ def save_converted_csv(name, json_data, file_obj=None):
 
 
 @csrf_exempt
+@ratelimit(key='ip', rate='50/h', method='POST', block=False)
 def create_csv_record(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    
+    # Check if rate limited
+    if getattr(request, 'limited', False):
+        logger.warning(f"CSV creation rate limit exceeded for IP: {request.META.get('REMOTE_ADDR')}")
+        return JsonResponse({
+            'error': 'Too many requests. Please try again later.',
+            'retry_after': '1 hour'
+        }, status=429)
 
     payload, error_response = validate_payload(request.body)
     if error_response:

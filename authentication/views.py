@@ -5,6 +5,7 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 from django.conf import settings
+from django_ratelimit.decorators import ratelimit
 # Removed HTML template imports since we only need API functionality
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
@@ -88,7 +89,15 @@ def send_welcome_email(user):
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='5/m', method='POST', block=False)
 def login(request):
+    # Check if rate limited
+    if getattr(request, 'limited', False):
+        logger.warning(f"Rate limit exceeded for IP: {request.META.get('REMOTE_ADDR')}")
+        return JsonResponse({
+            'error': 'Too many login attempts. Please try again later.'
+        }, status=429)
+    
     data, error_response = parse_json_body(request)
     if error_response:
         return error_response
@@ -131,7 +140,16 @@ def logout(request):
 
 @csrf_exempt
 @require_POST
+@ratelimit(key='ip', rate='3/h', method='POST', block=False)
 def register_profile(request):
+    # Check if rate limited
+    if getattr(request, 'limited', False):
+        logger.warning(f"Registration rate limit exceeded for IP: {request.META.get('REMOTE_ADDR')}")
+        return JsonResponse({
+            'error': 'Too many registration attempts. Please try again later.',
+            'retry_after': '1 hour'
+        }, status=429)
+    
     try: 
         data = json.loads(request.body.decode() or "{}")
     except json.JSONDecodeError:

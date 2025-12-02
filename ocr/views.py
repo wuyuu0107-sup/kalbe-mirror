@@ -1,11 +1,15 @@
 import os
+import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
+from django_ratelimit.decorators import ratelimit
 from notification.triggers import notify_ocr_completed, notify_ocr_failed
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from dashboard.tracking import track_feature
 from ocr.services.gemini import GeminiService
@@ -21,10 +25,19 @@ def health(request):
 
 @csrf_exempt
 @track_feature("ocr")
+@ratelimit(key='ip', rate='10/m', method='POST', block=False)
 def ocr_test_page(request):
     load_dotenv()
 
     if request.method == "POST":
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            logger.warning(f"OCR upload rate limit exceeded for IP: {request.META.get('REMOTE_ADDR')}")
+            return JsonResponse({
+                'error': 'Too many OCR requests. Please try again later.',
+                'retry_after': '1 minute'
+            }, status=429)
+        
         return _handle_upload(request)
     
     return render(request, "ocr.html")

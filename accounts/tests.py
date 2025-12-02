@@ -1,6 +1,7 @@
 # accounts/tests.py
 import json
 import re
+from unittest.mock import patch
 
 from django.test import (
     TestCase,
@@ -19,7 +20,7 @@ from accounts import csrf as csrf_view
 from accounts.tokens import password_reset_token
 from accounts.services import cache_store as cs
 from accounts import views as basic_views
-from accounts import views_otp_email as otp_views  # biar ke-import untuk coverage
+
 
 
 # -----------------------
@@ -31,26 +32,16 @@ def extract_otp_from_mail(body: str) -> str:
         raise AssertionError("OTP not found in email body")
     return m.group(1)
 
-<<<<<<< HEAD
 
 TEST_OVERRIDES = dict(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     DEFAULT_FROM_EMAIL="test@example.local",
     DATABASES={
-=======
-# Use an in-memory sqlite DB for these tests only,
-# and locmem email backend so mail.outbox is populated.
-TEST_OVERRIDES = {
-    "EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
-    "DEFAULT_FROM_EMAIL": "test@example.local",
-    "DATABASES": {
->>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": ":memory:",
         }
     },
-<<<<<<< HEAD
     CACHES={
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -58,9 +49,6 @@ TEST_OVERRIDES = {
         }
     },
 )
-=======
-}
->>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
 
 
 def get_auth_user_model():
@@ -74,14 +62,8 @@ def get_auth_user_model():
 class EmailOTPTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-<<<<<<< HEAD
         AuthUser = get_auth_user_model()
         cls.user = AuthUser.objects.create(
-=======
-        # Create user in the SAME table your views use: authentication_user
-        auth_user = apps.get_model("authentication", "User")
-        auth_user.objects.create(
->>>>>>> 3681087c2207037015f2eac908c4a4696bd53d72
             username="alice",
             email="alice@example.com",
             display_name="Alice",
@@ -366,14 +348,31 @@ class CacheStoreStubTests(TestCase):
     def setUp(self):
         cache.clear()
 
-    def test_cache_store_stub(self):
-        # cukup panggil semua fungsi sekali
+    def test_set_rate_returns_false_once_limit_exceeded(self):
+        email = "ratetest@example.com"
+        # limit=2 supaya cepat kena blok
+        self.assertTrue(cs.set_rate(email, window=15, limit=2))
+        self.assertTrue(cs.set_rate(email, window=15, limit=2))
+        self.assertFalse(cs.set_rate(email, window=15, limit=2))
+        self.assertFalse(cs.set_rate(email, window=15, limit=2))
+
+    @patch("accounts.services.cache_store.time.time", return_value=1234567890)
+    def test_store_and_get_otp_round_trip(self, _mocked_time):
         email = "storetest@example.com"
-        cs.store_otp(email, "123456", ttl=10)
-        _ = cs.get_otp(email)
+        cs.store_otp(email, "654321", ttl=20)
+        cached = cache.get("pr_otp:storetest@example.com")
+        self.assertEqual(cached, {"otp": "654321", "ts": 1234567890})
+        self.assertEqual(cs.get_otp(email), "654321")
+
+    def test_get_otp_missing_returns_none(self):
+        self.assertIsNone(cs.get_otp("missing@example.com"))
+
+    def test_delete_otp_removes_cache_entry(self):
+        email = "delete@example.com"
+        cs.store_otp(email, "000000", ttl=5)
+        self.assertIsNotNone(cache.get("pr_otp:delete@example.com"))
         cs.delete_otp(email)
-        # kalau sampai sini tanpa exception → ok
-        self.assertTrue(True)
+        self.assertIsNone(cache.get("pr_otp:delete@example.com"))
 
 
 # ============================================================

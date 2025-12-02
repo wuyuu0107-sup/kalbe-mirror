@@ -9,7 +9,7 @@ class Document(models.Model):
     meta = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)  # keep as is
     updated_at = models.DateTimeField(auto_now=True)
-    payload_json_text = models.TextField(blank=True)
+    payload_json_text = models.TextField(blank=True, null=True)
 
 
 

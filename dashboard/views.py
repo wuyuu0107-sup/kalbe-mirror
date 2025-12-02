@@ -16,6 +16,10 @@ from rest_framework.exceptions import PermissionDenied
 from .models import ChatSuggestion
 from .serializers import ChatSuggestionSerializer
 
+# Uncomment when being used
+# from django.contrib.auth.decorators import login_required
+
+# from .nav import try_label_annotation  # uncomment if you added it
 from .nav import SEGMENT_LABELS, looks_like_id
 
 # Services Import

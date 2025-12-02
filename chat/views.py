@@ -173,7 +173,7 @@ def _payload(request) -> dict:
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
-@track_feature("prediksi")
+@track_feature("chatbot")
 @csrf_exempt
 def sessions(request):
     user_id = _current_user_id(request)

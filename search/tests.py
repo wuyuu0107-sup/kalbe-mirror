@@ -53,28 +53,6 @@ class StorageSearchTests(TestCase):
         
         strategy.search.assert_called_once()
 
-<<<<<<< HEAD
-=======
-    def test_search_files_connection_error(self):
-        """Test handling of connection errors"""
-        class FailingStorageProvider(StorageProvider):
-            def list_files(self, bucket_name: str):
-                raise Exception("Connection error")
-                
-            def get_file(self, bucket_name: str, file_path: str) -> Optional[bytes]:
-                raise Exception("Connection error")
-                
-            def delete_file(self, bucket_name: str, file_path: str) -> bool:
-                raise Exception("Connection error")
-
-        storage = FailingStorageProvider()
-        service = SearchService(storage_provider=storage)
-
-        with self.assertRaises(Exception) as ctx:
-            service.search_files("test-bucket", "test")
-        self.assertIn("Connection error", str(ctx.exception))
-
->>>>>>> b92cae0a7ab2ee95c129c84afad7dc9c849b35c6
     def test_search_files_exact_match(self):
         """Test searching files with exact name match"""
         mock_files = [

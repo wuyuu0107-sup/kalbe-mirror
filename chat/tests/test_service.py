@@ -75,7 +75,7 @@ class TestServiceBranch(SimpleTestCase):
         self.assertTrue(_human_int("12.7").isdigit())        # float->int fallback
         self.assertEqual(_human_int("not-a-number"), "not-a-number")
         self.assertEqual(_human_pct(1, 0), "0%")             # zero den
-        self.assertEqual(_human_pct(None, 5), "0%")
+        self.assertEqual(_human_pct("bad", "value"), "0%")   # exception path
 
     # --- _render_table branches (L33–46) ---
     def test_render_table_empty_and_more_indicator(self):

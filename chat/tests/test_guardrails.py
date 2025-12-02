@@ -15,19 +15,34 @@ class GuardrailsTests(SimpleTestCase):
     @patch("chat.guardrails._get_rails")
     def test_blocked_input_short_circuits(self, mock_get_rails):
         from chat.guardrails import run_with_guardrails
-
+        
+        # Create a mock rails instance
         mock_rails_instance = Mock()
+        mock_rails_instance.generate.return_value = {"content": "Blocked by policy."} # Or however NeMo signals a block
         mock_get_rails.return_value = mock_rails_instance
 
-        # Simulate blocked output directly from NeMo
-        mock_rails_instance.generate.return_value = "Blocked by policy."
-
         out = run_with_guardrails("forbidden question", lambda _msg: "SHOULD_NOT_RUN")
-
+        
+        # Adjust expectation based on how NeMo returns a block response.
+        # If NeMo returns the block message directly via generate, check for that.
+        # If your logic intercepts and returns it differently, adjust accordingly.
+        # For now, assuming NeMo returns the block message via generate if configured to do so.
         mock_rails_instance.generate.assert_called_once_with(
             messages=[{"role": "user", "content": "forbidden question"}]
         )
-
+        # The exact assertion depends on your NeMo configuration for blocking.
+        # If NeMo returns the block message directly:
+        # self.assertEqual(out, "Blocked by policy.")
+        # If NeMo returns an empty response or standard response and your logic handles the block differently,
+        # you might need a different setup or test structure.
+        # For this example, let's assume it returns the blocked message via generate
+        # and your run_with_guardrails passes it through if it's non-empty.
+        # If generate returns an empty string/dict, it should fall back.
+        # Let's adjust the mock to simulate a block being handled by NeMo's Colang flow.
+        # This is complex and depends heavily on your rails.yaml.
+        # A simpler approach for the test might be:
+        mock_rails_instance.generate.return_value = "Blocked by policy."
+        out = run_with_guardrails("forbidden question", lambda _msg: "SHOULD_NOT_RUN")
         self.assertEqual(out, "Blocked by policy.")
 
     @patch("chat.guardrails._get_rails")

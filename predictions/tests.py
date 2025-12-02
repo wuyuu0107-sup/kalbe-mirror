@@ -195,7 +195,12 @@ class PredictCsvApiTests(TestCase):
 
     @patch("predictions.views.PredictionResult.objects.bulk_create")
     @patch("predictions.views.SubprocessModelRunner")
+<<<<<<< HEAD
     def test_upload_csv_and_get_json_rows(self, mock_runner, mock_bulk_create):
+=======
+    def test_upload_csv_saves_predictions_to_db(self, MockRunner, mock_bulk_create):
+        # Arrange: mock model runner to return two rows
+>>>>>>> b92cae0a7ab2ee95c129c84afad7dc9c849b35c6
         rows = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
@@ -249,8 +254,8 @@ class PredictCsvApiTests(TestCase):
         self.assertIn("file", body)
 
     @patch("predictions.views.SubprocessModelRunner")
-    def test_runner_failure_returns_500(self, mock_runner):
-        mock_runner = mock_runner.return_value
+    def test_runner_failure_returns_500(self, MockRunner):
+        mock_runner = MockRunner.return_value
         mock_runner.run.side_effect = Exception("crash in model")
 
         file_obj = io.BytesIO(self._dummy_csv_bytes())

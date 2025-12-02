@@ -15,6 +15,7 @@ from .service import answer_question as chat_service
 from .guardrails import run_with_guardrails
 from notification.triggers import notify_chat_reply
 from . import service as chat_service
+from dashboard.tracking import track_feature
 
 
 DEMO_COOKIE_NAME = "demo_user_id"
@@ -172,6 +173,7 @@ def _payload(request) -> dict:
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
+@track_feature("prediksi")
 @csrf_exempt
 def sessions(request):
     user_id = _current_user_id(request)

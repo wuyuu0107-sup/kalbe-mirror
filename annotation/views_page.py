@@ -8,7 +8,6 @@ from .models import Document
 
 def viewer(request, document_id: int, patient_id: int):
     doc = get_object_or_404(Document, id=document_id)
-    # If you store PDFs in media, expose media URL; else adapt accordingly
     pdf_url = doc.content_url or "/media/placeholder.pdf"
     return render(request, "viewer.html", {
         "doc_id": document_id,

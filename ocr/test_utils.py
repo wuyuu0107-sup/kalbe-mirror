@@ -1,4 +1,7 @@
 from django.test import TestCase
+from types import SimpleNamespace
+import json
+
 from ocr.utils.normalization import (
     normalize_payload,
     _normalize_section_keys,
@@ -10,12 +13,12 @@ from ocr.utils.normalization import (
     _as_meas,
     _ensure_section,
     _to_str,
-    _meas_template
+    _meas_template,
+    _serology_str,
 )
 from ocr.utils.response_builders import build_success_response, build_error_response
 from ocr.utils.spellchecker import correct_word
-from annotation.models import Document, Patient
-import json
+from annotation.models import Document  # ⬅️ no Patient import
 
 
 class NormalizePayloadTests(TestCase):
@@ -155,6 +158,24 @@ class ProcessSerologyTests(TestCase):
         base = {"hbsag": None, "hcv": None, "hiv": None}
         _process_serology(serology, base)
         self.assertEqual(base["hcv"], "Negative")
+    
+    def test_process_serology_non_dict_does_nothing(self):
+        """Cover early-return branch when serology is not a dict."""
+        base = {"hbsag": "original"}
+        _process_serology("not-a-dict", base)
+        # base should be untouched
+        self.assertEqual(base["hbsag"], "original")
+
+class SerologyStrTests(TestCase):
+
+    def test_serology_str_dict_without_known_keys(self):
+        """Cover branch where dict has no Hasil/value/result keys."""
+        data = {"foo": "bar"}
+        result = _serology_str(data)
+        # Should just be the stringified dict
+        self.assertEqual(result, str(data))
+
+
 
 
 class CollectExtraSectionsTests(TestCase):
@@ -255,7 +276,7 @@ class NormalizationHelpersTests(TestCase):
         self.assertIn("Satuan", result)
         self.assertIn("Metode", result)
         self.assertIsNone(result["Hasil"])
-
+    
     def test_norm_date_with_lowercase_month_already_formatted(self):
         result = _norm_date("13/apr/2024")
         self.assertEqual(result, "13/APR/2024")
@@ -264,11 +285,15 @@ class NormalizationHelpersTests(TestCase):
         result = _norm_date("01/Jan/2024")
         self.assertEqual(result, "01/JAN/2024")
 
+
 class ResponseBuildersTests(TestCase):
     
     def test_success_response_contains_required_fields(self):
         doc = Document.objects.create(source="pdf", content_url="http://test.pdf")
-        pat = Patient.objects.create(name="Test", external_id="TEST-1")
+
+        # Fake patient object – doesn’t depend on concrete Patient model
+        pat = SimpleNamespace(id=1, name="Test", external_id="TEST-1")
+
         ordered_data = {"DEMOGRAPHY": {"age": 25}}
         extracted_data = {"processing_time": 1.5, "raw_text": "raw"}
         supabase_urls = {"json_url": "http://test.json"}

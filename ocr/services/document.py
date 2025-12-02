@@ -1,5 +1,8 @@
+# ocr/services/document.py
 from typing import Dict, Any, Tuple
-from annotation.models import Document, Patient
+
+from annotation.models import Document
+from patient.models import Patient   # 👈 import from the real app
 
 
 class DocumentService:
@@ -34,6 +37,10 @@ class DocumentService:
             },
         )
         
-        pat = Patient.objects.create(name="OCR Patient", external_id="OCR-ADHOC")
+        # subject_initials is required, external_id no longer exists
+        pat = Patient.objects.create(
+            name="OCR Patient",
+            subject_initials="OCR",
+        )
         
         return doc, pat

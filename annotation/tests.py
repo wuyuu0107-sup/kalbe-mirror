@@ -1,5 +1,6 @@
 from django.test import TestCase, Client, override_settings
-from .models import Patient, Document
+from .models import Document
+from patient.models import Patient
 from unittest.mock import patch
 from authentication.models import User
 from rest_framework.test import APIClient
@@ -18,7 +19,7 @@ from annotation.models import Annotation
 from annotation import views
 from annotation.serializers import AnnotationSerializer, DocumentSerializer
 from django.test import TestCase, Client
-from .models import Document, Patient
+from .models import Document
 from unittest.mock import patch, MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -72,31 +73,31 @@ def _create_test_user(**overrides):
 class AnnotationCRUDTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.document_id = 1
-        self.patient_id = 1
         self.mock_drawing = {
             "type": "drawing",
-            "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}]
+            "data": [{"tool": "pen", "points": [[10, 10], [20, 20]]}],
         }
+
         self.user = _create_test_user(
-            username='testuser',
-            password='testpassword',
-            email='testuser@example.com',
+            username="testuser",
+            password="testpassword",
+            email="testuser@example.com",
         )
 
-        # ensure researcher role
         try:
-            self.user.roles = ['researcher']
-            self.user.save(update_fields=['roles'])
+            self.user.roles = ["researcher"]
+            self.user.save(update_fields=["roles"])
         except Exception:
             pass
 
-        # authenticate via DRF
         self.client.force_authenticate(user=self.user)
 
-        # seed minimal objects
-        Patient.objects.create(id=self.patient_id, name="Test Patient")
-        Document.objects.create(id=self.document_id)
+        # Create backing rows via ORM (NOTE: using patient.Patient)
+        doc = Document.objects.create(source="json", payload_json={"hello": "world"})
+        pat = Patient.objects.create(name="Test Patient")
+
+        self.document_id = doc.id
+        self.patient_id = pat.id
 
     def test_invalid_method_on_create_drawing_annotation(self):
         # GET on a POST-only endpoint should be Method Not Allowed
@@ -294,12 +295,8 @@ class AnnotationAPITests(TestCase):
         self.assertEqual(doc_res.status_code, status.HTTP_201_CREATED)
         self.document_id = doc_res.data['id']
 
-        pat_res = self.client.post('/api/v1/patients/', {
-            'name': 'Test Patient',
-            'external_id': 'PAT-001'
-        }, format='json')
-        self.assertEqual(pat_res.status_code, status.HTTP_201_CREATED)
-        self.patient_id = pat_res.data['id']
+        pat = Patient.objects.create(name="Test Patient")
+        self.patient_id = pat.id
 
     def test_create_annotation(self):
         # Create annotation
@@ -528,34 +525,6 @@ class DocumentViewSetTests(_AuthAPIMixin, TestCase):
         self.assertEqual(res.data["payload_json"]["b"], 3)
 
 
-class PatientViewSetTests(_AuthAPIMixin, TestCase):
-    def setUp(self):
-        self.api_setup()
-
-        # Satisfy stricter CI permissions
-        self.user.is_verified = True
-        self.user.is_staff = True
-        self.user.is_superuser = True
-        try:
-            self.user.roles = ['researcher']  # harmless, future-proof
-        except Exception:
-            pass
-        self.user.save()
-
-    def test_create_and_retrieve_patient(self):
-        create = self.client.post(
-            self.PAT_LIST,
-            {"name": "Alice", "external_id": "PAT-XYZ"},
-            format="json",                     # let DRF encode JSON
-        )
-        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.content)
-        pid = create.data["id"]
-
-        get_res = self.client.get(f"{self.PAT_LIST}{pid}/")
-        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
-        self.assertEqual(get_res.data["name"], "Alice")
-        self.assertEqual(get_res.data["external_id"], "PAT-XYZ")
-
 
 
 class AnnotationByDocPatientTests(_AuthAPIMixin, TestCase):
@@ -581,20 +550,12 @@ class AnnotationByDocPatientTests(_AuthAPIMixin, TestCase):
         self.assertEqual(d.status_code, status.HTTP_201_CREATED, d.content)
         self.doc_id = d.data["id"]
 
-        p1 = self.client.post(
-            self.PAT_LIST,
-            {"name": "P1", "external_id": "P-1"},
-            format="json",
-        )
-        p2 = self.client.post(
-            self.PAT_LIST,
-            {"name": "P2", "external_id": "P-2"},
-            format="json",
-        )
-        self.assertEqual(p1.status_code, status.HTTP_201_CREATED, p1.content)
-        self.assertEqual(p2.status_code, status.HTTP_201_CREATED, p2.content)
-        self.p1 = p1.data["id"]
-        self.p2 = p2.data["id"]
+        p1 = Patient.objects.create(name="P1")
+        p2 = Patient.objects.create(name="P2")
+
+        self.p1 = p1.id
+        self.p2 = p2.id
+
 
         # annotations for each patient
         a1 = self.client.post(
@@ -628,6 +589,8 @@ class AnnotationByDocPatientTests(_AuthAPIMixin, TestCase):
 
 if HAS_COMMENTS:
     class CommentViewSetTests(_AuthAPIMixin, TestCase):
+        COMMENT_LIST = "/api/v1/comments/"
+
         def setUp(self):
             self.api_setup()
 
@@ -650,15 +613,9 @@ if HAS_COMMENTS:
             self.assertEqual(d.status_code, 201, d.content)
             self.doc_id = d.data["id"]
 
-            p = self.client.post(
-                self.PAT_LIST,
-                {"name": "Commenter", "external_id": "C-1"},
-                format="json",
-            )
-            self.assertEqual(p.status_code, 201, p.content)
-            self.pat_id = p.data["id"]
+            p = Patient.objects.create(name="Commenter")
+            self.pat_id = p.id
 
-            self.COMMENT_LIST = "/api/v1/comments/"
 
 
         def test_create_list_delete_comment(self):
@@ -749,45 +706,6 @@ def _items(resp):
         return data["results"]
     return data
 
-class PatientSearchFilterTests(_AuthAPIMixin, TestCase):
-    def setUp(self):
-        self.api_setup()
-
-        # Satisfy stricter CI permissions
-        self.user.is_verified = True
-        self.user.is_staff = True
-        self.user.is_superuser = True
-        try:
-            self.user.roles = ['researcher']  # harmless, future-proof
-        except Exception:
-            pass
-        self.user.save()
-
-        # seed patients
-        self.client.post(
-            self.PAT_LIST,
-            {"name": "Jane Roe", "external_id": "PAT-ABC"},
-            format="json",
-        )
-        self.client.post(
-            self.PAT_LIST,
-            {"name": "John Smith", "external_id": "ZZ-999"},
-            format="json",
-        )
-
-    def test_patient_search_by_name_and_external_id(self):
-        # search by partial name
-        res1 = self.client.get(f"{self.PAT_LIST}?search=jane")
-        self.assertEqual(res1.status_code, 200, res1.content)
-        items1 = res1.data.get("results", res1.data)
-        self.assertTrue(any(p.get("name") == "Jane Roe" for p in items1))
-
-        # search by external_id
-        res2 = self.client.get(f"{self.PAT_LIST}?search=ZZ-999")
-        self.assertEqual(res2.status_code, 200, res2.content)
-        items2 = res2.data.get("results", res2.data)
-        self.assertTrue(any(p.get("name") == "John Smith" for p in items2))
-
 
 
 class AnnotationViewSetEdgeTests(_AuthAPIMixin, TestCase):
@@ -814,13 +732,9 @@ class AnnotationViewSetEdgeTests(_AuthAPIMixin, TestCase):
         self.assertEqual(d.status_code, status.HTTP_201_CREATED, d.content)
         self.doc_id = d.data["id"]
 
-        p = self.client.post(
-            self.PAT_LIST,
-            {"name": "Edge P", "external_id": "EDGE-1"},
-            format="json",
-        )
-        self.assertEqual(p.status_code, status.HTTP_201_CREATED, p.content)
-        self.pat_id = p.data["id"]
+        p = Patient.objects.create(name="Edge P")
+        self.pat_id = p.id
+
 
 
     def test_list_without_filters_and_ordering(self):
@@ -872,6 +786,7 @@ class AnnotationViewSetEdgeTests(_AuthAPIMixin, TestCase):
 
 if HAS_COMMENTS:
     class CommentViewSetMoreTests(_AuthAPIMixin, TestCase):
+        COMMENT_LIST = "/api/v1/comments/"
         def setUp(self):
             self.api_setup()
 
@@ -894,15 +809,9 @@ if HAS_COMMENTS:
             self.assertEqual(d.status_code, status.HTTP_201_CREATED, d.content)
             self.doc_id = d.data["id"]
 
-            p = self.client.post(
-                self.PAT_LIST,
-                {"name": "CUser", "external_id": "C-2"},
-                format="json",
-            )
-            self.assertEqual(p.status_code, status.HTTP_201_CREATED, p.content)
-            self.pat_id = p.data["id"]
+            p = Patient.objects.create(name="CUser")
+            self.pat_id = p.id
 
-            self.COMMENT_LIST = "/api/v1/comments/"
 
         def test_list_filter_only_doc_or_only_patient(self):
             # create one comment
@@ -943,16 +852,11 @@ class ViewsPageTests(TestCase):
     def setUp(self):
         self.client = Client()
         # create the objects the view requires
-        self.patient = Patient.objects.create(name="Test Patient", external_id="T-1")
+        self.patient = Patient.objects.create(name="Test Patient")
         self.document = Document.objects.create(content_url="/media/placeholder.pdf")
 
 
-# MODEL TESTS #    
-class PatientModelTests(TestCase):
-    def test_str_returns_name(self):
-        """__str__ should return the patient's name."""
-        patient = Patient.objects.create(name="Bob")
-        self.assertEqual(str(patient), "Bob")
+
 
 
 # MORE VIEW TESTS #
@@ -1638,5 +1542,28 @@ class AnnotationByDocumentPatientNoPaginationTests(TestCase):
         mock_get_serializer.assert_called_once_with(qs, many=True)
 
 
+class ModelStrTests(TestCase):
+    def test_document_str(self):
+        # Unsaved instance is fine; we just care that __str__ runs.
+        doc = Document(id=1, source="json")
+        self.assertEqual(str(doc), "Document 1 (json)")
+
+    def test_annotation_str(self):
+        # Use only foreign key IDs so we don't need real DB rows.
+        ann = Annotation(
+            document_id=5,
+            patient_id=10,
+            drawing_data={"type": "drawing"},
+        )
+        self.assertEqual(str(ann), "Annotation None on doc 5")
+
+    def test_comment_str(self):
+        comment = Comment(
+            document_id=9,
+            body="Hello",
+        )
+        self.assertEqual(str(comment), "Comment None on doc 9")
+        
 if __name__ == "__main__":
     unittest.main()
+

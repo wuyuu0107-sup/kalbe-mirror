@@ -1,7 +1,10 @@
 import json
 from typing import Dict, Any
+
 from django.http import HttpResponse
-from annotation.models import Document, Patient
+
+from annotation.models import Document
+from patient.models import Patient   # 👈 use your real Patient app here
 
 
 def build_success_response(
@@ -9,7 +12,7 @@ def build_success_response(
     patient: Patient,
     ordered_data: Dict[str, Any],
     extracted_data: Dict[str, Any],
-    supabase_urls: Dict[str, str]
+    supabase_urls: Dict[str, str],
 ) -> HttpResponse:
     result = {
         "success": True,
@@ -33,4 +36,8 @@ def build_error_response(error_message: str) -> HttpResponse:
         "structured_data": {},
         "raw_response": "",
     }
-    return HttpResponse(json.dumps(result), content_type="application/json", status=200)
+    return HttpResponse(
+        json.dumps(result),
+        content_type="application/json",
+        status=200,
+    )

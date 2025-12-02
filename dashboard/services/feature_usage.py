@@ -6,7 +6,6 @@ from dashboard.models import FeatureUsage
 def record_feature_use(request, feature_key: str):
     try:
         real_user = None
-        print("user_id:", request.session.get("user_id"))
 
         if not real_user and request:
             user_id = request.session.get("user_id")

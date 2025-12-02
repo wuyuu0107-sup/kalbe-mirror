@@ -29,7 +29,7 @@ class FeatureUsageServiceTests(TestCase):
     def test_record_feature_use_handles_exception_in_is_authenticated(self):
         class BadUser:
             def is_authenticated(self):
-                raise Exception("Boom")
+                raise RuntimeError("Boom")
 
         # make a valid request that has a session with user_id
         req = self.make_request_for_user(self.user)

@@ -9,6 +9,7 @@ django-filter
 python-decouple
 django-cors-headers
 djangorestframework
+django-ratelimit
 pyspellchecker
 pymupdf
 google-generativeai

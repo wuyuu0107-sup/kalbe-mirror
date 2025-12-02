@@ -43,14 +43,14 @@ def save_converted_csv(name, json_data, file_obj=None):
         # Convert JSON to CSV bytes
         csv_bytes = json_to_csv_bytes(json_data)
 
-        # Create ContentFile with proper name
-        csv_file = ContentFile(csv_bytes, name=f"{name}.csv")
-
-        # Create the CSV record
+        # We do not store the physical file locally. Store only the filename/path
+        # The VirtualFileField on CSV will normalize the stored value to
+        # start with 'datasets/csvs/' and expose a file-like interface.
+        filename = f"{name}.csv"
         dataset = CSV.objects.create(
             name=name,
-            file=csv_file,
-            source_json=json_data
+            file=filename,
+            source_json=json_data,
         )
 
         return dataset
@@ -85,12 +85,14 @@ def update_converted_csv(instance: CSV, name: str, json_data):
     try:
         # convert
         csv_bytes = json_to_csv_bytes(json_data)
-        csv_file = ContentFile(csv_bytes, name=f"{name}.csv")
+        filename = f"{name}.csv"
 
-        # update fields
+        # update fields — do not attempt to save local file contents.
         instance.name = name
         instance.source_json = json_data
-        instance.file.save(csv_file.name, csv_file, save=False)  # replace stored file
+        # Assigning to instance.file will store only the filename/path via the
+        # VirtualFileField descriptor (no local filesystem write).
+        instance.file = filename
 
         # clear uploaded_url since file changed
         instance.uploaded_url = None

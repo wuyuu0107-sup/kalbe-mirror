@@ -6,6 +6,7 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 from .models import Patient
 from .utility.json_mapper import map_ocr_json_to_patient
+from .validators import validate_patient_data
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,15 @@ def create_patient_from_data(request):
     
     try:
         patient_data = map_ocr_json_to_patient(data)
+        
+        # Enhanced input validation
+        validation_errors = validate_patient_data(patient_data)
+        if validation_errors:
+            logger.warning(f"Patient data validation failed: {validation_errors}")
+            return JsonResponse({
+                'error': 'Validation failed',
+                'details': validation_errors
+            }, status=400)
         
         patient = Patient.objects.create(**patient_data)
         

@@ -35,15 +35,15 @@ def validate_patient_data(data):
             errors['age'] = 'Age must be a valid number'
     
     # 3. Phone number validation
-    if 'phone' in data and data['phone']:
+    if 'phone_number' in data and data['phone_number']:
         phone_validator = RegexValidator(
             regex=r'^\+?1?\d{9,15}$',
             message="Phone number must be valid format (9-15 digits, optional +)"
         )
         try:
-            phone_validator(str(data['phone']))
+            phone_validator(str(data['phone_number']))
         except ValidationError:
-            errors['phone'] = 'Invalid phone number format'
+            errors['phone_number'] = 'Invalid phone number format'
     
     # 4. Blood pressure validation (format: systolic/diastolic)
     if 'blood_pressure' in data and data['blood_pressure']:

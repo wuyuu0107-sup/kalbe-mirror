@@ -5,7 +5,6 @@ from . import views
 app_name = "dashboard"
 
 router = DefaultRouter()
-router.register(r'chat-suggestions', views.ChatSuggestionViewSet, basename='chat-suggestion')
 
 urlpatterns = [
     path('api/', include(router.urls)),

@@ -55,24 +55,7 @@ class ViewsMissingCoverageTests(TestCase):
             data = res.json()
             self.assertIsInstance(data, list)
             self.assertIn("last_used_at", data[0])
-
-    # def test_chat_suggestion_viewset_get_queryset_anonymous(self):
-    #     req = self.factory.get("/api/chat-suggestions/")
-    #     req.user = MagicMock(is_authenticated=False)
-    #     viewset = views.ChatSuggestionViewSet()
-    #     viewset.request = req
-    #     qs = viewset.get_queryset()
-    #     self.assertEqual(list(qs), [])
-
-    # def test_chat_suggestion_viewset_perform_create(self):
-    #     serializer = MagicMock()
-    #     req = self.factory.post("/api/chat-suggestions/")
-    #     req.user = self.user
-    #     viewset = views.ChatSuggestionViewSet()
-    #     viewset.request = req
-    #     viewset.perform_create(serializer)
-    #     serializer.save.assert_called_once_with(user=self.user)
-
+            
 class CsrfExemptSessionAuthenticationTests(TestCase):
     def setUp(self):
         self.auth = CsrfExemptSessionAuthentication()

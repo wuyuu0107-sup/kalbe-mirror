@@ -11,66 +11,76 @@ from .llm import ask_gemini_text
 # =========================
 ALLOWED: Dict[str, set[str]] = {
     "patients": {
-        "sin", "subject_initials", "study_drug", "screening_date", "gender",
-        "date_of_birth", "age", "weight_kg", "height_cm", "bmi",
-        "smoker_cigarettes_per_day",
+        "id",
+        "sin",
+        "name",
+        "subject_initials",
+        "gender",
+        "date_of_birth",
+        "address",
+        "phone_number",
+        "age",
+        "height",
+        "weight",
+        "bmi",
+        "systolic",
+        "diastolic",
+        "smoking_habit",
+        "smoker",
+        "drinking_habit",
+        "hemoglobin",
+        "random_blood_glucose",
+        "sgot",
+        "sgpt",
+        "alkaline_phosphatase",
     },
-    "vitals": {
-        "sin", "systolic_bp", "diastolic_bp", "heart_rate",
+    "predictions_predictionresult": {
+        "sin",
+        "subject_initials",
+        "prediction",
+        "created_at",
     },
-    "serology": {
-        "sin", "hbsag", "hcv", "hiv",
-    },
-    "urinalysis": {
-        "sin", "ph", "density", "glucose", "ketone", "urobilinogen",
-        "urobilinogen_unit", "bilirubin", "blood", "leucocyte_esterase", "nitrite",
-    },
-    "hematology": {
-        "sin", "hemoglobin", "hemoglobin_unit", "hematocrit",
-        "leukocyte", "erythrocyte", "thrombocyte", "esr",
-    },
-    "clinical_chemistry": {
-        "sin", "bilirubin_total", "alkaline_phosphatase", "sgot",
-        "sgpt", "ureum", "creatinine", "random_blood_glucose",
-    },
-    # NOTE: raw_intake is intentionally excluded from analytics
 }
 
-# Relationships (hint to LLM): all analytic tables join via patients.sin
+
+
+
+# Relationships: currently single-table, but keep text for future extension
 RELATIONSHIPS = """
-- Primary entity: patients (one row per subject, key = patients.sin)
-- Join key across all modules is "sin"
-    vitals.sin = patients.sin
-    serology.sin = patients.sin
-    urinalysis.sin = patients.sin
-    hematology.sin = patients.sin
-    clinical_chemistry.sin = patients.sin
+- patients: one row per subject (key = patients.sin)
+- predictions_predictionresult: prediction results per subject (key = predictions_predictionresult.sin)
+
+Although both tables share sin, do NOT join them in the same query.
+Each query must use exactly one table: either patients OR predictions_predictionresult.
 """
 
-# Domain synonyms to bias mapping (don’t change DB names)
+
+
+# Domain synonyms to bias mapping (map to existing columns only)
 SYNONYMS = """
-Vocabulary / synonyms (map to columns):
-- "HBsAg" => serology.hbsag
-- "SGOT", "AST" => clinical_chemistry.sgot
-- "SGPT", "ALT" => clinical_chemistry.sgpt
-- "RBG", "random glucose", "kadar gula acak" => clinical_chemistry.random_blood_glucose
-- "hemoglobin" => hematology.hemoglobin
-- "hematocrit" => hematology.hematocrit
-- "leukocyte", "leukosit" => hematology.leukocyte
-- "erythrocyte", "eritrosit" => hematology.erythrocyte
-- "platelet", "trombosit" => hematology.thrombocyte
-- "ESR", "laju endap darah" => hematology.esr
-- "alkaline phosphatase", "ALP" => clinical_chemistry.alkaline_phosphatase
-- "bilirubin total" => clinical_chemistry.bilirubin_total
-- "creatinine" => clinical_chemistry.creatinine
-- "ureum", "BUN (approx.)" => clinical_chemistry.ureum
-- "blood pressure", "BP", "tekanan darah" => vitals.systolic_bp, vitals.diastolic_bp
-- "heart rate", "denyut nadi", "HR" => vitals.heart_rate
-- "jenis kelamin", "sex" => patients.gender
+Vocabulary / synonyms (map to columns on patients / predictions):
+
+Patients:
+- "subject id", "screening id", "subject number" => patients.sin
+- "jenis kelamin", "sex", "gender" => patients.gender
 - "umur", "age" => patients.age
-- "berat", "weight" => patients.weight_kg
-- "tinggi", "height" => patients.height_cm
+- "berat", "weight", "weight in kg" => patients.weight
+- "tinggi", "height", "height in cm" => patients.height
 - "BMI" => patients.bmi
+- "systolic", "systolic blood pressure", "BP atas" => patients.systolic
+- "diastolic", "diastolic blood pressure", "BP bawah" => patients.diastolic
+- "smoker", "perokok" => patients.smoker
+- "smoking habit", "kebiasaan merokok" => patients.smoking_habit
+- "drinking habit", "kebiasaan minum alkohol" => patients.drinking_habit
+- "hemoglobin", "HB" => patients.hemoglobin
+- "blood sugar", "gula darah acak", "RBG" => patients.random_blood_glucose
+- "SGOT", "AST" => patients.sgot
+- "SGPT", "ALT" => patients.sgpt
+- "alkaline phosphatase", "ALP" => patients.alkaline_phosphatase
+
+Predictions:
+- "prediction", "predicted label", "model output", "risk category" => predictions_predictionresult.prediction
+- "prediction time", "prediction date", "prediction created at" => predictions_predictionresult.created_at
 """
 
 SAFE_SELECT = re.compile(r"^\s*select\b", re.I)
@@ -131,40 +141,79 @@ class SQLPromptBuilder:
     def build(self, user_message: str, schema_hint: str) -> str:
         return f"""You are a senior data analyst writing SQL for PostgreSQL.
 
-TASK:
-Translate the user's analytics request into ONE safe **SELECT-only** SQL query.
+GOAL:
+Write ONE safe, production-ready **SELECT-only** SQL query.
 
 ABSOLUTE RULES:
-- Output **only** the SQL (no backticks, no prose).
+- Output ONLY the SQL (no backticks, no prose, no explanation).
 - The first token MUST be SELECT.
-- Use ONLY these tables/columns and nothing else:
-  {schema_hint}
-- Default joins:
-{self.relationships}
-  If multiple tables are needed, join them via the shared key "sin".
-- Prefer clear aliases: p (patients), v (vitals), s (serology), u (urinalysis), h (hematology), c (clinical_chemistry).
-- If user asks for "per patient" attributes + labs, join patients (p) and the relevant module(s).
-- Use WHERE for filters derived from the prompt (e.g., age > 30, gender = 'Male').
-- If aggregating, include proper GROUP BY.
-- If user asks for “top/most/least”, use ORDER BY and a LIMIT.
-- NEVER use INSERT/UPDATE/DELETE/DDL.
+- NEVER use INSERT/UPDATE/DELETE/DDL/TRUNCATE/ALTER/DROP/CREATE.
+- NEVER use JOIN. Only ONE table may appear in the FROM clause.
 
-Domain mapping to help you choose the right columns:
-{self.synonyms}
+TABLE + COLUMN RULES (CRITICAL):
+You may ONLY reference the following tables and columns:
+{schema_hint}
 
-Examples of JOIN patterns you can use:
-- SELECT p.sin, p.gender, c.sgot FROM patients p
-  JOIN clinical_chemistry c ON c.sin = p.sin
-  WHERE c.sgot > 35;
+Valid tables and aliases:
+- patients => alias as p
+- predictions_predictionresult => alias as pr
 
-- SELECT p.sin, v.systolic_bp, v.diastolic_bp
-  FROM patients p JOIN vitals v ON v.sin = p.sin
-  WHERE p.age >= 30;
+COLUMN SELECTION RULES:
+- When using **patients**, ALWAYS use:  
+    SELECT * FROM patients p
+
+- When using **predictions_predictionresult**, NEVER use SELECT *.  
+  Instead, you MUST explicitly select ONLY the following columns (id is forbidden):
+    pr.sin,
+    pr.subject_initials,
+    pr.prediction,
+    pr.created_at
+
+  Example of allowed pattern:
+    SELECT pr.sin, pr.subject_initials, pr.prediction, pr.created_at
+    FROM predictions_predictionresult pr
+    WHERE ...
+
+Under NO circumstances may pr.id be selected.
+
+STRICT ANTI-HALLUCINATION RULES:
+- Use column names EXACTLY as written.
+- NEVER invent new column names (forbidden examples: prediction_id, sin_id, pred_label, etc.)
+- If unsure which table to use, fall back to a minimal safe query:
+
+  SELECT * FROM patients p LIMIT 10;
+
+TABLE SELECTION GUIDANCE:
+- Use patients p when the request is about:
+  demographics, vitals, labs, age, gender, height, weight, sgot, sgpt, etc.
+
+- Use predictions_predictionresult pr when the request is about:
+  prediction, predicted label, model result, risk, created_at, latest prediction, etc.
+
+ALLOWED STRUCTURE:
+- Optional WHERE
+- Optional ORDER BY
+- Optional LIMIT
+- Optional GROUP BY / HAVING (if aggregating)
+
+Examples:
+
+-- patients
+SELECT *
+FROM patients p
+WHERE p.age > 40;
+
+-- predictions
+SELECT pr.sin, pr.subject_initials, pr.prediction, pr.created_at
+FROM predictions_predictionresult pr
+ORDER BY pr.created_at DESC
+LIMIT 20;
 
 USER REQUEST:
 \"\"\"{user_message}\"\"\"
 
-Write the final SQL below (no comments, no CTEs unless truly needed):
+
+Write ONLY the final SQL query below:
 """
 
 # SRP: validates and optionally post-processes SQL.
@@ -210,6 +259,10 @@ class SemanticSQLGenerator:
         # Validate and post-process
         sql = self.post_processor.validate_select_only(raw_sql)
         sql = self.post_processor.maybe_add_limit(sql, add_default_limit)
+        print("\n[SQLPromptBuilder] Generated SQL Prompt:\n")
+        print(sql)
+        print("\n-----------------------------------------\n")
+
         return sql
 
 

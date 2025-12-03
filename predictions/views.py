@@ -14,15 +14,10 @@ from rest_framework import status
 
 from .serializers import PredictRequestSerializer
 from .services import SubprocessModelRunner, IModelRunner
+from django.utils.decorators import method_decorator
+from dashboard.tracking import track_feature
 
-DOWNLOAD_CACHE_PREFIX = "predictions:download:"
-DOWNLOAD_CACHE_TIMEOUT = 15 * 60  # 15 minutes
-
-
-def _make_cache_key(download_id: str) -> str:
-    return f"{DOWNLOAD_CACHE_PREFIX}{download_id}"
-
-
+@method_decorator(track_feature("prediksi"), name="dispatch")
 class PredictCsvView(APIView):
     """
     Controller depends on abstraction (IModelRunner) => DIP

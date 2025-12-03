@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -190,7 +189,6 @@ class PredictCsvApiTests(TestCase):
 
     def setUp(self):
         self.url = reverse("predictions:predict_csv")
-        cache.clear()
 
     def _dummy_csv_bytes(self):
         return b"SIN,Subject Initials\n14515,YSSA\n9723,RDHO\n"

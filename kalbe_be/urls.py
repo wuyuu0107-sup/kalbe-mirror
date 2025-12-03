@@ -47,6 +47,9 @@ urlpatterns = [
     path('sentry-debug/', trigger_error),
 
     path('patient/', include('patient.urls')),
+
+    #silk
+    path("silk/", include("silk.urls", namespace="silk")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

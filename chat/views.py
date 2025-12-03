@@ -1,5 +1,6 @@
 # chat/views.py
 from django.conf import settings
+from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -340,14 +341,24 @@ def ask(request, sid):
 
     # Store user message
     ChatMessage.objects.create(session=sess, role="user", content=q)
+    #caching
+    normalized_q = q.strip().lower()
+    cache_key = f"chatbot_answer:{sess.id}:{normalized_q}"
 
-    # ✅ No try/except — directly call guardrails + service
-    answer = run_with_guardrails(q, chat_service.answer_question)
+    cached_answer = cache.get(cache_key)
+    if cached_answer is not None:
+        # cache hit → skip LLM call
+        answer = cached_answer
+    else:
+        # Call guardrails + LLM-backed service
+        answer = run_with_guardrails(q, chat_service.answer_question)
 
-    # If guardrails returns a dict, serialize to JSON; strings pass through.
-    if isinstance(answer, dict):
-        answer = json.dumps(answer, ensure_ascii=False, indent=2)
+        # If guardrails returns a dict, serialize to JSON; strings pass through.
+        if isinstance(answer, dict):
+            answer = json.dumps(answer, ensure_ascii=False, indent=2)
 
+        # Save to cache for next time
+        cache.set(cache_key, answer, timeout=60 * 60)  # 1 hour
     # Store assistant message
     ChatMessage.objects.create(session=sess, role="assistant", content=answer)
 

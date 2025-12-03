@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     "predictions",
     "user_settings",
     'audittrail',
+    'silk'
 ]
 # Email — DEV only: email dikirim ke console/locmem (test)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
@@ -121,6 +122,7 @@ TIME_ZONE = "Asia/Jakarta"
 USE_TZ = True
 
 MIDDLEWARE = [
+    'silk.middleware.SilkyMiddleware',
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
@@ -184,6 +186,13 @@ else:
         }
     }
 
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "chatbot-cache",
+    }
+}
 
 LANGUAGE_CODE = "en-us"
 USE_I18N = True

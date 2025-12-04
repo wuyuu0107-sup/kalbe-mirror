@@ -13,9 +13,10 @@ from rest_framework.permissions import BasePermission
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.exceptions import PermissionDenied
 
-from .models import ChatSuggestion
-from .serializers import ChatSuggestionSerializer
+# Uncomment when being used
+# from django.contrib.auth.decorators import login_required
 
+# from .nav import try_label_annotation  # uncomment if you added it
 from .nav import SEGMENT_LABELS, looks_like_id
 
 # Services Import
@@ -115,52 +116,3 @@ def breadcrumbs_json(request):
         crumbs.append({"href": href, "label": label})
 
     return JsonResponse(crumbs, safe=False)
-
-
-# ----------------- Chat Suggestions API ----------------- #
-
-class ChatSuggestionViewSet(viewsets.ModelViewSet):
-    """
-    /dashboard/api/chat-suggestions/
-
-    - Pakai session-based auth (user_id di request.session)
-    - Frontend Next mesti call dengan `credentials: "include"`
-      supaya cookie session ikut.
-    """
-    serializer_class = ChatSuggestionSerializer
-    authentication_classes = [CsrfExemptSessionAuthentication, BasicAuthentication]
-    permission_classes = [HasSessionUser]
-
-    def _get_user_from_session(self) -> User:
-        user_id = self.request.session.get("user_id")
-        if not user_id:
-            # Kalau sampai sini, berarti permission salah / dipanggil tanpa login
-            raise PermissionDenied("Unauthorized")
-
-        try:
-            return User.objects.get(user_id=user_id)
-        except User.DoesNotExist:
-            raise PermissionDenied("Unauthorized")
-
-    def get_queryset(self):
-        try:
-            user = self._get_user_from_session()
-        except PermissionDenied:
-            return ChatSuggestion.objects.none()
-        return ChatSuggestion.objects.filter(user=user).order_by("id")
-
-    def perform_create(self, serializer):
-        user = self._get_user_from_session()
-        serializer.save(user=user)
-
-    def perform_update(self, serializer):
-        # Pastikan ownership tetap user di session
-        user = self._get_user_from_session()
-        serializer.save(user=user)
-
-    def perform_destroy(self, instance):
-        user = self._get_user_from_session()
-        if instance.user_id != user.id:
-            # Jangan kasih tau terlalu detail, treat as forbidden
-            raise PermissionDenied("Cannot delete other user's suggestion")
-        instance.delete()

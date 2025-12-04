@@ -1,0 +1,57 @@
+groups:
+  - name: chatbot-alerts
+    rules:
+      # 1. High error rate for chatbot
+      - alert: ChatbotHighErrorRate
+        expr: |
+          (sum(rate(django_http_responses_total_by_status_view_method_total{
+            job="django",
+            view="chat:ask",
+            status=~"5.."
+          }[5m]))
+           /
+           sum(rate(django_http_requests_total_by_view_transport_method_total{
+            job="django",
+            view="chat:ask"
+          }[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High chatbot error rate"
+          description: "Chatbot 5xx error rate is above 5% for more than 5 minutes."
+
+      # 2. High latency (p95 > 2s)
+      - alert: ChatbotHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le)(
+              rate(django_http_requests_latency_seconds_by_view_method_bucket{
+                job="django",
+                view="chat:ask"
+              }[5m])
+            )
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High chatbot latency (p95)"
+          description: "Chatbot p95 latency is above 2 seconds for more than 5 minutes."
+
+      # 3. Unusual traffic spike (simple RPS threshold)
+      - alert: ChatbotTrafficSpike
+        expr: |
+          sum by (method)(
+            rate(django_http_requests_total_by_view_transport_method_total{
+              job="django",
+              view="chat:ask"
+            }[1m])
+          ) > 5
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Chatbot traffic spike"
+          description: "Chatbot is receiving more than 5 requests per second."

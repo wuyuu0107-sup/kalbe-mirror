@@ -11,13 +11,13 @@ variables:
   PIP_NO_CACHE_DIR: "1"
   DJANGO_SETTINGS_MODULE: "kalbe_be.test_settings"
   SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
-  GIT_DEPTH: "0"
+  GIT_DEPTH: "0"  
 
 cache:
   paths:
     - .cache/pip
 
-before_script:
+before_script:                              
   - python -V
   - pip install --upgrade pip
   - pip install --no-cache-dir -r requirements.txt
@@ -48,21 +48,20 @@ test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
-seed:production:
+seed:
   stage: seed
   image: python:3.12
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
-    - export DATABASE_URL=${DATABASE_URL}
+    - export DATABASE_URL=${PRODUCTION_DATABASE_URL}
     - python manage.py migrate --noinput
     - python manage.py loaddata fixtures/prod_patients.json
     - python manage.py shell -c "from patients.models import Patient; print(f'✅ Loaded {Patient.objects.count()} patients')"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "staging"'
   when: manual
-  environment:
-    name: production
+
 
 deploy:
   stage: deploy

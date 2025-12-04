@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pandas as pd
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from .serializers import PredictRequestSerializer
@@ -182,7 +182,7 @@ class SubprocessModelRunnerTests(SimpleTestCase):
 #  API / view tests
 # =====================================================================
 
-class PredictCsvApiTests(SimpleTestCase):
+class PredictCsvApiTests(TestCase):
     """
     Tes endpoint /api/predict-csv/ (name: predictions:predict_csv)
     """
@@ -193,29 +193,37 @@ class PredictCsvApiTests(SimpleTestCase):
     def _dummy_csv_bytes(self):
         return b"SIN,Subject Initials\n14515,YSSA\n9723,RDHO\n"
 
+    @patch("predictions.views.PredictionResult.objects.bulk_create")
     @patch("predictions.views.SubprocessModelRunner")
-    def test_upload_csv_and_get_json_rows(self, mock_runner):
-        mock_runner = mock_runner.return_value
-        mock_runner.run.return_value = [
+    def test_upload_csv_and_get_json_rows(self, mock_runner, mock_bulk_create):
+        rows = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
         ]
 
+        mock_runner = mock_runner.return_value
+        mock_runner.run.return_value = rows
+
         file_obj = io.BytesIO(self._dummy_csv_bytes())
         file_obj.name = "patients.csv"
 
-        resp = self.client.post(
-            self.url,
-            data={"file": file_obj},
-            format="multipart",
-        )
+        resp = self.client.post(self.url, data={"file": file_obj}, format="multipart")
 
         self.assertEqual(resp.status_code, 200)
-        data = json.loads(resp.content)
-        self.assertIn("rows", data)
-        self.assertEqual(len(data["rows"]), 2)
-        self.assertEqual(data["rows"][0]["prediction"], "low")
-        mock_runner.run.assert_called_once()
+        body = json.loads(resp.content)
+        self.assertIn("rows", body)
+        self.assertEqual(len(body["rows"]), 2)
+
+        mock_bulk_create.assert_called_once()
+        created_objs = mock_bulk_create.call_args[0][0]
+        self.assertEqual(len(created_objs), 2)
+
+        first = created_objs[0]
+        self.assertEqual(first.sin, "14515")
+        self.assertEqual(first.subject_initials, "YSSA")
+        self.assertEqual(first.prediction, "low")
+        self.assertEqual(first.input_data, "patients.csv")
+        self.assertEqual(first.meta, rows[0])
 
     def test_reject_non_csv_in_view(self):
         bad_file = io.BytesIO(b"not a csv at all")
@@ -241,8 +249,8 @@ class PredictCsvApiTests(SimpleTestCase):
         self.assertIn("file", body)
 
     @patch("predictions.views.SubprocessModelRunner")
-    def test_runner_failure_returns_500(self, mock_runner):
-        mock_runner = mock_runner.return_value
+    def test_runner_failure_returns_500(self, MockRunner):
+        mock_runner = MockRunner.return_value
         mock_runner.run.side_effect = Exception("crash in model")
 
         file_obj = io.BytesIO(self._dummy_csv_bytes())
@@ -424,3 +432,40 @@ class RunModelMainTests(SimpleTestCase):
 
             self.assertEqual(cm.exception.code, 1)
             self.assertIn("Model file not found", stderr.getvalue())
+
+from django.test import TestCase
+from predictions.models import PredictionResult
+
+class PredictionResultStrTests(TestCase):
+
+    def test_str_full_fields(self):
+        obj = PredictionResult(
+            sin="12345",
+            subject_initials="AB",
+            prediction="high",
+        )
+        self.assertEqual(str(obj), "12345 | AB → high")
+
+    def test_str_missing_sin(self):
+        obj = PredictionResult(
+            sin=None,
+            subject_initials="CD",
+            prediction="low",
+        )
+        self.assertEqual(str(obj), "N/A | CD → low")
+
+    def test_str_missing_subject_initials(self):
+        obj = PredictionResult(
+            sin="99999",
+            subject_initials=None,
+            prediction="medium",
+        )
+        self.assertEqual(str(obj), "99999 | N/A → medium")
+
+    def test_str_missing_both_fields(self):
+        obj = PredictionResult(
+            sin=None,
+            subject_initials=None,
+            prediction="unknown",
+        )
+        self.assertEqual(str(obj), "N/A | N/A → unknown")

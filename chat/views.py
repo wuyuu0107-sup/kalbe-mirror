@@ -1,5 +1,6 @@
 # chat/views.py
 from django.conf import settings
+from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -15,9 +16,11 @@ from .service import answer_question as chat_service
 from .guardrails import run_with_guardrails
 from notification.triggers import notify_chat_reply
 from . import service as chat_service
+from dashboard.tracking import track_feature
 
 
 DEMO_COOKIE_NAME = "demo_user_id"
+KSCAN_COOKIE_NAME = "kscan_sessionid"
 log = logging.getLogger(__name__)
 
 
@@ -56,6 +59,13 @@ def _attach_demo_cookie_if_needed(request, resp, user_id: uuid.UUID):
 
 
 def _current_user_id(request) -> uuid.UUID:
+    sid_user_id = (getattr(request, "session", None) or {}).get("user_id")
+    if sid_user_id:
+        try:
+            return uuid.UUID(str(sid_user_id))
+        except Exception:
+            log.warning("Invalid UUID in session.user_id=%r", sid_user_id)
+
     user = getattr(request, "user", None)
     if user and getattr(user, "is_authenticated", False):
         # Prefer the auth user pk as UUID; if not UUID, namespace it deterministically
@@ -172,6 +182,7 @@ def _payload(request) -> dict:
 
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
+@track_feature("chatbot")
 @csrf_exempt
 def sessions(request):
     user_id = _current_user_id(request)
@@ -308,6 +319,21 @@ def ask(request, sid):
     )
     q = str(q_raw).strip()
 
+    MAX_QUESTION_LEN = 4000
+    if len(q) > MAX_QUESTION_LEN:
+        log.warning(
+            "Rejecting long question for session %s (user %s): len=%s > MAX_QUESTION_LEN=%s",
+            sess.id,
+            user_id,
+            len(q),
+            MAX_QUESTION_LEN,
+        )
+        resp = Response(
+            {"error": f"Message too long (max {MAX_QUESTION_LEN} characters)"},
+            status=400,
+        )
+        _attach_demo_cookie_if_needed(request, resp, user_id)
+        return resp
     if not q:
         resp = Response({"error": "empty question"}, status=400)
         _attach_demo_cookie_if_needed(request, resp, user_id)
@@ -315,14 +341,24 @@ def ask(request, sid):
 
     # Store user message
     ChatMessage.objects.create(session=sess, role="user", content=q)
+    #caching
+    normalized_q = q.strip().lower()
+    cache_key = f"chatbot_answer:{sess.id}:{normalized_q}"
 
-    # ✅ No try/except — directly call guardrails + service
-    answer = run_with_guardrails(q, chat_service.answer_question)
+    cached_answer = cache.get(cache_key)
+    if cached_answer is not None:
+        # cache hit → skip LLM call
+        answer = cached_answer
+    else:
+        # Call guardrails + LLM-backed service
+        answer = run_with_guardrails(q, chat_service.answer_question)
 
-    # If guardrails returns a dict, serialize to JSON; strings pass through.
-    if isinstance(answer, dict):
-        answer = json.dumps(answer, ensure_ascii=False, indent=2)
+        # If guardrails returns a dict, serialize to JSON; strings pass through.
+        if isinstance(answer, dict):
+            answer = json.dumps(answer, ensure_ascii=False, indent=2)
 
+        # Save to cache for next time
+        cache.set(cache_key, answer, timeout=60 * 60)  # 1 hour
     # Store assistant message
     ChatMessage.objects.create(session=sess, role="assistant", content=answer)
 
@@ -340,4 +376,3 @@ def ask(request, sid):
     resp = Response({"answer": answer}, status=200)
     _attach_demo_cookie_if_needed(request, resp, user_id)
     return resp
-

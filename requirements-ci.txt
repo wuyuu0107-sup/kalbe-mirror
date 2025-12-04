@@ -1,0 +1,8 @@
+django
+djangorestframework
+django-cors-headers
+django-filter
+dj_database_url
+python-decouple
+requests
+django-prometheus

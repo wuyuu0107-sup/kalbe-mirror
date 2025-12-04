@@ -64,17 +64,14 @@ def _human_int(v: Any) -> str:
         except Exception:
             return str(v)
 
-def _human_pct(num: Any, den: Any) -> str:
-    """Return 'X%' while safely handling None, non-numeric, or zero denominators."""
+def _human_pct(num: float, den: float) -> str:
     try:
-        n = float(num or 0)
-        d = float(den or 0)
-        if d == 0:
+        if float(den) == 0:
             return "0%"
-        return f"{(n / d) * 100:.0f}%"
+        return f"{(float(num)/float(den))*100:.0f}%"
     except Exception:
         return "0%"
-    
+
 def _render_table(cols: List[str], rows: List[Tuple[Any, ...]], max_rows: int = 8) -> str:
     # No rows at all
     if not rows:
@@ -192,19 +189,17 @@ class SemanticQAService:
     formatter: AnswerFormatter
 
     def answer(self, user_message: str, session_id: str | None = None) -> str:
-        """
-        session_id is accepted for backward compatibility with call sites/tests,
-        but is intentionally unused.
-        """
-        _ = session_id  # explicitly mark as intentionally unused
 
+        # 1) NL -> SQL
         sql = self.sqlgen.generate(user_message)
+
+        # 2) Execute
         result = self.runner.query(sql) or {}
-        rows = result.get("rows") or []
-        cols = result.get("columns") or []
+        rows: List[Tuple[Any, ...]] = result.get("rows") or []
+        cols: List[str] = result.get("columns") or []
 
+        # 3) Format
         return self.formatter.format(user_message, cols, rows)
-
 
 
 # =========================

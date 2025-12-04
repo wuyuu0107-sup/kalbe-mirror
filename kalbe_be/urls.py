@@ -2,12 +2,16 @@ from django.contrib import admin
 from django.urls import path, include
 from authentication.views import protected_endpoint
 from annotation.views_page import AnnotationTesterPage
+from ocr.views import ocr_test_page
 from django.conf import settings
 from django.conf.urls.static import static
 from dashboard import views
 
 # CSRF token endpoint (for SPA/Next.js to fetch a token)
 from accounts.csrf import csrf as csrf_view
+
+def trigger_error(request):
+    raise ZeroDivisionError("Intentional error for Sentry testing")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -25,6 +29,7 @@ urlpatterns = [
     path('api/protected-endpoint/', protected_endpoint),
     path('ocr/', include('ocr.urls')),
     path('annotation/test/', AnnotationTesterPage.as_view(), name='annotation-test'),
+    path('ocr_test_page/', ocr_test_page, name='ocr-test-page'),
     path('api/protected-endpoint/', protected_endpoint),
     path('', include('annotation.urls')),
     path('csv/', include('csv_export.urls')),
@@ -38,6 +43,13 @@ urlpatterns = [
     path('', include('django_prometheus.urls')),
     path('api/user-settings/', include('user_settings.urls')),
     path("audit/", include("audittrail.urls")),
+    #sentry monitoring 
+    path('sentry-debug/', trigger_error),
+
+    path('patient/', include('patient.urls')),
+
+    #silk
+    path("silk/", include("silk.urls", namespace="silk")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

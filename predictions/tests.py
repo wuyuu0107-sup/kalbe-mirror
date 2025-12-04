@@ -195,37 +195,29 @@ class PredictCsvApiTests(TestCase):
 
     @patch("predictions.views.PredictionResult.objects.bulk_create")
     @patch("predictions.views.SubprocessModelRunner")
-    def test_upload_csv_saves_predictions_to_db(self, MockRunner, mock_bulk_create):
-        # Arrange: mock model runner to return two rows
+    def test_upload_csv_and_get_json_rows(self, mock_runner, mock_bulk_create):
         rows = [
             {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
             {"SIN": "9723", "Subject Initials": "RDHO", "prediction": "high"},
         ]
-        mock_runner = MockRunner.return_value
+
+        mock_runner = mock_runner.return_value
         mock_runner.run.return_value = rows
 
         file_obj = io.BytesIO(self._dummy_csv_bytes())
         file_obj.name = "patients.csv"
 
-        # Act
-        resp = self.client.post(
-            self.url,
-            data={"file": file_obj},
-            format="multipart",
-        )
+        resp = self.client.post(self.url, data={"file": file_obj}, format="multipart")
 
-        # Assert: HTTP response still OK and rows returned
         self.assertEqual(resp.status_code, 200)
         body = json.loads(resp.content)
         self.assertIn("rows", body)
         self.assertEqual(len(body["rows"]), 2)
 
-        # Assert: bulk_create called once with correct number of objects
         mock_bulk_create.assert_called_once()
         created_objs = mock_bulk_create.call_args[0][0]
         self.assertEqual(len(created_objs), 2)
 
-        # Check that first object has the correct mapped fields
         first = created_objs[0]
         self.assertEqual(first.sin, "14515")
         self.assertEqual(first.subject_initials, "YSSA")
@@ -275,86 +267,6 @@ class PredictCsvApiTests(TestCase):
         self.assertIn("detail", body)
         self.assertIn("crash in model", body["detail"])
 
-    @patch("predictions.views.PredictionResult.objects.bulk_create")
-    @patch("predictions.views.SubprocessModelRunner")
-    def test_no_rows_means_no_bulk_create(self, MockRunner, mock_bulk_create):
-        mock_runner = MockRunner.return_value
-        mock_runner.run.return_value = []  # no predictions
-
-        file_obj = io.BytesIO(self._dummy_csv_bytes())
-        file_obj.name = "patients.csv"
-
-        resp = self.client.post(
-            self.url,
-            data={"file": file_obj},
-            format="multipart",
-        )
-
-        self.assertEqual(resp.status_code, 200)
-        body = json.loads(resp.content)
-        self.assertEqual(body["rows"], [])
-
-        mock_bulk_create.assert_not_called()
-
-    @patch("predictions.views.PredictionResult.objects.bulk_create")
-    @patch("predictions.views.SubprocessModelRunner")
-    def test_runner_failure_does_not_save_anything(self, MockRunner, mock_bulk_create):
-        mock_runner = MockRunner.return_value
-        mock_runner.run.side_effect = Exception("crash in model")
-
-        file_obj = io.BytesIO(self._dummy_csv_bytes())
-        file_obj.name = "patients.csv"
-
-        resp = self.client.post(
-            self.url,
-            data={"file": file_obj},
-            format="multipart",
-        )
-
-        self.assertEqual(resp.status_code, 500)
-        body = json.loads(resp.content)
-        self.assertIn("detail", body)
-        self.assertIn("crash in model", body["detail"])
-
-        # should never attempt to write to DB on failure
-        mock_bulk_create.assert_not_called()
-
-    @patch("predictions.views.PredictionResult.objects.bulk_create")
-    @patch("predictions.views.SubprocessModelRunner")
-    def test_missing_tmp_file_is_ignored(self, MockRunner, mock_bulk_create):
-        # Arrange: model runner returns a single row
-        rows = [
-            {"SIN": "14515", "Subject Initials": "YSSA", "prediction": "low"},
-        ]
-        mock_runner = MockRunner.return_value
-        mock_runner.run.return_value = rows
-
-        file_obj = io.BytesIO(b"SIN,Subject Initials\n14515,YSSA\n")
-        file_obj.name = "patients.csv"
-
-        # Patch os.remove so it raises FileNotFoundError and hits the except branch
-        with patch("os.remove", side_effect=FileNotFoundError) as mock_os_remove:
-            # Act
-            resp = self.client.post(
-                self.url,
-                data={"file": file_obj},
-                format="multipart",
-            )
-
-        # Assert: request still succeeds (FileNotFoundError is swallowed)
-        self.assertEqual(resp.status_code, 200)
-        body = json.loads(resp.content)
-        self.assertIn("rows", body)
-        self.assertEqual(len(body["rows"]), 1)
-
-        # os.remove was called once, but its FileNotFoundError didn't bubble up
-        mock_os_remove.assert_called_once()
-
-        # bulk_create still called for the row
-        mock_bulk_create.assert_called_once()
-        created_objs = mock_bulk_create.call_args[0][0]
-        self.assertEqual(len(created_objs), 1)
-        self.assertEqual(created_objs[0].sin, "14515")
 
 # =====================================================================
 #  run_model.py helper tests

@@ -9,6 +9,9 @@ from django.conf import settings
 from .forms import LoginForm, RegistrationForm
 from authentication.models import User
 from authentication.helpers import parse_json_body, get_user_or_none, handle_failed_login, set_user_session, build_success_response
+from authentication.helpers_profiling import LoginTimer
+
+import time
 import json
 import logging
 
@@ -86,9 +89,13 @@ def send_welcome_email(user):
         logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
         return False
 
+
 @csrf_exempt
 @require_POST
 def login(request):
+    timer = LoginTimer()
+    timer.begin()
+
     data, error_response = parse_json_body(request)
     if error_response:
         return error_response
@@ -98,28 +105,25 @@ def login(request):
         return JsonResponse({"error": "Username and password are required"}, status=400)
 
     username = form.cleaned_data['username']
-
     user = get_user_or_none(username)
     if not user:
         return JsonResponse({"error": "Invalid credentials"}, status=401)
 
-    # Check lock status
     if user.is_account_locked():
-        return JsonResponse({
-            "error": "Account is temporarily locked due to too many failed attempts"
-        }, status=423)
+        return JsonResponse({"error": "Account is temporarily locked due to too many failed attempts"}, status=423)
 
-    # Authenticate
     if not form.authenticate():
         return handle_failed_login(user)
 
-    # Check verification
     if not user.is_verified:
         return JsonResponse({"error": "Please verify your email before logging in."}, status=403)
 
-    # Success
     user.reset_failed_login_attempts()
     set_user_session(request, user)
+
+    user.auth_latency_ms = timer.end()
+    user.save(update_fields=["auth_latency_ms", "last_accessed"])
+
     return JsonResponse(build_success_response(user), status=200)
 
 @csrf_exempt  

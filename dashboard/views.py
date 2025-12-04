@@ -1,20 +1,17 @@
 from __future__ import annotations
 from urllib.parse import unquote
+
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponseBadRequest
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from authentication.models import User
 from django.views.decorators.csrf import csrf_exempt
-from django.core.exceptions import ValidationError
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from .models import ChatSuggestion
-from .serializers import ChatSuggestionSerializer
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 
-class CsrfExemptSessionAuthentication(SessionAuthentication):
-    def enforce_csrf(self, request):
-        return  # Disable CSRF
+from rest_framework import viewsets
+from rest_framework.permissions import BasePermission
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.exceptions import PermissionDenied
 
 # Uncomment when being used
 # from django.contrib.auth.decorators import login_required
@@ -26,14 +23,33 @@ from .nav import SEGMENT_LABELS, looks_like_id
 from dashboard.services.recent_files import get_recent_files
 from dashboard.services.feature_usage import get_recent_features
 
-# Create your views here.
+
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    """SessionAuthentication tanpa cek CSRF DRF (kita pakai cookie session)."""
+    def enforce_csrf(self, request):
+        return  # Disable CSRF checks for DRF
+
+
+class HasSessionUser(BasePermission):
+    """
+    Permission DRF yang menganggap user 'authenticated'
+    kalau di session ada 'user_id' (sesuai skema login app ini).
+    """
+    def has_permission(self, request, view):
+        return bool(request.session.get("user_id"))
+
+
+# ----------------- Simple JSON helpers ----------------- #
 
 def whoami(request):
-    return JsonResponse({
-        "cookie_sessionid": request.COOKIES.get("sessionid"),
-        "user_id": request.session.get("user_id"),
-        "username": request.session.get("username"),
-    })
+    return JsonResponse(
+        {
+            "cookie_sessionid": request.COOKIES.get("sessionid"),
+            "user_id": request.session.get("user_id"),
+            "username": request.session.get("username"),
+        }
+    )
+
 
 @csrf_exempt
 def recent_files_json(request, limit):
@@ -46,8 +62,9 @@ def recent_files_json(request, limit):
     for i in items:
         if hasattr(i.get("updated_at"), "isoformat"):
             i["updated_at"] = i["updated_at"].isoformat()
-        
+
     return JsonResponse(items, safe=False)
+
 
 def recent_features_json(request):
     user_id = request.session.get("user_id")
@@ -56,17 +73,16 @@ def recent_features_json(request):
 
     try:
         user = User.objects.get(user_id=user_id)
-    except (User.DoesNotExist, ValueError, ValidationError):
+    except (User.DoesNotExist, ValueError, DjangoValidationError):
         return JsonResponse({"error": "User not found"}, status=404)
 
     items = get_recent_features(user)
     for it in items:
         if hasattr(it.get("last_used_at"), "isoformat"):
             it["last_used_at"] = it["last_used_at"].isoformat()
-            
+
     return JsonResponse(items, safe=False)
 
-# dashboard/views.py
 
 def breadcrumbs_json(request):
     """
@@ -93,10 +109,6 @@ def breadcrumbs_json(request):
         # 1) known segment label?
         label = SEGMENT_LABELS.get(seg)
 
-        # 2) optional: dynamic lookup when the previous segment is 'annotation'
-        # if not label and i > 0 and parts[i - 1] == "annotation":
-        #     label = try_label_annotation(seg) or label
-
         # 3) default formatting
         if not label:
             label = seg if looks_like_id(seg) else seg.replace("-", " ").capitalize()
@@ -104,17 +116,3 @@ def breadcrumbs_json(request):
         crumbs.append({"href": href, "label": label})
 
     return JsonResponse(crumbs, safe=False)
-
-class ChatSuggestionViewSet(viewsets.ModelViewSet):
-    serializer_class = ChatSuggestionSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    authentication_classes = [CsrfExemptSessionAuthentication, BasicAuthentication]
-
-    def get_queryset(self):
-        user = self.request.user
-        if not user.is_authenticated:
-            return ChatSuggestion.objects.none()
-        return ChatSuggestion.objects.filter(user_id=user.user_id)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)

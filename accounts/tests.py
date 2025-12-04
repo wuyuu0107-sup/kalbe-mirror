@@ -191,8 +191,6 @@ class EmailOTPTests(TestCase):
         user = get_auth_user_model().objects.get(email="alice@example.com")
         self.assertTrue(user.password.startswith("pbkdf2_"))
         self.assertIsNone(cs.get_otp("alice@example.com"))
-
-
 # ============================================================
 # 2. STUB untuk views.py (basic password reset)
 # ============================================================
@@ -240,7 +238,6 @@ class BasicPasswordResetViewsStubTests(TestCase):
             {"email": "", "otp": "", "password": ""},
         )
         self.assertIn(resp.status_code, (200, 400))
-
 
 @override_settings(**TEST_OVERRIDES)
 class PasswordResetViewsTests(TestCase):
@@ -333,7 +330,6 @@ class PasswordResetViewsTests(TestCase):
         user = get_auth_user_model().objects.get(email="bob@example.com")
         self.assertEqual(user.password, "StrongPass")
         self.assertIsNone(cache.get("pwdreset:bob@example.com"))
-
 # ============================================================
 # 3. STUB untuk cache_store service
 # ============================================================

@@ -6,7 +6,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import PredictRequestSerializer
 from .services import SubprocessModelRunner, IModelRunner
+from django.utils.decorators import method_decorator
+from dashboard.tracking import track_feature
 
+@method_decorator(track_feature("prediksi"), name="dispatch")
 class PredictCsvView(APIView):
     """
     Controller depends on abstraction (IModelRunner) => DIP
